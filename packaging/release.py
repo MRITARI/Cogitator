@@ -70,6 +70,16 @@ def build(version: str, app_dir: Path, out: Path, key_path: Path, installer: boo
     return [*assets, sig, sums]
 
 
+def check_versions(version: str) -> None:
+    """The version baked into the app must equal the release version, or the updater would offer the release forever."""
+    root = Path(__file__).resolve().parents[1]
+    found = {"pyproject.toml": re.search(r'(?m)^version\s*=\s*"([^"]+)"', (root / "pyproject.toml").read_text(encoding="utf-8")),
+             "cogitator/__init__.py": re.search(r'__version__\s*=\s*"([^"]+)"', (root / "cogitator" / "__init__.py").read_text(encoding="utf-8"))}
+    bad = [f"{n} says {m.group(1) if m else '?'}" for n, m in found.items() if not m or m.group(1) != version]
+    if bad:
+        raise SystemExit(f"--version {version} disagrees with the source: " + "; ".join(bad) + ". Bump them first.")
+
+
 def main(argv: list[str] | None = None) -> int:
     p = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     p.add_argument("--version", required=True)
@@ -83,6 +93,7 @@ def main(argv: list[str] | None = None) -> int:
         raise SystemExit("give the private key with --key or COGITATOR_SIGNING_KEY_FILE")
     if not Path(a.key).is_file():
         raise SystemExit("signing key file not found")
+    check_versions(a.version)
     if not a.no_build:
         subprocess.run(["powershell", "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", str(Path(__file__).with_name("build_exe.ps1"))], check=True)
     for f in build(a.version, Path(a.app_dir), Path(a.out), Path(a.key), installer=not a.no_installer):
