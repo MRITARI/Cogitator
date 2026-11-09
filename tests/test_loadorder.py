@@ -157,3 +157,40 @@ def test_cli_mod(game, capsys):
     assert cli.main(["--game-dir", str(game), "mod", "enable", "nope"]) == 2
     assert cli.main(["--game-dir", str(game), "status"]) == 0
     assert "disabled  alpha" in capsys.readouterr().out
+
+
+# ------------------------------------------------------------ moving mods in the load order
+
+def _lo(g):
+    return (g / "mods" / "mod_load_order.txt")
+
+
+def test_move_swaps_neighbours_and_keeps_comments_blank_lines_endings_and_internal_entries(tmp_path):
+    from cogitator.mods import move_mod
+
+    (tmp_path / "mods").mkdir()
+    for m in ("a", "b", "c"):
+        (tmp_path / "mods" / m).mkdir()
+    _lo(tmp_path).write_bytes(b"dmf\r\n-- my list\r\na\r\n\r\n--b extra\r\nc")
+    move_mod(tmp_path, "a", 1)
+    assert _lo(tmp_path).read_bytes() == b"dmf\r\n-- my list\r\n--b extra\r\n\r\na\r\nc"
+    move_mod(tmp_path, "a", 1)
+    assert _lo(tmp_path).read_bytes() == b"dmf\r\n-- my list\r\n--b extra\r\n\r\nc\r\na"
+    move_mod(tmp_path, "a", -1)
+    move_mod(tmp_path, "a", -1)
+    assert _lo(tmp_path).read_bytes() == b"dmf\r\n-- my list\r\na\r\n\r\n--b extra\r\nc"  # dmf never moved
+
+
+def test_move_at_the_ends_and_unlisted_mods(tmp_path):
+    from cogitator.mods import move_mod
+
+    (tmp_path / "mods" / "a").mkdir(parents=True)
+    (tmp_path / "mods" / "z").mkdir()
+    _lo(tmp_path).write_bytes(b"dmf\na\n")
+    before = _lo(tmp_path).read_bytes()
+    assert "already first" in move_mod(tmp_path, "a", -1) and "already last" in move_mod(tmp_path, "a", 1)
+    assert _lo(tmp_path).read_bytes() == before
+    with pytest.raises(ModError, match="Press Space"):
+        move_mod(tmp_path, "z", -1)
+    with pytest.raises(ModError):
+        move_mod(tmp_path, "dmf", 1)  # the Framework is not movable

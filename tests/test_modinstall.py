@@ -366,3 +366,34 @@ def test_cli_update_free_account_prints_page_and_does_not_download(game, monkeyp
     assert "?tab=files" in out and opened == [19] and dl.call_count == 0
     assert cli.main(g + ["update", "--all"]) == 0
     assert "Free account" in capsys.readouterr().out and dl.call_count == 0
+
+
+def test_dropped_paths_understands_what_terminals_paste(tmp_path):
+    from cogitator.modinstall import dropped_paths
+
+    a = tmp_path / "My Mod 1 2.zip"
+    b = tmp_path / "other.zip"
+    a.write_bytes(b"x")
+    b.write_bytes(b"x")
+    assert dropped_paths(f'"{a}"') == [a]  # Windows Terminal quotes paths with spaces
+    assert dropped_paths(f"'{a}'  ") == [a]
+    assert dropped_paths(str(a)) == [a]  # unquoted, with spaces
+    assert dropped_paths(f'"{a}" {b}\r\n') == [a, b]  # several files at once
+    assert dropped_paths("file:///" + str(b).replace("\\", "/").replace(" ", "%20")) == [b]
+    assert dropped_paths(str(tmp_path / "missing.zip")) == [] and dropped_paths("hello") == []
+
+
+def test_newest_download_picks_the_latest_recent_zip(tmp_path):
+    import os, time
+    from cogitator.modinstall import newest_download
+
+    old, new = tmp_path / "old.zip", tmp_path / "new.zip"
+    for p, age in ((old, 7200), (new, 60)):
+        with zipfile.ZipFile(p, "w") as z:
+            z.writestr("a", "b")
+        t = time.time() - age
+        os.utime(p, (t, t))
+    (tmp_path / "junk.zip").write_bytes(b"not a zip")
+    assert newest_download(tmp_path) == new
+    os.utime(new, (time.time() - 7200,) * 2)
+    assert newest_download(tmp_path) is None  # nothing from the last hour

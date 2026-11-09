@@ -794,3 +794,51 @@ async def test_github_bootstrap_is_opt_in_and_shows_each_source_before_installin
         assert (g / "binaries" / "mod_loader").is_file() and not (g / "mods" / "dmf").exists()
         assert "DMF install declined" in log_text(app)
         assert Registry.load().framework("dml")["source_kind"] == "github-tag-source" and Registry.load().framework("dmf") is None
+
+
+# ------------------------------------------------------------ load order moves, and drag and drop
+
+async def test_shift_arrows_move_the_selected_mod_in_the_load_order(game):
+    lo = game / "mods" / "mod_load_order.txt"
+    app = make_app(game)
+    async with app.run_test(size=SIZE) as pilot:
+        await settle(app, pilot)
+        select(app, "alpha")
+        await pilot.press("shift+down")
+        assert lo.read_bytes() == b"-- header\r\n--beta\r\nalpha\r\nghost\r\n"
+        t = app.query_one("#mods", DataTable)
+        assert [r.value for r in t.rows][:2] == ["beta", "alpha"] and app.selected() == "alpha"  # cursor follows the mod
+        await pilot.press("shift+up")
+        assert lo.read_bytes() == b"-- header\r\nalpha\r\n--beta\r\nghost\r\n"
+        select(app, "gamma")  # not in the load order yet
+        await pilot.press("shift+up")
+        assert "Press Space" in log_text(app) and lo.read_bytes() == b"-- header\r\nalpha\r\n--beta\r\nghost\r\n"
+
+
+async def test_dropping_a_zip_on_the_main_screen_imports_it_without_pressing_i(game, tmp_path):
+    from textual import events
+
+    zp = tmp_path / "Some Mod-1-1.zip"
+    zp.write_bytes(b"x")
+    app = make_app(game)
+    got = []
+    async with app.run_test(size=SIZE) as pilot:
+        await settle(app, pilot)
+        app._job_import = lambda raw, mod_id: got.append(raw)
+        app.post_message(events.Paste(f'"{zp}"'))
+        await settle(app, pilot)
+        app.post_message(events.Paste("just some text"))  # ordinary pastes are ignored
+        await settle(app, pilot)
+    assert got == [str(zp)]
+
+
+async def test_empty_import_box_falls_back_to_the_newest_download(game, tmp_path):
+    app = make_app(game)
+    app._downloads_dir = lambda: tmp_path / "empty"
+    async with app.run_test(size=SIZE) as pilot:
+        await settle(app, pilot)
+        await pilot.press("i")
+        await pilot.pause()
+        await pilot.press("enter")  # nothing typed or dropped
+        await settle(app, pilot)
+        assert "No .zip from the last hour" in log_text(app)

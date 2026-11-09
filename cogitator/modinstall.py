@@ -13,6 +13,7 @@ import tempfile
 import time
 import webbrowser
 import zipfile
+from urllib.parse import unquote, urlsplit
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Callable
@@ -315,3 +316,42 @@ def wait_for_download(downloads: Path, mod_id: int, latest: dict, *, since: floa
             return None
         sleep(poll_s)
     return None
+
+
+def newest_download(downloads: Path, max_age_s: float = 3600.0, now: float | None = None) -> Path | None:
+    """The most recently modified finished .zip in `downloads` (changed within `max_age_s`), or None.
+    Used when a dropped path did not arrive: press Enter on an empty import box and the newest download is used."""
+    now = time.time() if now is None else now
+    best: tuple[float, Path] | None = None
+    try:
+        entries = list(Path(downloads).glob("*.zip"))
+    except OSError:
+        return None
+    for p in entries:
+        try:
+            mt = p.stat().st_mtime
+        except OSError:
+            continue
+        if now - mt <= max_age_s and zipfile.is_zipfile(p) and (best is None or mt > best[0]):
+            best = (mt, p)
+    return best[1] if best else None
+
+
+_DROP = re.compile(r"\"([^\"\r\n]+)\"|'([^'\r\n]+)'|(file:///\S+)|(\S+\.zip)", re.I)
+
+
+def dropped_paths(text: str) -> list[Path]:
+    """Existing .zip files named in dropped/pasted text: quoted or bare paths, one or several, file:// forms too."""
+    out: list[Path] = []
+    for m in _DROP.finditer(text or ""):
+        raw = next(g for g in m.groups() if g)
+        if raw.lower().startswith("file:"):
+            raw = unquote(urlsplit(raw).path).lstrip("/")
+        p = Path(raw.strip())
+        if p.suffix.lower() == ".zip" and p.is_file() and p not in out:
+            out.append(p)
+    if not out:  # an unquoted path that contains spaces
+        p = Path((text or "").strip().strip("\"'"))
+        if p.suffix.lower() == ".zip" and p.is_file():
+            out.append(p)
+    return out

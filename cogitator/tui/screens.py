@@ -66,9 +66,9 @@ class InputScreen(_Base):
 
     BINDINGS = [Binding("escape", "cancel", "Cancel")]
 
-    def __init__(self, title: str, placeholder: str = "", password: bool = False, body: str = ""):
+    def __init__(self, title: str, placeholder: str = "", password: bool = False, body: str = "", allow_blank: bool = False):
         super().__init__()
-        self._title, self._ph, self._pw, self._body = title, placeholder, password, body
+        self._title, self._ph, self._pw, self._body, self._blank = title, placeholder, password, body, allow_blank
 
     def compose(self) -> ComposeResult:
         with Vertical():
@@ -83,7 +83,18 @@ class InputScreen(_Base):
 
     def on_input_submitted(self, event: Input.Submitted) -> None:
         event.stop()
-        self.dismiss(event.value.strip() or None)
+        v = event.value.strip()
+        self.dismiss(v if v else ("" if self._blank else None))
+
+    def on_paste(self, event) -> None:
+        """A dropped file lands here even if the box was not focused yet (focus is set after the first refresh)."""
+        inp = self.query_one("#value", Input)
+        if not inp.has_focus and not self._pw:
+            line = (event.text.splitlines() or [""])[0]
+            inp.value = line.strip()
+            inp.cursor_position = len(inp.value)
+            inp.focus()
+            event.stop()
 
     def action_cancel(self) -> None:
         self.dismiss(None)

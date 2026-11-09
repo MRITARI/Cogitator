@@ -32,11 +32,12 @@ Run `cogitator`. If the Mod Loader is missing it offers to install it from the N
 |---|---|
 | `T` | Mods on or off (asks before switching off) |
 | `Space` | Enable or disable the selected mod |
+| `Shift+Up` / `Shift+Down` (or `[` / `]`) | Move the selected mod up or down in the load order |
 | `U` / `Ctrl+U` | Update the selected mod / all mods |
 | `F` | Update the Mod Loader or Framework |
 | `R` | Re-check for updates |
 | `L` | Link the selected mod to its Nexus page |
-| `I` | Import a mod, Mod Loader or Framework zip |
+| `I` | Import a mod, Mod Loader or Framework zip (or just drop the file onto the window) |
 | `K` | Set your Nexus API key (only needed for update checks) |
 | `D` | Run the doctor |
 | `Q` | Quit |

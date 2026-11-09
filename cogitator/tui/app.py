@@ -30,8 +30,9 @@ from ..glyphs import Glyphs, detect, glyphs_for
 from ..linking import link_mod
 from ..loader import LoaderError, NEXUS_PAGES, make_client
 from ..modinstall import (AmbiguousArchive, ModImportError, NotPremium, apply_update_premium, fetch_premium_download,
-                          import_archive, inspect_mod_zip, mod_page_url, open_files_page, wait_for_download)
-from ..mods import INTERNAL_FOLDERS, Mod, ENABLED, DISABLED, UNLISTED, scan_mods, toggle_mod, ModError
+                          dropped_paths, import_archive, inspect_mod_zip, mod_page_url, newest_download, open_files_page,
+                          wait_for_download)
+from ..mods import INTERNAL_FOLDERS, Mod, ENABLED, DISABLED, UNLISTED, scan_mods, toggle_mod, move_mod, ModError
 from ..nexus import NexusClient, NexusError, latest_main_file, parse_nexus_ref
 from ..patcher import ON, OFF, PatcherError, banner as patch_banner, default_runner, patch_state
 from ..patcher import toggle as toggle_mods
@@ -55,7 +56,7 @@ NOTICE_BODY = (
 EMPTY_STATE = ("The machine spirit stirs, but no mods are consecrated here. "
                "Press I to import a mod archive, or install the Mod Loader first.")
 
-_MAIN_ACTIONS = {"toggle_mods", "toggle_mod", "update_selected", "update_all", "recheck", "link", "import_archive",
+_MAIN_ACTIONS = {"toggle_mods", "toggle_mod", "move_up", "move_down", "update_selected", "update_all", "recheck", "link", "import_archive",
                  "set_key", "cycle_sort", "quit_app", "framework_update", "doctor", "apply_update"}
 SORT_COLUMNS = ("mod", "status", "installed", "latest", "en")
 
@@ -177,6 +178,10 @@ class CogitatorApp(App):
         Binding("T", "toggle_mods", show=False),
         Binding("space", "toggle_mod", "On/off", key_display="Space"),
         # Case never matters: u/U (and Caps Lock) always mean "update the selected mod". Update-all is Ctrl+U.
+        Binding("shift+up", "move_up", "Move up", key_display="Shift+Up"),
+        Binding("shift+down", "move_down", "Move down", key_display="Shift+Down"),
+        Binding("[", "move_up", show=False),
+        Binding("]", "move_down", show=False),
         Binding("u", "update_selected", "Update", key_display="U"),
         Binding("U", "update_selected", show=False),
         Binding("ctrl+u", "update_all", "All", key_display="Ctrl+U"),
@@ -597,6 +602,26 @@ class CogitatorApp(App):
             self.log_line(f"Could not write mod_load_order.txt: {e}", "bold red")
         self._refresh_mod_row(f)
 
+    # -------------------------------------------------------------- Shift+Up / Shift+Down: load order
+    def _move(self, delta: int) -> None:
+        f = self.selected()
+        if not (self._need_game() and f):
+            return
+        try:
+            self.log_line(move_mod(self.game_dir, f, delta), "green")
+        except ModError as e:
+            self.log_line(str(e), "bold red")
+        except OSError as e:
+            self.log_line(f"Could not write mod_load_order.txt: {e}", "bold red")
+        self._sort_i = -1  # the table shows the load order again, so the move is visible
+        self.refresh_all(keep=f)
+
+    def action_move_up(self) -> None:
+        self._move(-1)
+
+    def action_move_down(self) -> None:
+        self._move(1)
+
     # -------------------------------------------------------------- R: recheck / background check
     def action_recheck(self) -> None:
         if self._need_game():
@@ -722,11 +747,43 @@ class CogitatorApp(App):
     def action_import_archive(self) -> None:
         if not self._need_game():
             return
-        self.push_screen(InputScreen("Import archive (.zip)", r"path to a mod, DML or DMF archive, e.g. C:\Users\you\Downloads\file.zip"),
-                         lambda p: p and self._bg(self._job_import, p, None, name="import", group="install", exclusive=True))
+        self.push_screen(InputScreen("Import archive (.zip)", r"path to a mod, DML or DMF archive, e.g. C:\Users\you\Downloads\file.zip",
+                                     body="Drop the file onto this window or paste its path. If the path does not arrive, "
+                                          "press Enter on the empty box to use the newest .zip in your Downloads folder (last hour).",
+                                     allow_blank=True),
+                         lambda p: p is not None and self._bg(self._job_import, p, None, name="import", group="install", exclusive=True))
+
+    def on_paste(self, event) -> None:
+        """A file dropped on the window (the terminal pastes its path) imports without pressing I first."""
+        if len(self.screen_stack) > 1 or not (self.game_dir and self.registry):
+            return
+        found = dropped_paths(event.text)
+        if found:
+            event.stop()
+            self._bg(self._job_import_many, found, name="import", group="install", exclusive=True)
+
+    def _job_import_many(self, paths: list[Path]) -> None:
+        for p in paths:
+            self._job_import(str(p), None)
+
+    def _downloads_dir(self) -> Path:
+        return Path(self.settings.downloads_dir) if self.settings.downloads_dir else Path.home() / "Downloads"
 
     def _job_import(self, raw: str, mod_id: int | None) -> None:
-        p = Path(raw.strip().strip('"'))
+        raw = raw.strip()
+        if not raw:
+            p = newest_download(self._downloads_dir())
+            if p is None:
+                self._ui(self.log_line, f"No .zip from the last hour in {self._downloads_dir()}.", "bold red")
+                return
+            self._ui(self.log_line, f"Using the newest download: {p.name}", "dim")
+        else:
+            found = dropped_paths(raw)
+            if len(found) > 1:
+                for f in found:
+                    self._job_import(str(f), None)
+                return
+            p = found[0] if found else Path(raw.strip('"'))
         if not p.is_file():
             self._ui(self.log_line, f"No such file: {p}", "bold red")
             return

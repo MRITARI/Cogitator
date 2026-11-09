@@ -85,3 +85,25 @@ def toggle_mod(game_dir: Path, folder: str, internal=None) -> str:
     """Space-key semantics: enabled<->disabled; unlisted -> add (enabled)."""
     lo = LoadOrder.load(load_order_path(game_dir))
     return set_mod_enabled(game_dir, folder, lo.state(folder) is not True, internal)
+
+
+def move_mod(game_dir: Path, folder: str, delta: int, internal: frozenset[str] | set[str] | None = None) -> str:
+    """Move a listed mod one place up (delta<0) or down (delta>0) in mod_load_order.txt by swapping it with its
+    neighbouring mod entry. Comments, blank lines, line endings and the Mod Loader/Framework entries stay where they
+    are. Raises ModError."""
+    internal = INTERNAL_FOLDERS if internal is None else internal
+    path = load_order_path(game_dir)
+    lo = LoadOrder.load(path)
+    mine = next((i for i, l in enumerate(lo.lines) if l.name == folder and folder not in internal), None)
+    if mine is None:
+        raise ModError(f"{folder} is not in the load order yet. Press Space to add it first.")
+    # other movable entries (a repeated line of the same mod is not a neighbour)
+    seq = [i for i, l in enumerate(lo.lines) if l.name and l.name not in internal and (l.name != folder or i == mine)]
+    pos = seq.index(mine) + (1 if delta > 0 else -1)
+    if not 0 <= pos < len(seq):
+        return f"{folder}: already {'last' if delta > 0 else 'first'} in the load order."
+    a, b = lo.lines[mine], lo.lines[seq[pos]]
+    neighbour = b.name
+    a.text, b.text = b.text, a.text  # swap the entries; each line keeps its own position and line ending
+    lo.save(path)
+    return f"{folder}: moved {'down, after' if delta > 0 else 'up, before'} {neighbour}."
