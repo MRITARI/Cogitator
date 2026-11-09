@@ -113,6 +113,9 @@ def exchange(app: Path, previous: Path) -> None:
 
 def run(argv: list[str], *, alive: Callable[[int], bool] = pid_alive, check: Callable[[list[str]], bool] = _check,
         relaunch: Callable[[list[str]], None] = _launch, wait_timeout: float = 60.0) -> int:
+    if argv == ["--self-check"]:
+        print(f"ok    updater: frozen={getattr(sys, 'frozen', False)}")
+        return 0
     p = argparse.ArgumentParser()
     p.add_argument("--app", required=True)
     p.add_argument("--previous", required=True)

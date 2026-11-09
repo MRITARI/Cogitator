@@ -155,6 +155,13 @@ def test_release_notes_are_plain_inert_text():
 
 
 # ---- checking: etag, throttle, offline, limits
+def test_check_queries_the_configured_repo(root, monkeypatch):
+    monkeypatch.setattr(su, "UPDATE_REPO", "someone/else")
+    gh = FakeGitHub()
+    updater(gh, root).check()
+    assert gh.requests[0].url.path == "/repos/someone/else/releases"
+
+
 def test_check_uses_etag_and_throttles(root):
     gh, t = FakeGitHub(), [1000.0]
     u = updater(gh, root, now=lambda: t[0])

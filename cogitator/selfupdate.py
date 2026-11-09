@@ -33,7 +33,7 @@ from .registry import Registry
 
 log = logging.getLogger(__name__)
 
-UPDATE_REPO = os.environ.get("COGITATOR_UPDATE_REPO_FOR_TESTS") or "MRITARI/Cogitator"
+UPDATE_REPO = "MRITARI/Cogitator"
 RELEASE_PUBLIC_KEY_HEX = ""  # the release signing public key (64 hex characters); empty = updates are disabled in this build
 API = "https://api.github.com"
 ALLOWED_HOSTS = frozenset({"github.com", "api.github.com", "objects.githubusercontent.com",
