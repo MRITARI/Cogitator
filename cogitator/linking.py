@@ -4,12 +4,15 @@ Link sources, in priority order: Cogitator's own import, a metadata file in the 
 marks the latest MAIN file as installed unless told otherwise; an unknown baseline is never reported as up to date."""
 from __future__ import annotations
 
+import difflib
 import json
 import logging
+import os
 import re
 import time
 from pathlib import Path
 
+from .loadorder import LOAD_ORDER_NAME
 from .nexus import GAME, NexusFile, latest_main_file, release_group
 from .registry import Registry
 
@@ -101,3 +104,70 @@ def link_mod(registry: Registry, folder: str, nexus_id: int, name: str | None, f
         rec["latest"] = _latest_record(files)
         rec["checked_at"] = now
     return registry.set_mod(folder, save=save, **rec)
+
+
+# ---------------------------------------------------------------- baseline guess for mods that pre-date Cogitator
+
+GUESS_WINDOW_S = 7 * 86400
+
+
+def folder_mtime(mod_dir: Path) -> float | None:
+    """Newest file mtime inside the mod folder, ignoring mod_load_order.txt and dotfiles/dot-folders."""
+    newest: float | None = None
+    for root, dirs, names in os.walk(mod_dir):
+        dirs[:] = [d for d in dirs if not d.startswith(".")]
+        for n in names:
+            if n.startswith(".") or n.lower() == LOAD_ORDER_NAME.lower():
+                continue
+            try:
+                m = os.stat(os.path.join(root, n)).st_mtime
+            except OSError:
+                continue
+            newest = m if newest is None or m > newest else newest
+    return newest
+
+
+def guess_baseline(mtime: float | None, files: list[NexusFile]) -> NexusFile | None:
+    """First uploaded file whose upload time is >= the folder's newest mtime and within 7 days of it; else None."""
+    if mtime is None:
+        return None
+    near = [f for f in files if f.file_id is not None and f.uploaded is not None and mtime <= f.uploaded <= mtime + GUESS_WINDOW_S]
+    return min(near, key=lambda f: (f.uploaded, f.file_id), default=None)
+
+
+def apply_guess(registry: Registry, folder: str, files: list[NexusFile], mtime: float | None, *, save: bool = True) -> NexusFile | None:
+    """Record a guessed baseline for a linked mod that has none. Never overrides a known or chosen baseline."""
+    rec = registry.mod(folder) or {}
+    if not rec.get("nexus_id") or rec.get("installed_file_id") is not None:
+        return None
+    f = guess_baseline(mtime, files)
+    if f is not None:
+        registry.set_mod(folder, save=save, installed_file_id=f.file_id, installed_version=f.version, baseline="guessed")
+    return f
+
+
+def choose_baseline(registry: Registry, folder: str, files: list[NexusFile], file_id: int, *, save: bool = True) -> dict:
+    """The user picked (or confirmed) the installed file: baseline becomes "chosen"."""
+    f = next((x for x in files if x.file_id == file_id), None)
+    if f is None:
+        raise ValueError(f"file {file_id} is not a file of this Nexus mod")
+    return registry.set_mod(folder, save=save, installed_file_id=f.file_id, installed_version=f.version, baseline="chosen")
+
+
+def _squash(s: str) -> str:
+    return re.sub(r"[\s_]+", "", s).casefold()
+
+
+def rank_candidates(folder: str, results: list[dict], limit: int = 3) -> list[dict]:
+    """Exact (ignoring case, spaces, underscores) matches first, then near matches. Only a suggestion; the user confirms."""
+    want = _squash(folder)
+    exact, near = [], []
+    for r in results:
+        got = _squash(r["name"])
+        if got == want:
+            exact.append((0.0, r))
+            continue
+        ratio = difflib.SequenceMatcher(None, want, got).ratio()
+        if ratio >= 0.8 or (len(want) >= 4 and want in got):
+            near.append((-ratio, r))
+    return [r for _, r in (exact + sorted(near, key=lambda x: x[0]))][:limit]

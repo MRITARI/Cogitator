@@ -103,9 +103,9 @@ class InputScreen(_Base):
 class ChoiceScreen(_Base):
     BINDINGS = [Binding("escape", "cancel", "Cancel")]
 
-    def __init__(self, question: str, options: list[str]):
+    def __init__(self, question: str, options: list[str], selected: int = 0):
         super().__init__()
-        self._q, self._opts = question, options
+        self._q, self._opts, self._sel = question, options, selected
 
     def compose(self) -> ComposeResult:
         with Vertical():
@@ -115,6 +115,8 @@ class ChoiceScreen(_Base):
 
     def on_mount(self) -> None:
         self.focus_later("OptionList")
+        if 0 < self._sel < len(self._opts):
+            self.query_one(OptionList).highlighted = self._sel
 
     def on_option_list_option_selected(self, event: OptionList.OptionSelected) -> None:
         event.stop()

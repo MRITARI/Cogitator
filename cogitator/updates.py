@@ -12,7 +12,7 @@ from dataclasses import dataclass
 from typing import Callable
 
 from .archives import match_archive_to_files
-from .linking import _latest_record
+from .linking import _latest_record, apply_guess
 from .nexus import (InvalidKey, NexusClient, NexusError, NexusFile, RateLimited, latest_main_file, release_group)
 from .registry import Registry
 
@@ -20,6 +20,7 @@ log = logging.getLogger(__name__)
 
 FRAMEWORK_MODS = {"dml": 19, "dmf": 8}
 UP_TO_DATE, UPDATE, UNKNOWN, FAILED, NOT_LINKED = "up to date", "update available", "unknown", "check failed", "not linked"
+PROBABLY_UP_TO_DATE, PROBABLY_OUTDATED = "probably up to date", "probably outdated"  # baseline only guessed
 FULL_CHECK_AFTER_S = 30 * 86400
 
 
@@ -58,10 +59,14 @@ def decide_mod(rec: dict | None) -> tuple[str, str]:
         return UNKNOWN, "no MAIN file found on Nexus"
     inst = rec.get("installed_file_id")
     if inst is None:  # the rule: never "up to date" without a known baseline
-        return UNKNOWN, "installed file unknown - mark current as installed, or import the archive"
+        return UNKNOWN, "version unknown - press L to set it"
     if inst == latest["file_id"] or inst in (latest.get("group") or []):
+        if rec.get("baseline") == "guessed":
+            return PROBABLY_UP_TO_DATE, "installed version is a guess from file dates; press L to confirm it"
         return UP_TO_DATE, "installed file is the current release"
     old = rec.get("installed_version") or f"file {inst}"
+    if rec.get("baseline") == "guessed":
+        return PROBABLY_OUTDATED, f"~{old} -> {latest.get('version') or latest['file_id']} (installed version is a guess; press L to confirm it)"
     return UPDATE, f"{old} -> {latest.get('version') or latest['file_id']}"
 
 
@@ -160,6 +165,8 @@ class ModRow:
     installed: str | None
     latest: str | None
     reason: str
+    baseline: str | None = None  # chosen | guessed | import | marked-current | None (unknown)
+    baseline_unknown: bool = False  # linked, but no installed file recorded
 
 
 @dataclass
@@ -178,7 +185,11 @@ def _row(folder: str, rec: dict | None) -> ModRow:
     status, reason = decide_mod(rec)
     rec = rec or {}
     latest = rec.get("latest") or {}
-    return ModRow(folder, rec.get("nexus_id"), status, rec.get("installed_version"), latest.get("version"), reason)
+    inst = rec.get("installed_version")
+    if inst and rec.get("baseline") == "guessed":
+        inst = f"~{inst}"
+    return ModRow(folder, rec.get("nexus_id"), status, inst, latest.get("version"), reason, rec.get("baseline"),
+                  bool(rec.get("nexus_id")) and rec.get("installed_file_id") is None)
 
 
 def cached_rows(folders: list[str], registry: Registry) -> list[ModRow]:
@@ -188,7 +199,8 @@ def cached_rows(folders: list[str], registry: Registry) -> list[ModRow]:
 
 def check_mods(folders: list[str], registry: Registry, nexus: NexusClient | None, *, ttl_s: float = 3600.0,
                force: bool = False, now: Callable[[], float] = time.time,
-               on_row: Callable[[ModRow], None] | None = None) -> CheckResult:
+               on_row: Callable[[ModRow], None] | None = None,
+               mtimes: dict[str, float | None] | None = None) -> CheckResult:
     """Run the budgeted update check for the installed `folders`. Never raises for network/quota problems."""
     t = now()
     upd = registry.data["updates"]
@@ -249,6 +261,8 @@ def check_mods(folders: list[str], registry: Registry, nexus: NexusClient | None
                 if m.status in ("exact", "inferred") and len(m.files) == 1:
                     f = m.files[0]
                     rec.update(installed_file_id=f.file_id, installed_version=f.version, baseline="import")
+            if rec.get("installed_file_id") is None and mtimes:  # pre-existing mod: guess from file dates
+                apply_guess(registry, folder, files, mtimes.get(folder), save=False)
             emit(_row(folder, rec))  # rows appear in the UI as each mod's result arrives
         upd["last_run"] = t
         if full:
@@ -287,13 +301,14 @@ class CheckBundle:
 def run_checks(folders: list[str], registry: Registry, key: str | None, *, ttl_s: float = 3600.0, force: bool = False,
                on_row: Callable[[ModRow], None] | None = None,
                on_framework: Callable[[FrameworkUpdate], None] | None = None,
+               mtimes: dict[str, float | None] | None = None,
                now: Callable[[], float] = time.time) -> CheckBundle:
     """Frameworks + linked mods in one budgeted pass. Validates at most once; records quota and account type."""
     nx = NexusClient(key) if key else None
     t_start = now()
     try:
         fw = check_frameworks(registry, nx, ttl_s=ttl_s, force=force, now=now, on_result=on_framework)
-        r = check_mods(folders, registry, nx, ttl_s=ttl_s, force=force, now=now, on_row=on_row)
+        r = check_mods(folders, registry, nx, ttl_s=ttl_s, force=force, now=now, on_row=on_row, mtimes=mtimes)
         upd = registry.data["updates"]
         if nx is not None and nx.requests > 0 and not nx.exhausted and (upd.get("premium_checked") or 0) < t_start:
             try:  # a live run happened but check_mods did not validate (frameworks only): validate exactly once

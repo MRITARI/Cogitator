@@ -14,6 +14,7 @@ from . import __version__
 log = logging.getLogger(__name__)
 
 BASE = "https://api.nexusmods.com/v1"
+GRAPHQL = "https://api.nexusmods.com/v2/graphql"
 GAME = "warhammer40kdarktide"
 # Category ids seen in files.json: 1=MAIN, 4=OLD_VERSION, 7=ARCHIVED; category 6 arrives with category_name null.
 # Ids 2, 3, 5 and the name DELETED for 6 come from Nexus's documentation. `category_name` is preferred whenever present.
@@ -215,6 +216,32 @@ class NexusClient:
 
     def files(self, mod_id: int) -> list[NexusFile]:
         return parse_files(self.get(f"/games/{GAME}/mods/{mod_id}/files.json"))
+
+    def search_mods(self, name: str, count: int = 10) -> list[dict]:
+        """Name search through the v2 GraphQL endpoint (v1 has none). Returns [{"mod_id", "name"}]; [] on any odd reply."""
+        if self.exhausted:
+            raise RateLimited(f"Nexus API quota exhausted ({self.quota}); try again later.")
+        q = "query($f: ModsFilter, $n: Int){ mods(filter:$f, count:$n){ nodes{ modId name } } }"
+        v = {"f": {"gameDomainName": [{"value": GAME}], "name": [{"value": name, "op": "WILDCARD"}]}, "n": count}
+        try:
+            self.requests += 1
+            r = self._c.post(GRAPHQL, json={"query": q, "variables": v}, headers=self._headers())
+        except httpx.HTTPError as e:
+            raise NexusError(f"Network error talking to Nexus: {type(e).__name__}") from None
+        self._note_quota(r)
+        if r.status_code == 401:
+            raise InvalidKey("Nexus rejected the API key (HTTP 401).")
+        if r.status_code == 429:
+            self.exhausted = True
+            raise RateLimited("Nexus API rate limit reached (HTTP 429); try again later.")
+        if r.status_code != 200:
+            raise NexusError(f"Nexus name search failed (HTTP {r.status_code}).")
+        try:
+            nodes = r.json()["data"]["mods"]["nodes"]
+        except (ValueError, KeyError, TypeError):
+            return []
+        return [{"mod_id": n["modId"], "name": n["name"]} for n in nodes
+                if isinstance(n, dict) and isinstance(n.get("modId"), int) and isinstance(n.get("name"), str)]
 
     def download_links(self, mod_id: int, file_id: int) -> list[dict]:
         """Premium only. Returns [{"URI": ..., "name": ..., "short_name": ...}, ...]."""

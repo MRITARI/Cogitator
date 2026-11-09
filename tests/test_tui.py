@@ -431,7 +431,7 @@ async def test_start_check_runs_in_background_and_updates_rows_in_place(game, mo
         assert not app.checking
         assert cell(app, "alpha", "status") == "update available (25.12.02 \u2192 26.06.24)"
         assert cell(app, "alpha", "installed") == "25.12.02" and cell(app, "alpha", "latest") == "26.06.24"
-        assert cell(app, "gamma", "status") == "unknown"  # linked, baseline unknown -> never "up to date"
+        assert cell(app, "gamma", "status") == "version unknown - press L to set it"  # never "up to date"
         assert "k" * 12 not in str(app.query_one("#hdr", Static).render())
         hdr = str(app.query_one("#hdr", Static).render())
         assert "key ok (free)" in hdr and "19990 daily / 1990 hourly left (as of " in hdr

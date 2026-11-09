@@ -27,18 +27,19 @@ from ..frameworks import (describe_plan, detect_framework, plan_github, plan_loc
 from ..fwupdate import install_framework_plan, needs_repatch
 from ..gamefinder import resolve_game_dir, validate_game_dir
 from ..glyphs import Glyphs, detect, glyphs_for
-from ..linking import link_mod
+from ..linking import apply_guess, choose_baseline, folder_mtime, link_mod, rank_candidates
 from ..loader import LoaderError, NEXUS_PAGES, make_client
 from ..modinstall import (AmbiguousArchive, ModImportError, NotPremium, apply_update_premium, fetch_premium_download,
                           dropped_paths, import_archive, inspect_mod_zip, mod_page_url, newest_download, open_files_page,
                           wait_for_download)
-from ..mods import INTERNAL_FOLDERS, Mod, ENABLED, DISABLED, UNLISTED, scan_mods, toggle_mod, move_mod, ModError
-from ..nexus import NexusClient, NexusError, latest_main_file, parse_nexus_ref
+from ..mods import INTERNAL_FOLDERS, Mod, mods_dir, ENABLED, DISABLED, UNLISTED, scan_mods, toggle_mod, move_mod, ModError
+from ..nexus import InvalidKey, NexusClient, NexusError, RateLimited, latest_main_file, parse_nexus_ref
 from ..patcher import ON, OFF, PatcherError, banner as patch_banner, default_runner, patch_state
 from ..patcher import toggle as toggle_mods
 from ..procs import darktide_running
 from ..registry import Registry
 from ..updates import (FRAMEWORK_MODS, CheckBundle, FrameworkUpdate, ModRow, UP_TO_DATE, UPDATE, UNKNOWN, FAILED, NOT_LINKED,
+                       PROBABLY_OUTDATED, PROBABLY_UP_TO_DATE,
                        cached_frameworks, cached_rows, quota_text, run_checks)
 from .screens import ChoiceScreen, ConfirmScreen, DoctorScreen, InputScreen, NoticeScreen
 
@@ -56,7 +57,7 @@ NOTICE_BODY = (
 EMPTY_STATE = ("The machine spirit stirs, but no mods are consecrated here. "
                "Press I to import a mod archive, or install the Mod Loader first.")
 
-_MAIN_ACTIONS = {"toggle_mods", "toggle_mod", "move_up", "move_down", "update_selected", "update_all", "recheck", "link", "import_archive",
+_MAIN_ACTIONS = {"link_all", "toggle_mods", "toggle_mod", "move_up", "move_down", "update_selected", "update_all", "recheck", "link", "import_archive",
                  "set_key", "cycle_sort", "quit_app", "framework_update", "doctor", "apply_update"}
 SORT_COLUMNS = ("mod", "status", "installed", "latest", "en")
 
@@ -82,7 +83,16 @@ def mod_cell(mod: Mod) -> Text:
     return t
 
 
-_STATUS_STYLE = {UP_TO_DATE: "green", UPDATE: "bold yellow", UNKNOWN: "dim", FAILED: "bold red", NOT_LINKED: "dim"}
+_STATUS_STYLE = {UP_TO_DATE: "green", UPDATE: "bold yellow", UNKNOWN: "dim", FAILED: "bold red", NOT_LINKED: "dim",
+                 PROBABLY_UP_TO_DATE: "green", PROBABLY_OUTDATED: "bold yellow"}
+BASELINE_UNKNOWN_LABEL = "version unknown - press L to set it"
+
+
+def installed_text(row: ModRow | None, mtime: float | None) -> Text:
+    """Version, "~version" for a guess, else the folder's last-modified date."""
+    if row is not None and row.installed:
+        return Text(row.installed)
+    return Text(time.strftime("%Y-%m-%d", time.localtime(mtime)) if mtime else "-", "dim")
 
 
 def status_text(row: ModRow | None, g: Glyphs, mod: Mod | None = None) -> Text:
@@ -91,8 +101,10 @@ def status_text(row: ModRow | None, g: Glyphs, mod: Mod | None = None) -> Text:
     if row is None:
         return Text("not linked", "dim")
     label = row.status
-    if row.status == UPDATE:
-        label = f"update available ({row.installed or '?'} {g.arrow} {row.latest or '?'})"
+    if row.status == UNKNOWN and row.baseline_unknown:
+        label = BASELINE_UNKNOWN_LABEL
+    elif row.status in (UPDATE, PROBABLY_OUTDATED):
+        label = f"{row.status} ({row.installed or '?'} {g.arrow} {row.latest or '?'})"
     return Text(label, _STATUS_STYLE.get(row.status, ""))
 
 
@@ -193,6 +205,8 @@ class CogitatorApp(App):
         Binding("R", "recheck", show=False),
         Binding("l", "link", "Link", key_display="L"),
         Binding("L", "link", show=False),
+        Binding("m", "link_all", "Link all", key_display="M"),
+        Binding("M", "link_all", show=False),
         Binding("i", "import_archive", "Import", key_display="I"),
         Binding("I", "import_archive", show=False),
         Binding("k", "set_key", "Key", key_display="K"),
@@ -481,8 +495,12 @@ class CogitatorApp(App):
 
     def _add_row(self, t: DataTable, m: Mod) -> None:
         r = self.urows.get(m.folder)
-        t.add_row(enabled_cell(m, self.glyphs), mod_cell(m), Text((r.installed if r else None) or "-"),
+        t.add_row(enabled_cell(m, self.glyphs), mod_cell(m), self._installed_cell(m.folder, r),
                   Text((r.latest if r else None) or "-"), status_text(r, self.glyphs, m), key=m.folder)
+
+    def _installed_cell(self, folder: str, r: ModRow | None) -> Text:
+        m = None if r is not None and r.installed else folder_mtime(mods_dir(self.game_dir) / folder)
+        return installed_text(r, m)
 
     def _mod(self, folder: str | None) -> Mod | None:
         return next((m for m in self.mods if m.folder == folder), None)
@@ -509,7 +527,7 @@ class CogitatorApp(App):
         t = self.query_one("#mods", DataTable)
         m = self._mod(r.folder)
         try:
-            t.update_cell(r.folder, "installed", Text(r.installed or "-"))  # Text: versions are never markup
+            t.update_cell(r.folder, "installed", self._installed_cell(r.folder, r))  # Text: versions are never markup
             t.update_cell(r.folder, "latest", Text(r.latest or "-"))
             t.update_cell(r.folder, "status", status_text(r, self.glyphs, m))
         except Exception:
@@ -657,8 +675,9 @@ class CogitatorApp(App):
         try:
             with self._lock:
                 folders = [m.folder for m in self.mods if m.present]
+                mt = {f: folder_mtime(mods_dir(self.game_dir) / f) for f in folders}
                 b = run_checks(folders, self.registry, get_api_key(), ttl_s=self.settings.update_ttl_minutes * 60.0,
-                               force=force, on_row=lambda r: self._ui(self._apply_row, r),
+                               force=force, mtimes=mt, on_row=lambda r: self._ui(self._apply_row, r),
                                on_framework=lambda u: self._ui(self._apply_fw, u))
             self._ui(self._check_done, b)
         except Exception as e:
@@ -720,6 +739,10 @@ class CogitatorApp(App):
         if f in INTERNAL_FOLDERS:
             self.log_line(f"'{f}' belongs to the loader/framework.", "yellow")
             return
+        row = self.urows.get(f)
+        if row is not None and row.nexus_id and row.baseline in (None, "guessed"):  # linked; just set the version
+            self._bg(self._job_set_version, f, row.nexus_id, name="set version", group="link", exclusive=True)
+            return
         self.push_screen(InputScreen(f"Link '{f}' to its Nexus page", "https://www.nexusmods.com/warhammer40kdarktide/mods/<id>  or  numeric id"),
                          lambda ref: self._link_ref(f, ref))
 
@@ -758,6 +781,110 @@ class CogitatorApp(App):
                            baseline="current" if choice == 0 else "none")
         self._ui(self._after_registry_change, folder)
         self._ui(self.log_line, f"Linked '{folder}' to {name}." + ("" if rec["installed_file_id"] else " Baseline unknown."), "green")
+
+    # -------------------------------------------------------------- M: link every unlinked mod
+    def action_link_all(self) -> None:
+        if self._need_game():
+            self._bg(self._job_link_all, name="link all", group="link", exclusive=True)
+
+    def _job_link_all(self) -> None:
+        key = get_api_key()
+        if not key:
+            self._ui(self.log_line, "Linking validates through the API - press K to set your Nexus key first.", "yellow")
+            return
+        todo = [m.folder for m in self.mods if m.present and m.folder not in INTERNAL_FOLDERS
+                and not (self.registry.mod(m.folder) or {}).get("nexus_id")]
+        if not todo:
+            self._ui(self.log_line, "Every mod is already linked.", "dim")
+            return
+        done = 0
+        try:
+            with NexusClient(key) as nx:
+                for folder in todo:
+                    r = self._link_one(nx, folder)
+                    if r is None:
+                        break
+                    done += bool(r)
+        except NexusError as e:
+            self._ui(self.log_line, f"Link all stopped: {e}", "bold red")
+        self._ui(self._after_registry_change)
+        self._ui(self.log_line, f"Link all finished: {done} linked.", "green")
+
+    def _link_one(self, nx: NexusClient, folder: str) -> bool | None:
+        """True linked, False skipped, None stop. Never links without the user's confirmation."""
+        mod_id = None
+        try:
+            cands = rank_candidates(folder, nx.search_mods(folder.replace("_", " ")))
+        except (InvalidKey, RateLimited):
+            raise
+        except NexusError as e:
+            self._ui(self.log_line, f"Name search unavailable ({e}); paste a URL or id.", "yellow")
+            cands = []
+        if cands:
+            opts = [f"Yes - link to: {cands[0]['name']} (mod {cands[0]['mod_id']})"]
+            opts += [f"Use instead: {c['name']} (mod {c['mod_id']})" for c in cands[1:]]
+            opts += ["No - paste a Nexus URL or id", "Skip this mod", "Stop"]
+            c = self.ask(ChoiceScreen(f"Link '{folder}'?", opts))
+            if c is None or c == len(opts) - 1:
+                return None
+            if c == len(opts) - 2:
+                return False
+            if c < len(cands):
+                mod_id = cands[c]["mod_id"]
+        if mod_id is None:
+            ref = self.ask(InputScreen(f"Link '{folder}' to its Nexus page", "URL or numeric id (blank = skip)", allow_blank=True))
+            if ref is None:
+                return None
+            if not ref:
+                return False
+            mod_id, problem = parse_nexus_ref(ref)
+            if mod_id is None:
+                self._ui(self.log_line, f"{folder}: {problem}", "bold red")
+                return False
+        try:
+            info, files = nx.mod(mod_id), nx.files(mod_id)
+        except (InvalidKey, RateLimited):
+            raise
+        except NexusError as e:
+            self._ui(self.log_line, f"{folder}: {e}", "bold red")
+            return False
+        with self._lock:
+            link_mod(self.registry, folder, mod_id, info.get("name") or f"mod {mod_id}", files, via="manual", baseline="none")
+            apply_guess(self.registry, folder, files, folder_mtime(mods_dir(self.game_dir) / folder))
+        self._pick_version(folder, files)
+        self._ui(self.log_line, f"Linked '{folder}' to {info.get('name') or mod_id}.", "green")
+        return True
+
+    def _pick_version(self, folder: str, files) -> None:
+        """Version picker with dates; the current guess is preselected. The last option keeps whatever is stored."""
+        pool = sorted((f for f in files if f.file_id is not None), key=lambda f: (f.uploaded or 0, f.file_id), reverse=True)[:40]
+        if not pool:
+            return
+        guess = (self.registry.mod(folder) or {}).get("installed_file_id")
+        opts = [f"{f.version or '?'}   {time.strftime('%Y-%m-%d', time.localtime(f.uploaded)) if f.uploaded else '?'}   "
+                f"{f.category or ''} {f.name or f.file_name or ''}".rstrip() + ("   <- guess" if f.file_id == guess else "")
+                for f in pool] + ["I do not know"]
+        sel = next((i for i, f in enumerate(pool) if f.file_id == guess), 0)
+        c = self.ask(ChoiceScreen(f"Which version of '{folder}' is installed?", opts, selected=sel))
+        if c is not None and c < len(pool):
+            with self._lock:
+                choose_baseline(self.registry, folder, files, pool[c].file_id)
+
+    def _job_set_version(self, folder: str, mod_id: int) -> None:
+        key = get_api_key()
+        if not key:
+            self._ui(self.log_line, "Press K to set your Nexus key first.", "yellow")
+            return
+        try:
+            with NexusClient(key) as nx:
+                files = nx.files(mod_id)
+        except NexusError as e:
+            self._ui(self.log_line, f"Could not load versions: {e}", "bold red")
+            return
+        with self._lock:
+            apply_guess(self.registry, folder, files, folder_mtime(mods_dir(self.game_dir) / folder))
+        self._pick_version(folder, files)
+        self._ui(self._after_registry_change, folder)
 
     def _after_registry_change(self, folder: str | None = None) -> None:
         self.refresh_all(keep=folder)
@@ -871,7 +998,7 @@ class CogitatorApp(App):
         if not (self._need_game() and f):
             return
         row = self.urows.get(f)
-        if row is None or row.status != UPDATE:
+        if row is None or row.status not in (UPDATE, PROBABLY_OUTDATED):
             self.log_line(f"'{f}': nothing to update ({row.status if row else NOT_LINKED}).", "yellow")
             return
         if self._premium():
