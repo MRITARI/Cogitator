@@ -88,14 +88,15 @@ def test_script_refuses_bad_input(built, tmp_path):
         release.main(["--version", "1.0.0"])  # no key given anywhere
 
 
-def test_the_release_key_is_not_in_the_repo_and_the_default_build_refuses_updates():
-    assert su.RELEASE_PUBLIC_KEY_HEX == "" or len(su.RELEASE_PUBLIC_KEY_HEX) == 64
+def test_the_release_key_is_public_only_and_gitignore_covers_private_keys():
+    assert len(su.RELEASE_PUBLIC_KEY_HEX) == 64 and bytes.fromhex(su.RELEASE_PUBLIC_KEY_HEX)
     repo = Path(__file__).parents[1]
     assert "release/" in (repo / ".gitignore").read_text() and "*.key" in (repo / ".gitignore").read_text()
 
 
 def test_cli_self_update_paths(capsys, built, monkeypatch):
     files, pub, tmp = built
+    monkeypatch.setattr(su, "RELEASE_PUBLIC_KEY_HEX", "")
     assert cli.main(["self-update", "--check"]) == 1  # no key built in: refuses, says why
     assert "no release key" in capsys.readouterr().out
     monkeypatch.setattr(su, "RELEASE_PUBLIC_KEY_HEX", pub)

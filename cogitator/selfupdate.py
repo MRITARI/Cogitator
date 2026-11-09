@@ -34,7 +34,7 @@ from .registry import Registry
 log = logging.getLogger(__name__)
 
 UPDATE_REPO = "MRITARI/Cogitator"
-RELEASE_PUBLIC_KEY_HEX = ""  # the release signing public key (64 hex characters); empty = updates are disabled in this build
+RELEASE_PUBLIC_KEY_HEX = "e2d621da43aa9b6cae3d0dde71e65b69bc77cccbf12fb93ba8cbdabf7bb664ce"  # the release signing public key (64 hex characters); empty = updates are disabled in this build
 API = "https://api.github.com"
 ALLOWED_HOSTS = frozenset({"github.com", "api.github.com", "objects.githubusercontent.com",
                            "github-releases.githubusercontent.com", "release-assets.githubusercontent.com"})

@@ -60,11 +60,14 @@ def build(version: str, app_dir: Path, out: Path, key_path: Path, installer: boo
         for p in sorted(x for x in app_dir.rglob("*") if x.is_file()):
             z.write(p, p.relative_to(app_dir).as_posix())  # the app folder's contents sit at the zip root
     data = zpath.read_bytes()
-    sums = out / "SHA256SUMS"
-    sums.write_text(f"{hashlib.sha256(data).hexdigest()}  {name}\n", encoding="utf-8", newline="\n")
     sig = out / (name + ".sig")
     sig.write_bytes(base64.b64encode(key.sign(data)) + b"\n")
-    return [zpath, sig, sums]
+    assets = [zpath]
+    if installer:
+        assets.append(build_installer(version, out))
+    sums = out / "SHA256SUMS"
+    sums.write_text("".join(f"{hashlib.sha256(a.read_bytes()).hexdigest()}  {a.name}\n" for a in assets), encoding="utf-8", newline="\n")
+    return [*assets, sig, sums]
 
 
 def main(argv: list[str] | None = None) -> int:
