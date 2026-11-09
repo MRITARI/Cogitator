@@ -31,7 +31,7 @@ def built(tmp_path):
     (app / "cogitator.exe").write_bytes(b"NEWEXE")
     (app / "_internal" / "lib.dll").write_bytes(b"dll")
     out = tmp_path / "release"
-    files = release.build("1.2.3", app, out, kp)
+    files = release.build("1.2.3", app, out, kp, installer=False)
     pub = key.public_key().public_bytes(serialization.Encoding.Raw, serialization.PublicFormat.Raw).hex()
     return files, pub, tmp_path
 
