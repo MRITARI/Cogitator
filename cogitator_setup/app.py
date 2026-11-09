@@ -139,7 +139,7 @@ class SetupApp:
         self.container.rowconfigure(0, weight=1)
         self.container.columnconfigure(0, weight=1)
         self.nav = ttk.Frame(self.root, padding=(16, 0, 16, 12))
-        self.nav.pack(fill="x")
+        self.nav.pack(side="bottom", fill="x", before=self.container)
         self.btn_cancel = ttk.Button(self.nav, text="Cancel", command=self.on_cancel)
         self.btn_next = ttk.Button(self.nav, text="Next >", command=self.on_next)
         self.btn_back = ttk.Button(self.nav, text="< Back", command=self.on_back)
@@ -227,7 +227,7 @@ class SetupApp:
     # ---------------------------------------------------------------- wizard shell
     def show_wizard(self) -> None:
         self.in_wizard = True
-        self.nav.pack(fill="x")
+        self.nav.pack(side="bottom", fill="x", before=self.container)
         self.model.page = Page.WELCOME
         self.model.accepted = False
         self._goto(Page.WELCOME)
@@ -454,7 +454,7 @@ class SetupApp:
         body.grid(row=2, column=0, sticky="nsew")
         body.rowconfigure(0, weight=1)
         body.columnconfigure(0, weight=1)
-        self.review_text = tk.Text(body, wrap="word", state="disabled", relief="solid", borderwidth=1)
+        self.review_text = tk.Text(body, wrap="word", state="disabled", relief="solid", borderwidth=1, height=8)
         sb = ttk.Scrollbar(body, command=self.review_text.yview)
         self.review_text.configure(yscrollcommand=sb.set)
         self.review_text.grid(row=0, column=0, sticky="nsew")
@@ -548,7 +548,7 @@ class SetupApp:
 
         plan = self.model.build_plan()
         self.in_wizard = True
-        self.nav.pack(fill="x")
+        self.nav.pack(side="bottom", fill="x", before=self.container)
         for iid in self.steps.get_children():
             self.steps.delete(iid)
         self.step_rows = {}

@@ -629,3 +629,10 @@ def test_start_cogitator_runs_the_installed_app_exe(tmp_path):
     (tmp_path / "app" / "cogitator.exe").write_bytes(b"x")
     assert cogitator_target(True, str(tmp_path / "setup" / "Cogitator Setup.exe")) == [str((tmp_path / "app" / "cogitator.exe").resolve())]
     assert cogitator_target(False, "py.exe") == ["py.exe", "-m", "cogitator"]
+
+
+def test_navigation_buttons_keep_their_space_when_the_review_page_is_tall(root, world):
+    app = make_app(root, world, first_run=True)
+    walk_first_run(app)
+    assert app.root.pack_slaves()[0] is app.nav and str(app.nav.pack_info()["side"]) == "bottom"  # packed first: never squeezed out
+    assert int(app.review_text.cget("height")) <= 10

@@ -74,7 +74,7 @@ class UninstallApp:
         self.container.rowconfigure(0, weight=1)
         self.container.columnconfigure(0, weight=1)
         self.nav = ttk.Frame(self.root, padding=(16, 0, 16, 12))
-        self.nav.pack(fill="x")
+        self.nav.pack(side="bottom", fill="x", before=self.container)
         self.btn_cancel = ttk.Button(self.nav, text="Cancel", command=self.on_cancel)
         self.btn_next = ttk.Button(self.nav, text="Next >", command=self.on_next)
         self.btn_back = ttk.Button(self.nav, text="< Back", command=self.on_back)
@@ -354,7 +354,7 @@ class UninstallApp:
     # ---------------------------------------------------------------- navigation
     def _goto(self, page: UPage) -> None:
         self.model.page = page
-        self.nav.pack(fill="x")
+        self.nav.pack(side="bottom", fill="x", before=self.container)
         self.pages[page.value].tkraise()
         getattr(self, f"_enter_{page.value}", lambda: None)()
         self._refresh_nav()
