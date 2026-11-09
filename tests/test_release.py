@@ -112,3 +112,14 @@ def test_cli_self_update_paths(capsys, built, monkeypatch):
     assert cli.main(["self-update", "--rollback"]) == 1 and "pipx upgrade cogitator" in capsys.readouterr().err
     assert cli.main(["self-update", "--channel", "beta", "--check"]) == 0
     assert Settings.load().update_channel == "beta"
+
+
+def test_installer_script_is_one_flow_and_asks_before_touching_the_game():
+    iss = (Path(__file__).resolve().parents[1] / "packaging" / "cogitator.iss").read_text(encoding="utf-8")
+    run = [ln for ln in iss.split("[Run]")[1].split("[UninstallDelete]")[0].splitlines() if ln.startswith("Filename")]
+    assert len(run) == 1 and 'setup\Cogitator Setup.exe' in run[0] and 'Parameters: "--wizard"' in run[0]
+    assert "skipifsilent" in run[0] and "postinstall" not in run[0] and "unchecked" not in run[0]  # automatic, never on /SILENT
+    assert 'Name: "{autoprograms}\Cogitator Setup";' in iss
+    assert 'Name: "desktopicon"; Description: "Create a &desktop shortcut"; Flags: checkedonce' in iss  # ticked by default
+    assert "Also remove the Mod Loader and Framework from Darktide?" in iss and "if UninstallSilent then" in iss
+    assert "'--uninstall'" in iss and "ewWaitUntilTerminated" in iss and "toggle_darktide_mods.bat" in iss

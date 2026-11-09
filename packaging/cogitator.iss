@@ -34,6 +34,7 @@ Compression=lzma2
 SolidCompression=yes
 WizardStyle=modern
 CloseApplications=yes
+DisableFinishedPage=yes
 
 [Files]
 Source: "..\dist\cogitator\*"; DestDir: "{app}\app"; Flags: recursesubdirs createallsubdirs ignoreversion
@@ -42,14 +43,16 @@ Source: "cogitator.ico"; DestDir: "{app}"; Flags: ignoreversion
 
 [Icons]
 Name: "{autoprograms}\Cogitator"; Filename: "{app}\app\cogitator.exe"; IconFilename: "{app}\cogitator.ico"
-Name: "{autoprograms}\Cogitator Setup (repair or uninstall)"; Filename: "{app}\setup\Cogitator Setup.exe"; IconFilename: "{app}\cogitator.ico"
+Name: "{autoprograms}\Cogitator Setup"; Filename: "{app}\setup\Cogitator Setup.exe"; IconFilename: "{app}\cogitator.ico"
 Name: "{autodesktop}\Cogitator"; Filename: "{app}\app\cogitator.exe"; IconFilename: "{app}\cogitator.ico"; Tasks: desktopicon
 
 [Tasks]
 Name: "desktopicon"; Description: "Create a &desktop shortcut"; Flags: checkedonce
 
 [Run]
-Filename: "{app}\app\cogitator.exe"; Description: "Start Cogitator"; Flags: postinstall nowait skipifsilent unchecked
+; One flow: after the files are in place the wizard opens by itself (not an optional checkbox). Silent installs skip it
+; and never touch the game. The Nexus key is typed in the wizard only; nothing is passed on a command line.
+Filename: "{app}\setup\Cogitator Setup.exe"; Parameters: "--wizard"; Flags: nowait skipifsilent
 
 [UninstallDelete]
 ; Created by the self-updater after installation; Inno does not know about them.
@@ -65,4 +68,22 @@ begin
     // Its presence next to the app\ folder is what makes the Update panel live (detect_layout -> "installer").
     SaveStringToFile(ExpandConstant('{app}\install.json'),
       '{"installer": "inno", "version": "{#AppVersion}"}' + #13#10, False);
+end;
+
+function InitializeUninstall(): Boolean;
+var
+  SetupExe: String;
+  Code: Integer;
+begin
+  Result := True; // the app is removed whatever the answer is
+  if UninstallSilent then
+    exit; // silent uninstalls never touch the game
+  SetupExe := ExpandConstant('{app}\setup\Cogitator Setup.exe');
+  if not FileExists(SetupExe) then
+    exit;
+  if MsgBox('Also remove the Mod Loader and Framework from Darktide?', mbConfirmation, MB_YESNO) = IDYES then
+    Exec(SetupExe, '--uninstall', '', SW_SHOWNORMAL, ewWaitUntilTerminated, Code)
+  else
+    MsgBox('Darktide was left as it is. Mods stay active until you switch them off with Cogitator or toggle_darktide_mods.bat.',
+      mbInformation, MB_OK);
 end;

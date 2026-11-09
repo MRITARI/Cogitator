@@ -128,7 +128,7 @@ def test_invalid_key_never_reaches_the_plan(game):
 
 
 def test_key_copy():
-    assert "Only needed for mod update checks" in KEY_BLURB and "K key" in KEY_BLURB and "never shared" in KEY_BLURB
+    assert "Optional" in KEY_BLURB and "check your mods for updates" in KEY_BLURB and "Skip" in KEY_BLURB and "K key" in KEY_BLURB and "never shared" in KEY_BLURB
 
 
 def test_the_key_appears_in_no_user_visible_or_loggable_text(game):

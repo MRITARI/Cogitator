@@ -103,10 +103,10 @@ def real_deps(tool=None, **kw):
                      doctor_fn=lambda game, **k: run_doctor(game, **{**k, "offline": True, "log_dirs": [], "steam_roots_fn": lambda: []}), **kw)
 
 
-def make_app(root, world, *, dialogs=None, deps=None, run_fn=None, **svc):
+def make_app(root, world, *, dialogs=None, deps=None, run_fn=None, first_run=False, **svc):
     model = SetupModel(services(world, **svc))
     ctl = Controller(model, deps or real_deps(), **({"run_fn": run_fn} if run_fn else {}))
-    return SetupApp(model=model, controller=ctl, dialogs=dialogs or FakeDialogs(), root=root)
+    return SetupApp(model=model, controller=ctl, dialogs=dialogs or FakeDialogs(), root=root, first_run=first_run)
 
 
 def pump(app, pred, timeout=10.0):
@@ -551,3 +551,81 @@ def test_the_checkup_report_opens_in_a_scrollable_window(root):
 def test_the_finish_page_uses_the_scrollable_dialog_by_default():
     from cogitator_setup.app import Dialogs, scroll_dialog
     assert Dialogs().show_info is scroll_dialog
+
+
+# ------------------------------------------------------------ first run: opened by the installer (--wizard)
+
+def walk_first_run(app):
+    """welcome -> game -> key (skipped) -> review; returns once Install is possible."""
+    assert app.in_wizard and app.model.page is Page.WELCOME
+    app.v_accept.set(True)
+    app._accept_changed()
+    app.btn_next.invoke()
+    assert pump(app, lambda: app.model.page is Page.GAME and app.model.game_dir is not None and str(app.btn_next.cget("state")) == "normal")
+    app.btn_next.invoke()
+    assert app.model.page is Page.KEY and str(app.e_key.cget("show")) == "*"  # the key is typed hidden
+    app.on_skip_key()
+    assert app.model.page is Page.REVIEW  # no Components page: the installer already did the app and shortcuts
+    assert pump(app, lambda: app.model.install_ready()[0] and bool(app.model.options) and str(app.btn_next.cget("state")) == "normal")
+
+
+def test_first_run_goes_straight_to_the_wizard_comes_to_the_front_and_installs_everything(root, world):
+    g, *_ = world
+    d = FakeDialogs()
+    app = make_app(root, world, dialogs=d, first_run=True)
+    assert app.root.attributes("-topmost")  # raised above the installer window
+    walk_first_run(app)
+    rows = {r.label: r.lines for r in app.model.review_rows()}
+    assert "installer" in rows["Cogitator"][0] and "installer" in rows["Shortcuts"][0]
+    app.btn_next.invoke()
+    assert pump(app, lambda: app.model.page is Page.FINISH)
+    assert app.result.ok and patch_state(g) == ON and (g / "binaries" / "mod_loader").is_file() and (g / "mods" / "dmf" / "dmf.mod").is_file()
+    assert "app" not in [app.steps.item(i, "values")[1] for i in app.steps.get_children()] and "shortcuts" not in app.result.__dict__.get("steps", "")
+    assert app.v_launch.get() and str(app.btn_finish.cget("text")) == "Start Cogitator"
+    assert "Installed:" in " ".join(widget_texts(app.root))
+    app.btn_finish.invoke()
+    assert ("launch",) in d.log
+
+
+def test_first_run_that_fails_midway_leaves_the_game_folder_as_it_was(root, world):
+    g, *_ = world
+    before = tree(g)
+    app = make_app(root, world, deps=real_deps(FakeTool(fail_patch=True)), first_run=True)
+    walk_first_run(app)
+    app.btn_next.invoke()
+    assert pump(app, lambda: app.model.page is Page.FINISH)
+    assert not app.result.ok and app.result.rolled_back and tree(g) == before and patch_state(g) == OFF
+    assert "disabled" in app.fin_launch.state()  # nothing to start from a failed run; Cogitator itself is unaffected
+
+
+def test_first_run_cancelled_mid_run_leaves_nothing_changed(root, world):
+    g, *_ = world
+    before = tree(g)
+    app = make_app(root, world, run_fn=SlowRun(), first_run=True)
+    walk_first_run(app)
+    app.btn_next.invoke()
+    assert pump(app, lambda: app.model.page is Page.PROGRESS)
+    app.btn_cancel.invoke()
+    assert pump(app, lambda: app.model.page is Page.FINISH) and app.result.cancelled and tree(g) == before
+
+
+def test_wizard_flag_opens_the_app_in_first_run_mode_even_when_installed():
+    seen = []
+
+    class A:
+        def mainloop(self):
+            pass
+
+    assert main(["--wizard"], build=22000, installed=True, app_factory=lambda **kw: seen.append(kw) or A()) == 0
+    assert seen == [{"first_run": True}]
+
+
+def test_start_cogitator_runs_the_installed_app_exe(tmp_path):
+    from cogitator_setup.launch import cogitator_target
+
+    (tmp_path / "setup").mkdir()
+    (tmp_path / "app").mkdir()
+    assert cogitator_target(True, str(tmp_path / "setup" / "Cogitator Setup.exe")) is None  # not installed there
+    (tmp_path / "app" / "cogitator.exe").write_bytes(b"x")
+    assert cogitator_target(True, str(tmp_path / "setup" / "Cogitator Setup.exe")) == [str((tmp_path / "app" / "cogitator.exe").resolve())]
+    assert cogitator_target(False, "py.exe") == ["py.exe", "-m", "cogitator"]

@@ -21,7 +21,8 @@ NOTICE = (
     "so only install mods you trust.\n"
     "Fatshark does not allow mods that affect other players, progression or servers. Cogitator includes none.")
 
-KEY_BLURB = ("Only needed for mod update checks. You can add it later with the K key. "
+KEY_BLURB = ("Optional. A Nexus Mods API key lets Cogitator check your mods for updates. Open the Nexus page below, "
+             "copy your key, and paste it here, or press Skip. You can add it later with the K key. "
              "Your key stays on this computer and is never shared.")
 PATCH_SENTENCE = ("Mods are switched on by a small change to the game's files. Game updates switch them off again, "
                   "and Cogitator can switch them back on.")
@@ -121,6 +122,7 @@ class SetupModel:
         self.result: SetupResult | None = None
         self.run_doctor = True
         self.launch = True
+        self.first_run = False  # opened by the installer: the app and shortcuts are already in place; no Components page
         self.repair = False  # maintenance 'Repair': reinstall what is already there, too
 
     def __repr__(self) -> str:  # the key must never show up in a repr (logs, tracebacks)
@@ -147,18 +149,23 @@ class SetupModel:
             return self.install_ready()
         return False, ""  # Progress and Finish are driven by the engine
 
+    def _order(self) -> list[Page]:
+        return [p for p in ORDER if not (self.first_run and p is Page.COMPONENTS)]
+
     def next(self) -> bool:
         ok, _ = self.can_next()
         if not ok or self.page in (Page.PROGRESS, Page.FINISH):
             return False
-        self.page = ORDER[ORDER.index(self.page) + 1]
+        order = self._order()
+        self.page = order[order.index(self.page) + 1]
         return True
 
     def back(self) -> bool:
         if self.page in (Page.WELCOME, Page.PROGRESS, Page.FINISH):
             return False  # nothing can be undone once the run started
         self.confirmed = False
-        self.page = ORDER[ORDER.index(self.page) - 1]
+        order = self._order()
+        self.page = order[order.index(self.page) - 1]
         return True
 
     # ---------------------------------------------------------------- game page
@@ -279,7 +286,9 @@ class SetupModel:
         return True, ""
 
     def review_rows(self) -> list[ReviewRow]:
-        rows = [ReviewRow("Darktide folder", [str(self.game_dir)]), ReviewRow("Cogitator", ["Installed for your Windows user only (no administrator rights)."])]
+        rows = [ReviewRow("Darktide folder", [str(self.game_dir)]),
+                ReviewRow("Cogitator", ["Already installed (done by the installer)." if self.first_run
+                                        else "Installed for your Windows user only (no administrator rights)."])]
         for kind in ("dml", "dmf"):
             c = self.components[kind]
             if not c.selected:
@@ -295,7 +304,7 @@ class SetupModel:
             rows.append(ReviewRow(c.title + (" - UNRELEASED SNAPSHOT" if opt.unreleased else ""), lines,
                                   SNAPSHOT_EXPLANATION if opt.unreleased else ""))
         rows.append(ReviewRow("Mods", [PATCH_SENTENCE if self.enable_mods else "Left switched off. You can switch them on later with the T key."]))
-        shortcuts = [n for n, on in (("Desktop icon", self.desktop_icon), ("Start Menu entry", self.start_menu)) if on]
+        shortcuts = ["Already created by the installer."] if self.first_run else [n for n, on in (("Desktop icon", self.desktop_icon), ("Start Menu entry", self.start_menu)) if on]
         rows.append(ReviewRow("Shortcuts", shortcuts or ["None"]))
         rows.append(ReviewRow("Nexus key", ["Will be stored in Windows' credential store."] if self.key_for_plan() else ["Not set. Update checks stay off until you add it (K key)."]))
         return rows

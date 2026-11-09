@@ -10,8 +10,9 @@ start. Mods are not supported by Fatshark and are used at your own risk.
 
 Windows 11 (x64) only.
 
-1. Download `Cogitator-<version>-win-x64-installer.exe` from the [Releases](https://github.com/MRITARI/Cogitator/releases) page.
-2. Run it. It installs per user and needs no administrator rights.
+Download `Cogitator-<version>-win-x64-installer.exe` from the [Releases](https://github.com/MRITARI/Cogitator/releases) page and run it.
+Follow the window that opens: it asks for your Nexus key (optional) and installs everything, including the Mod Loader and
+Framework. It installs per user and needs no administrator rights.
 
 The installer is not code-signed, so Windows SmartScreen may warn about it. Click **More info**, then **Run anyway**.
 

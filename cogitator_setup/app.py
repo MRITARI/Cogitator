@@ -56,6 +56,12 @@ def scroll_dialog(title: str, body: str) -> None:
     top.wait_window()
 
 
+def _launch_cogitator() -> None:
+    from .launch import launch_cogitator
+
+    launch_cogitator()
+
+
 # ---------------------------------------------------------------- things tests replace
 @dataclass
 class Dialogs:
@@ -66,21 +72,22 @@ class Dialogs:
     browse_zip: Callable[[str], str | None] = lambda what: filedialog.askopenfilename(
         title=f"Choose the {what} zip you downloaded", filetypes=[("Zip files", "*.zip")]) or None
     open_url: Callable[[str], object] = webbrowser.open
-    launch: Callable[[], object] = lambda: None  # real launch arrives with the installed app + shortcuts (build steps 7 and 9)
+    launch: Callable[[], object] = lambda: _launch_cogitator()
 
 
 class SetupApp:
     def __init__(self, model: SetupModel | None = None, controller: Controller | None = None, dialogs: Dialogs | None = None,
                  root: tk.Tk | None = None, services: Services | None = None, deps: SetupDeps | None = None,
-                 dry_run: bool = False, repair: bool = False):
+                 dry_run: bool = False, repair: bool = False, first_run: bool = False):
         from .dryrun import simulated_setup
 
         self.root = root or tk.Tk()
         self.model = model or SetupModel(services)
         self.model.repair = repair
+        self.model.first_run = first_run
         self.dry_run = dry_run
         self.ctl = controller or Controller(self.model, deps, **({"run_fn": simulated_setup} if dry_run else {}))
-        self.dlg = dialogs or Dialogs()
+        self.dlg = dialogs or (Dialogs(launch=lambda: None) if dry_run else Dialogs())
         self.root.title(f"{TITLE} {self.model.version}" + (" - DRY RUN (nothing will be changed)" if dry_run else ""))
         self.root.geometry("760x560")
         self.root.minsize(560, 420)
@@ -96,8 +103,22 @@ class SetupApp:
         for seq, delta in (("<Control-plus>", 1), ("<Control-equal>", 1), ("<Control-minus>", -1)):
             self.root.bind(seq, lambda e, d=delta: self.scale_text(d))
         self.root.bind("<Control-0>", lambda e: self.scale_text(0))
-        self.show_express()
+        if first_run:
+            self.show_wizard()  # the installer already put the app in place: go straight to the install flow
+            self._to_front()
+        else:
+            self.show_express()
         self.root.after(POLL_MS, self._poll)
+
+    def _to_front(self) -> None:
+        """Launched by the installer, the window must not open behind it."""
+        try:
+            self.root.lift()
+            self.root.attributes("-topmost", True)
+            self.root.after(500, lambda: self.root.attributes("-topmost", False))
+            self.root.focus_force()
+        except tk.TclError:
+            pass
 
     # ---------------------------------------------------------------- shell
     def _build_fonts(self) -> None:
@@ -554,7 +575,7 @@ class SetupApp:
         self.v_doctor = tk.BooleanVar(value=True)
         self.v_launch = tk.BooleanVar(value=True)
         self.fin_doctor = ttk.Checkbutton(f, text="Show the check-up results", variable=self.v_doctor)
-        self.fin_launch = ttk.Checkbutton(f, text="Start Cogitator now", variable=self.v_launch)
+        self.fin_launch = ttk.Checkbutton(f, text="Start Cogitator now", variable=self.v_launch, command=self._finish_label)
         self.fin_doctor.grid(row=4, column=0, sticky="w", pady=(12, 0))
         self.fin_launch.grid(row=5, column=0, sticky="w")
         btns = ttk.Frame(f)
@@ -563,6 +584,9 @@ class SetupApp:
         self.btn_copy.pack(side="left")
         self.btn_finish = ttk.Button(btns, text="Finish", command=self.on_finish)
         self.btn_finish.pack(side="left", padx=8)
+
+    def _finish_label(self) -> None:
+        self.btn_finish.configure(text="Start Cogitator" if self.v_launch.get() else "Finish")
 
     def _show_finish(self, res: SetupResult) -> None:
         self.result = res
@@ -576,6 +600,7 @@ class SetupApp:
         if not res.doctor:
             self.fin_doctor.state(["disabled"])
             self.v_doctor.set(False)
+        self._finish_label()
         self._goto(Page.FINISH)
 
     def on_copy_details(self) -> None:
@@ -590,7 +615,10 @@ class SetupApp:
 
             self.dlg.show_info("Check-up results", format_report(res.doctor))
         if res and res.ok and self.v_launch.get():
-            self.dlg.launch()
+            try:
+                self.dlg.launch()
+            except OSError:
+                self.dlg.show_error(TITLE, "Cogitator could not be started. Open it from the Start Menu.")
         self.root.destroy()
 
     # ---------------------------------------------------------------- message pump (UI thread only)
@@ -743,14 +771,14 @@ def main(argv: list[str] | None = None, *, build=_DETECT, show_error: Callable[[
     if mode == "uninstall":
         make_uninstall(start="choose").mainloop()
         return 0
-    repair = False
+    kw: dict = {"first_run": True} if flags.wizard else {}
     if mode == "maintenance":
         win = make_uninstall(start="maintenance")
         win.mainloop()
         if getattr(win, "action", None) != "repair":
             return 0
-        repair = True
-    app = make_setup(repair=repair) if not app_factory else make_setup()
+        kw["repair"] = True
+    app = make_setup(**kw)
     app.mainloop()
     return 0
 
