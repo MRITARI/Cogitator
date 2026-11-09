@@ -58,3 +58,19 @@ async def test_remind_later_and_skip_hide_the_banner(game, root):
             await pilot.pause()
             assert "Update available" not in hdr(app)
         Registry.load()  # still loads
+
+
+async def test_a_failed_update_is_explained_at_the_next_start(game):
+    from cogitator.tui.app import CogitatorApp
+
+    app = CogitatorApp(game, check_updates=False)
+    app.game_running = lambda: False
+    async with app.run_test(size=(140, 45)) as pilot:
+        await pilot.pause()
+        app._report_update_result({"status": "aborted", "version": "0.1.3", "detail": "Could not replace the app folder: in use"})
+        await pilot.pause()
+        text = "\n".join(l.text for l in app.query_one("#log").lines)
+        assert "Update to v0.1.3 failed" in text and "Could not replace the app folder" in text and "update.log" in text
+        app._report_update_result({"status": "ok", "version": "0.1.3"})
+        await pilot.pause()
+        assert "Updated to v0.1.3" in "\n".join(l.text for l in app.query_one("#log").lines)

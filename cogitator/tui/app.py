@@ -21,7 +21,7 @@ from textual.worker import get_current_worker
 
 from .. import __version__
 from ..archives import parse_archive_name
-from ..config import InstanceLock, LockError, Settings, get_api_key, redact, set_api_key
+from ..config import InstanceLock, LockError, Settings, config_dir, get_api_key, log_path, redact, set_api_key
 from ..doctor import Check, exit_code as doctor_exit_code, run_doctor
 from ..frameworks import (describe_plan, detect_framework, plan_github, plan_local, classify_zip)
 from ..fwupdate import install_framework_plan, needs_repatch
@@ -253,7 +253,7 @@ class CogitatorApp(App):
         t.add_column("Latest", key="latest")
         t.add_column("Status", key="status")
         self.set_interval(0.15, self._tick)
-        self.log_line(f"Cogitator {__version__}", "dim")
+        self.log_line(f"Cogitator {__version__}   log file: {log_path()}", "dim")
         if self._given_game:
             self._game_ready(self._given_game, persist=False)
         else:
@@ -389,14 +389,33 @@ class CogitatorApp(App):
     def _job_selfupdate(self) -> None:
         u = self.selfupdater
         with self._lock:
-            u.absorb_result()
+            last = u.absorb_result()
             res = u.run_automatic()
+        if last:
+            self._ui(self._report_update_result, last)
         self._ui(self.refresh_header)
         self._ui(self.refresh_bindings)
         if res.status == "available" and res.latest:
             self._ui(self.log_line, f"Cogitator v{res.latest.version} is available.", "bold")
         if u.should_apply_automatically():
             self._ui(self._apply_update_now)
+
+    def _report_update_result(self, r: dict) -> None:
+        """What the update helper did last time, in plain words (it ran after Cogitator had closed)."""
+        status, ver, detail = r.get("status"), r.get("version") or "", r.get("detail") or ""
+        if status == "ok":
+            self.log_line(f"Updated to v{ver}.", "green")
+        elif status == "rolled-back":
+            self.log_line("Went back to the previous version.", "green")
+        else:
+            why = {"aborted": "The update did not start; your current version is unchanged.",
+                   "reverted": "The new version failed its check, so your previous version was restored.",
+                   "broken": "The update failed and the old version could not be restored."}.get(status, "The update did not finish.")
+            self.log_line(f"Update to v{ver} failed. {why}", "bold red")
+            if detail:
+                self.log_line(f"Reason: {detail}", "red")
+            self.log_line(f"Details: {config_dir() / 'update.log'}. If it keeps failing, run the latest installer from the releases page; "
+                          "your mods and settings are kept.", "yellow")
 
     def action_apply_update(self) -> None:
         u, a = self.selfupdater, None

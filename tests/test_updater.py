@@ -98,7 +98,7 @@ def test_updater_is_stdlib_only():
     tree = ast.parse(pathlib.Path(up.__file__).read_text(encoding="utf-8"))
     mods = {n.names[0].name.split(".")[0] for n in ast.walk(tree) if isinstance(n, ast.Import)}
     mods |= {n.module.split(".")[0] for n in ast.walk(tree) if isinstance(n, ast.ImportFrom) and n.module}
-    assert mods <= {"__future__", "argparse", "json", "os", "shutil", "subprocess", "sys", "time", "pathlib", "typing", "ctypes"}
+    assert mods <= {"__future__", "argparse", "json", "os", "shutil", "subprocess", "sys", "tempfile", "time", "pathlib", "typing", "ctypes"}
 
 
 def test_an_older_previous_build_is_replaced_by_the_newer_one(tmp_path):
@@ -154,3 +154,51 @@ def test_older_previous_survives_until_the_new_build_passes_and_returns_if_it_fa
 
 def test_self_check_accepts_extra_flags():
     assert up.run(["--self-check", "--expect-version", "9.9.9"]) == 0
+
+
+def test_a_folder_that_is_briefly_locked_is_retried_then_swapped(tmp_path, monkeypatch):
+    root = layout(tmp_path)
+    real, fails = type(root).rename, {"n": 0}
+
+    def locked_twice(self, target):
+        if self.name == "app" and fails["n"] < 2:
+            fails["n"] += 1
+            raise PermissionError(13, "in use")
+        return real(self, target)
+
+    monkeypatch.setattr(type(root), "rename", locked_twice)
+    monkeypatch.setattr(up.time, "sleep", lambda s: None)
+    rc, _ = go(args(root, tmp_path))
+    assert rc == 0 and fails["n"] == 2 and (root / "app" / "cogitator.exe").read_bytes() == b"NEW"
+
+
+def test_a_folder_that_stays_locked_gives_up_and_changes_nothing(tmp_path, monkeypatch):
+    root = layout(tmp_path)
+    real = type(root).rename
+    monkeypatch.setattr(type(root), "rename", lambda self, t: (_ for _ in ()).throw(PermissionError(13, "in use")) if self.name == "app" else real(self, t))
+    monkeypatch.setattr(up.time, "sleep", lambda s: None)
+    monkeypatch.setattr(up, "RENAME_TRIES", 3)
+    rc, c = go(args(root, tmp_path))
+    assert rc == 4 and (root / "app" / "cogitator.exe").read_bytes() == b"OLD" and result(tmp_path)["status"] == "aborted"
+    assert "swap failed" in (tmp_path / "cfg" / "update.log").read_text()  # the reason is kept for the user
+
+
+def test_the_helper_writes_a_log_next_to_the_result(tmp_path):
+    root = layout(tmp_path)
+    go(args(root, tmp_path))
+    log = (tmp_path / "cfg" / "update.log").read_text()
+    assert "install 2.0.0" in log and "updated to 2.0.0" in log
+
+
+def test_relaunch_gets_a_console_and_a_working_folder_outside_the_app(monkeypatch):
+    seen = {}
+    monkeypatch.setattr(up.shutil, "which", lambda n: None)
+    monkeypatch.setattr(up.subprocess, "Popen", lambda argv, **k: seen.update(argv=argv, **k))
+    up._launch([r"C:\x\app\cogitator.exe"])
+    if up.os.name == "nt":
+        assert seen["creationflags"] == 0x00000010  # not DETACHED_PROCESS: a terminal program has nothing to draw on then
+    assert seen["cwd"] == str(up.Path.home())
+    monkeypatch.setattr(up.shutil, "which", lambda n: r"C:\wt.exe")
+    up._launch([r"C:\x\app\cogitator.exe"])
+    if up.os.name == "nt":
+        assert seen["argv"][:3] == [r"C:\wt.exe", "--title", "Cogitator"]

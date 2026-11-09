@@ -451,3 +451,13 @@ def test_helper_temp_folder_is_deleted_on_next_start_only_if_ours(root, tmp_path
     u.st["helper_dir"] = str(other)  # not a folder this feature created
     u.absorb_result()
     assert other.is_dir()
+
+
+def test_the_helper_is_started_outside_the_app_folder(root, tmp_path):
+    spawned = []
+    u = updater(FakeGitHub(), root, popen=lambda argv, **k: spawned.append(k), layout=Layout("installer", root))
+    (root / "app" / "cogitator-updater.exe").write_bytes(b"H")
+    u.stage(u.check().latest)
+    u.apply()
+    cwd = Path(spawned[0]["cwd"])
+    assert cwd.name.startswith("cogitator-update-") and root not in cwd.parents  # a folder in use cannot be renamed

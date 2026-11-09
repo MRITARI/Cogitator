@@ -42,9 +42,9 @@ Source: "..\dist\Cogitator Setup\*"; DestDir: "{app}\setup"; Flags: recursesubdi
 Source: "cogitator.ico"; DestDir: "{app}"; Flags: ignoreversion
 
 [Icons]
-Name: "{autoprograms}\Cogitator"; Filename: "{app}\app\cogitator.exe"; IconFilename: "{app}\cogitator.ico"
+Name: "{autoprograms}\Cogitator"; Filename: "{app}\app\cogitator.exe"; WorkingDir: "{%USERPROFILE}"; IconFilename: "{app}\cogitator.ico"
 Name: "{autoprograms}\Cogitator Setup"; Filename: "{app}\setup\Cogitator Setup.exe"; IconFilename: "{app}\cogitator.ico"
-Name: "{autodesktop}\Cogitator"; Filename: "{app}\app\cogitator.exe"; IconFilename: "{app}\cogitator.ico"; Tasks: desktopicon
+Name: "{autodesktop}\Cogitator"; Filename: "{app}\app\cogitator.exe"; WorkingDir: "{%USERPROFILE}"; IconFilename: "{app}\cogitator.ico"; Tasks: desktopicon
 
 [Tasks]
 Name: "desktopicon"; Description: "Create a &desktop shortcut"; Flags: checkedonce

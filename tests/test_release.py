@@ -117,9 +117,15 @@ def test_cli_self_update_paths(capsys, built, monkeypatch):
 def test_installer_script_is_one_flow_and_asks_before_touching_the_game():
     iss = (Path(__file__).resolve().parents[1] / "packaging" / "cogitator.iss").read_text(encoding="utf-8")
     run = [ln for ln in iss.split("[Run]")[1].split("[UninstallDelete]")[0].splitlines() if ln.startswith("Filename")]
-    assert len(run) == 1 and 'setup\Cogitator Setup.exe' in run[0] and 'Parameters: "--wizard"' in run[0]
+    assert len(run) == 1 and 'setup\\Cogitator Setup.exe' in run[0] and 'Parameters: "--wizard"' in run[0]
     assert "skipifsilent" in run[0] and "postinstall" not in run[0] and "unchecked" not in run[0]  # automatic, never on /SILENT
-    assert 'Name: "{autoprograms}\Cogitator Setup";' in iss
+    assert 'Name: "{autoprograms}\\Cogitator Setup";' in iss
     assert 'Name: "desktopicon"; Description: "Create a &desktop shortcut"; Flags: checkedonce' in iss  # ticked by default
     assert "Also remove the Mod Loader and Framework from Darktide?" in iss and "if UninstallSilent then" in iss
     assert "'--uninstall'" in iss and "ewWaitUntilTerminated" in iss and "toggle_darktide_mods.bat" in iss
+
+
+def test_shortcuts_do_not_start_cogitator_inside_its_own_app_folder():
+    iss = (Path(__file__).resolve().parents[1] / "packaging" / "cogitator.iss").read_text(encoding="utf-8")
+    for ln in (l for l in iss.splitlines() if l.startswith("Name:") and "app\\cogitator.exe" in l):
+        assert 'WorkingDir: "{%USERPROFILE}"' in ln  # the app folder is renamed by updates; nothing may sit in it

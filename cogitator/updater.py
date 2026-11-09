@@ -12,6 +12,7 @@ import os
 import shutil
 import subprocess
 import sys
+import tempfile
 import time
 from pathlib import Path
 from typing import Callable
@@ -55,12 +56,47 @@ def _check(argv: list[str]) -> bool:
 
 
 def _launch(argv: list[str]) -> None:
-    flags = 0x00000008 | 0x00000200 if os.name == "nt" else 0
-    subprocess.Popen(argv, creationflags=flags, close_fds=True, shell=False)
+    """Start Cogitator again. It is a terminal program, so it needs a console: Windows Terminal when present, else a new
+    console window (a detached process has none and would exit at once). Its folder must not be the app folder."""
+    flags = 0
+    if os.name == "nt":
+        wt = shutil.which("wt.exe")
+        if wt:
+            argv = [wt, "--title", "Cogitator", *argv]
+        else:
+            flags = 0x00000010  # CREATE_NEW_CONSOLE
+    subprocess.Popen(argv, creationflags=flags, close_fds=True, shell=False, cwd=str(Path.home()))
 
 
 def _rm(p: Path) -> None:
     shutil.rmtree(p, ignore_errors=True)
+
+
+def _log(result: str | None, text: str) -> None:
+    """Append a line to update.log beside the result file, so a failed update can be diagnosed afterwards."""
+    if not result:
+        return
+    try:
+        with open(Path(result).with_name("update.log"), "a", encoding="utf-8") as f:
+            f.write(time.strftime("%Y-%m-%d %H:%M:%S ") + text + "\n")
+    except OSError:
+        pass
+
+
+RENAME_TRIES = 40  # a folder can stay locked for a few seconds after its program exits (antivirus, indexer)
+RENAME_DELAY = 0.5
+
+
+def _mv(src: Path, dst: Path) -> None:
+    """Rename, retrying while Windows reports the folder as in use."""
+    for i in range(RENAME_TRIES):
+        try:
+            src.rename(dst)
+            return
+        except PermissionError:
+            if i == RENAME_TRIES - 1:
+                raise
+            time.sleep(RENAME_DELAY)
 
 
 def _write_result(path: str | None, status: str, version: str, detail: str = "") -> None:
@@ -81,19 +117,19 @@ def swap_in(app: Path, previous: Path, staged: Path) -> Path | None:
     stash = previous.with_name(previous.name + ".old") if previous.exists() else None
     if stash is not None:
         _rm(stash)
-        previous.rename(stash)
+        _mv(previous, stash)
     try:
-        app.rename(previous)
+        _mv(app, previous)
     except OSError:
         if stash is not None:
-            stash.rename(previous)
+            _mv(stash, previous)
         raise
     try:
-        staged.rename(app)
+        _mv(staged, app)
     except OSError:
-        previous.rename(app)
+        _mv(previous, app)
         if stash is not None:
-            stash.rename(previous)
+            _mv(stash, previous)
         raise
     return stash
 
@@ -102,11 +138,11 @@ def swap_back(app: Path, previous: Path) -> None:
     """Drop the failed build and restore app.previous as app."""
     failed = app.with_name(app.name + ".failed")
     _rm(failed)
-    app.rename(failed)
+    _mv(app, failed)
     try:
-        previous.rename(app)
+        _mv(previous, app)
     except OSError:
-        failed.rename(app)
+        _mv(failed, app)
         raise
     _rm(failed)
 
@@ -114,13 +150,13 @@ def swap_back(app: Path, previous: Path) -> None:
 def exchange(app: Path, previous: Path) -> None:
     tmp = app.with_name(app.name + ".swap")
     _rm(tmp)
-    app.rename(tmp)
+    _mv(app, tmp)
     try:
-        previous.rename(app)
+        _mv(previous, app)
     except OSError:
-        tmp.rename(app)
+        _mv(tmp, app)
         raise
-    tmp.rename(previous)
+    _mv(tmp, previous)
 
 
 def run(argv: list[str], *, alive: Callable[[int], bool] = pid_alive, check: Callable[[list[str]], bool] = _check,
@@ -151,8 +187,10 @@ def run(argv: list[str], *, alive: Callable[[int], bool] = pid_alive, check: Cal
             except OSError:
                 pass
 
+    _log(a.result, f"update helper started: {'rollback' if a.rollback else 'install ' + a.version}, waiting for pid {a.wait_pid}")
     if a.wait_pid and not wait_for_exit(a.wait_pid, wait_timeout, alive):
         _write_result(a.result, "aborted", a.version, "Cogitator did not close in time.")
+        _log(a.result, "Cogitator did not close in time")
         return 3
     stash: Path | None = None
     try:
@@ -162,6 +200,7 @@ def run(argv: list[str], *, alive: Callable[[int], bool] = pid_alive, check: Cal
             stash = swap_in(app, previous, Path(a.staged))
     except OSError as e:
         _write_result(a.result, "aborted", a.version, f"Could not replace the app folder: {e}")
+        _log(a.result, f"swap failed, nothing changed: {e}")
         start()
         return 4
     if check_cmd and not check(check_cmd):
@@ -175,17 +214,23 @@ def run(argv: list[str], *, alive: Callable[[int], bool] = pid_alive, check: Cal
         except OSError as e:
             _write_result(a.result, "broken", a.version, f"The new build failed its check and the old one could not be restored: {e}")
             return 5
+        _log(a.result, "the new build failed its self-check; previous version restored")
         _write_result(a.result, "reverted", a.version, "The new build failed its self-check; the previous version was restored.")
         start()
         return 1
     if stash is not None:
         _rm(stash)  # only now, with the new build in place and checked, is the older previous build dropped
+    _log(a.result, "done: " + ("rolled back" if a.rollback else "updated to " + a.version))
     _write_result(a.result, "rolled-back" if a.rollback else "ok", a.version)
     start()
     return 0
 
 
 def main() -> int:
+    try:
+        os.chdir(tempfile.gettempdir())  # never keep the app folder (inherited from Cogitator) open: it cannot be renamed then
+    except OSError:
+        pass
     return run(sys.argv[1:])
 
 

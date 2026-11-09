@@ -503,7 +503,9 @@ class SelfUpdater:
     def _spawn(self, extra: list[str]) -> None:
         argv = self._helper_argv() + extra
         flags = 0x00000008 | 0x00000200 if os.name == "nt" else 0  # DETACHED_PROCESS | CREATE_NEW_PROCESS_GROUP
-        self.popen(argv, creationflags=flags, close_fds=True, shell=False)
+        # the helper must not inherit the app folder as its working directory: a folder in use cannot be renamed
+        cwd = None if self.layout.helper else str(Path(argv[0]).parent)
+        self.popen(argv, creationflags=flags, close_fds=True, shell=False, cwd=cwd)
 
     def _common_args(self, version: str) -> list[str]:
         app = self.layout.app_dir
