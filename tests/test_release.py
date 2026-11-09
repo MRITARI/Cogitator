@@ -116,13 +116,25 @@ def test_cli_self_update_paths(capsys, built, monkeypatch):
 
 def test_installer_script_is_one_flow_and_asks_before_touching_the_game():
     iss = (Path(__file__).resolve().parents[1] / "packaging" / "cogitator.iss").read_text(encoding="utf-8")
-    run = [ln for ln in iss.split("[Run]")[1].split("[UninstallDelete]")[0].splitlines() if ln.startswith("Filename")]
+    run = [ln for ln in iss.split("[Run]")[1].split("[UninstallRun]")[0].splitlines() if ln.startswith("Filename") and "path add" not in ln]
     assert len(run) == 1 and 'setup\\Cogitator Setup.exe' in run[0] and 'Parameters: "--wizard"' in run[0]
     assert "skipifsilent" in run[0] and "postinstall" not in run[0] and "unchecked" not in run[0]  # automatic, never on /SILENT
     assert 'Name: "{autoprograms}\\Cogitator Setup";' in iss
     assert 'Name: "desktopicon"; Description: "Create a &desktop shortcut"; Flags: checkedonce' in iss  # ticked by default
     assert "Also remove the Mod Loader and Framework from Darktide?" in iss and "if UninstallSilent then" in iss
     assert "'--uninstall'" in iss and "ewWaitUntilTerminated" in iss and "toggle_darktide_mods.bat" in iss
+
+
+def test_installer_path_is_done_by_the_cli_not_by_pascal():
+    iss = (Path(__file__).resolve().parents[1] / "packaging" / "cogitator.iss").read_text(encoding="utf-8")
+    task = [ln for ln in iss.splitlines() if ln.startswith('Name: "addtopath"')]
+    assert len(task) == 1 and "checkedonce" not in task[0] and "unchecked" not in task[0]  # ticked on every install, upgrades too
+    assert r'Filename: "{app}\app\cogitator.exe"; Parameters: "path add"; Flags: runhidden' in iss and "Tasks: addtopath" in iss
+    assert not [c for c in iss if ord(c) < 32 and c not in "\r\n\t"]  # a stray control character (BEL) was the 0.1.6 PATH bug
+    un = iss.split("[UninstallRun]")[1].split("[UninstallDelete]")[0]
+    assert 'Parameters: "path remove"; Flags: runhidden' in un and "RunOnceId:" in un
+    for gone in ("RegWriteExpandStringValue", "RegQueryStringValue", "AddToPath", "RemoveFromPath(", "{app}pp"):
+        assert gone not in iss
 
 
 def test_shortcuts_do_not_start_cogitator_inside_its_own_app_folder():

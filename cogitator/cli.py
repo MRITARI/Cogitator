@@ -89,6 +89,9 @@ def build_parser() -> argparse.ArgumentParser:
     vd = sub.add_parser("verify-download", help="check a downloaded SHA256SUMS file (and optionally a download listed in it) against the release key")
     vd.add_argument("sums", help="path to SHA256SUMS (the SHA256SUMS.sig file must sit next to it)")
     vd.add_argument("file", nargs="?", help="a downloaded release file to check against the list")
+    pa = sub.add_parser("path", help="add/remove the folder of this cogitator.exe in your user PATH (no admin)")
+    pa.add_argument("action", choices=["add", "remove", "status"])
+    pa.add_argument("--dir", help="folder to use instead of the one containing the running cogitator.exe")
     mod = sub.add_parser("mod", help="enable/disable a mod")
     mod.add_argument("action", choices=["enable", "disable"])
     mod.add_argument("folder")
@@ -171,6 +174,29 @@ def cmd_restore_database(args) -> int:
     except PatcherError as e:
         print(f"Error: {e}", file=sys.stderr)
         return 2
+    return 0
+
+
+def cmd_path(args) -> int:
+    from . import userpath
+
+    directory = args.dir or userpath.default_dir()
+    if not directory:
+        print("Not running from cogitator.exe: pass --dir <folder>.", file=sys.stderr)
+        return 2
+    directory = str(Path(directory).absolute())
+    try:
+        if args.action == "status":
+            present = userpath.has_entry(directory)
+            print(f"{directory}: {'present in' if present else 'not in'} your user PATH")
+            return 0 if present else 1
+        adding = args.action == "add"
+        changed = (userpath.add_entry if adding else userpath.remove_entry)(directory)
+    except OSError as e:
+        print(f"Could not change your user PATH: {e}", file=sys.stderr)
+        return 1
+    if changed:
+        print(f"{'Added' if adding else 'Removed'} {directory} {'to' if adding else 'from'} your user PATH.")
     return 0
 
 
@@ -726,6 +752,8 @@ def _dispatch(args) -> int:
         return cmd_verify_download(args)
     if args.cmd == "self-update":
         return cmd_self_update(args)
+    if args.cmd == "path":
+        return cmd_path(args)
     if args.cmd is None:
         from .tui.app import run_tui  # imported lazily: headless commands must not pay for Textual
 

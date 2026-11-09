@@ -60,7 +60,8 @@ update with one key.
 The same things work without the interface: `cogitator status`, `toggle`, `mod enable|disable <folder>`,
 `install-framework --zip <file>`, `check-updates`, `link`, `import`, `update`, `uninstall-framework`, `set-key`,
 `restore-database`, `verify-download` and `doctor` (exit code 0 ok, 1 warnings, 2 failures) and
-`self-update [--check|--apply|--rollback]` (signed GitHub releases only). Commands that change things refuse to run while
+`self-update [--check|--apply|--rollback]` (signed GitHub releases only). `path add|remove|status` adds or removes the folder of
+`cogitator.exe` in your user PATH (the installer's PATH option runs it). Commands that change things refuse to run while
 the interface is open.
 
 `cogitator-setup` opens a step-by-step installer window (add `--dry-run` to look without changing anything, or

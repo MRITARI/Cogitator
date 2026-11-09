@@ -51,12 +51,17 @@ Name: "{autodesktop}\Cogitator"; Filename: "{app}\app\cogitator.exe"; WorkingDir
 
 [Tasks]
 Name: "desktopicon"; Description: "Create a &desktop shortcut"; Flags: checkedonce
-Name: "addtopath"; Description: "Add Cogitator to the &PATH (so the cogitator command works in any new terminal)"; Flags: checkedonce
+Name: "addtopath"; Description: "Add Cogitator to the &PATH (so the cogitator command works in any new terminal)"
 
 [Run]
+; The PATH edit lives in cogitator.userpath (tested); a failure here never blocks the install.
+Filename: "{app}\app\cogitator.exe"; Parameters: "path add"; Flags: runhidden skipifdoesntexist; Tasks: addtopath
 ; One flow: after the files are in place the wizard opens by itself (not an optional checkbox). Silent installs skip it
 ; and never touch the game. The Nexus key is typed in the wizard only; nothing is passed on a command line.
 Filename: "{app}\setup\Cogitator Setup.exe"; Parameters: "--wizard"; Flags: nowait skipifsilent
+
+[UninstallRun]
+Filename: "{app}\app\cogitator.exe"; Parameters: "path remove"; Flags: runhidden skipifdoesntexist; RunOnceId: "RemoveFromPath"
 
 [UninstallDelete]
 ; Created by the self-updater after installation; Inno does not know about them.
@@ -66,109 +71,12 @@ Type: filesandordirs; Name: "{app}\staging"
 Type: files; Name: "{app}\install.json"
 
 [Code]
-// The user's PATH (HKCU\Environment, no admin). Entries are compared whole, ignoring case and a trailing backslash.
-function NormEntry(S: String): String;
-begin
-  S := Trim(S);
-  while (Length(S) > 1) and (S[Length(S)] = '\') do
-    Delete(S, Length(S), 1);
-  Result := Uppercase(S);
-end;
-
-function PathHasEntry(Paths, Dir: String): Boolean;
-var
-  P: Integer;
-  Item, Want: String;
-begin
-  Result := False;
-  Want := NormEntry(Dir);
-  while Paths <> '' do
-  begin
-    P := Pos(';', Paths);
-    if P = 0 then
-    begin
-      Item := Paths;
-      Paths := '';
-    end else
-    begin
-      Item := Copy(Paths, 1, P - 1);
-      Delete(Paths, 1, P);
-    end;
-    if NormEntry(Item) = Want then
-    begin
-      Result := True;
-      exit;
-    end;
-  end;
-end;
-
-function PathWithout(Paths, Dir: String): String;
-var
-  P: Integer;
-  Item, Want: String;
-begin
-  Result := '';
-  Want := NormEntry(Dir);
-  while Paths <> '' do
-  begin
-    P := Pos(';', Paths);
-    if P = 0 then
-    begin
-      Item := Paths;
-      Paths := '';
-    end else
-    begin
-      Item := Copy(Paths, 1, P - 1);
-      Delete(Paths, 1, P);
-    end;
-    if (Item <> '') and (NormEntry(Item) <> Want) then
-    begin
-      if Result <> '' then
-        Result := Result + ';';
-      Result := Result + Item;
-    end;
-  end;
-end;
-
-procedure AddToPath(Dir: String);
-var
-  Paths: String;
-begin
-  if not RegQueryStringValue(HKCU, 'Environment', 'Path', Paths) then
-    Paths := '';
-  if PathHasEntry(Paths, Dir) then
-    exit;
-  if (Paths <> '') and (Paths[Length(Paths)] <> ';') then
-    Paths := Paths + ';';
-  RegWriteExpandStringValue(HKCU, 'Environment', 'Path', Paths + Dir);
-end;
-
-procedure RemoveFromPath(Dir: String);
-var
-  Paths: String;
-begin
-  if not RegQueryStringValue(HKCU, 'Environment', 'Path', Paths) then
-    exit;
-  if PathHasEntry(Paths, Dir) then
-    RegWriteExpandStringValue(HKCU, 'Environment', 'Path', PathWithout(Paths, Dir));
-end;
-
-procedure CurUninstallStepChanged(CurUninstallStep: TUninstallStep);
-begin
-  if CurUninstallStep = usPostUninstall then
-    RemoveFromPath(ExpandConstant('{app}\app'));
-end;
-
 procedure CurStepChanged(CurStep: TSetupStep);
 begin
   if CurStep = ssPostInstall then
-  begin
     // Its presence next to the app\ folder is what makes the Update panel live (detect_layout -> "installer").
     SaveStringToFile(ExpandConstant('{app}\install.json'),
       '{"installer": "inno", "version": "{#AppVersion}"}' + #13#10, False);
-    if WizardIsTaskSelected('addtopath') then
-      AddToPath(ExpandConstant('{app}pp'));
-  end;
 end;
 
 function InitializeUninstall(): Boolean;
