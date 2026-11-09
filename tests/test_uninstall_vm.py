@@ -25,7 +25,7 @@ def model(installed, **kw):
 
 # ------------------------------------------------------------ defaults
 
-def test_defaults_match_the_brief(installed):
+def test_default_choices_are_safe(installed):
     m = model(installed, app=FakeApp())
     assert (m.remove_app, m.remove_dmf, m.remove_dml, m.remove_key) == (True, True, True, True)
     assert (m.remove_data, m.remove_user_mods, m.remove_load_order) == (False, False, False)

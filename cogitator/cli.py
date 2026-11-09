@@ -39,6 +39,7 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--no-update-check", action="store_true", help="TUI: do not check for updates on start")
     p.add_argument("--version", action="version", version=__version__)
     p.add_argument("--self-check", action="store_true", help=argparse.SUPPRESS)  # verifies a pipx/PyInstaller build
+    p.add_argument("--expect-version", help=argparse.SUPPRESS)  # with --self-check: fail unless this is the build's version
     sub = p.add_subparsers(dest="cmd")
     st = sub.add_parser("status", help="show game path and mod state")
     st.add_argument("--json", action="store_true")
@@ -591,6 +592,9 @@ def main(argv: list[str] | None = None) -> int:
     setup_logging()
     args = build_parser().parse_args(argv)
     if args.self_check:
+        if args.expect_version and args.expect_version != __version__:
+            print(f"FAIL  version: this build is {__version__}, expected {args.expect_version}", file=sys.stderr)
+            return 1
         from .selfcheck import run as self_check
 
         return self_check()

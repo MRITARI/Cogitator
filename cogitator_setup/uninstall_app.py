@@ -114,7 +114,9 @@ class UninstallApp:
         self.btn_uninstall = ttk.Button(row, text="Uninstall...", command=lambda: self._goto(UPage.CHOOSE))
         for b in (self.btn_repair, self.btn_update, self.btn_uninstall):
             b.pack(side="left", padx=(0, 10), ipadx=14, ipady=6)
-        self._wrapped(f, "Repair reinstalls what Cogitator put in place and keeps your mods and mod list.", row=3, foreground="#555")
+        self.repair_note = self._wrapped(f, "Repair reinstalls what Cogitator put in place and keeps your mods and mod list. "
+                                         "In-app updates do not refresh this Setup program, so it may be out of date; to get the newest, "
+                                         "run the latest Cogitator installer from the releases page.", row=3, foreground="#555")
         self.update_box = ttk.Frame(f)
         self.update_box.grid(row=4, column=0, sticky="we", pady=(12, 0))
         self.update_box.columnconfigure(0, weight=1)

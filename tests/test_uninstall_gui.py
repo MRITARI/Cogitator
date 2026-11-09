@@ -39,7 +39,7 @@ def advance(win, to):
 
 # ------------------------------------------------------------ choose page: defaults
 
-def test_defaults_are_the_ones_in_the_brief_and_user_data_is_not_ticked(root, installed):
+def test_default_choices_are_safe_and_user_data_is_not_ticked(root, installed):
     win = make(root, installed, app=FakeApp())
     v = {k: win.v[k].get() for k in win.v}
     assert v == {"app": True, "dmf": True, "dml": True, "key": True, "data": False, "mods": False, "order": False}
@@ -403,3 +403,9 @@ def test_maintenance_update_panel_shows_plain_notes_and_installs(root, installed
     win2 = UninstallApp(services=svc, deps=UninstallDeps(runner=t, is_running=lambda: False, registry=reg), dialogs=FakeDialogs(), root=root, start="maintenance")
     win2.btn_update.invoke()
     assert u2.log == ["stage", "apply"] and win2.action == "update"
+
+
+def test_maintenance_page_warns_that_setup_may_be_out_of_date(root, installed):
+    win = make(root, installed, app=FakeApp(), start="maintenance")
+    txt = win.repair_note.cget("text")
+    assert "may be out of date" in txt and "latest Cogitator installer" in txt

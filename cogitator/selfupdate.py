@@ -394,7 +394,12 @@ class SelfUpdater:
                     continue
                 if r.status_code != 200:
                     raise UpdateError(f"The download failed (HTTP {r.status_code}).")
-                declared = int(r.headers.get("content-length") or 0)
+                try:
+                    declared = int(r.headers.get("content-length") or 0)
+                except ValueError:
+                    declared = -1
+                if declared < 0:
+                    raise UpdateError("The download reported an invalid size, so it was refused.")
                 if declared > limit:
                     raise UpdateError("The download is larger than allowed, so it was refused.")
                 buf = bytearray()
@@ -491,6 +496,8 @@ class SelfUpdater:
         tmp = Path(tempfile.mkdtemp(prefix="cogitator-update-"))
         dst = tmp / "cogitator-updater.exe"
         shutil.copy2(src, dst)  # run from outside the folder that is about to be replaced
+        self.st["helper_dir"] = str(tmp)  # remembered so the next start can delete it
+        self._save()
         return [str(dst)]
 
     def _spawn(self, extra: list[str]) -> None:
@@ -501,9 +508,10 @@ class SelfUpdater:
     def _common_args(self, version: str) -> list[str]:
         app = self.layout.app_dir
         exe = str(app / REQUIRED_EXE)
+        check = [exe, "--self-check"] + (["--expect-version", version] if version != "previous" else [])  # binds the build to the release version
         return ["--app", str(app), "--previous", str(self.layout.previous_dir), "--version", version,
                 "--wait-pid", str(self.pid()), "--result", str(config_dir() / RESULT_FILE),
-                "--check", json.dumps([exe, "--self-check"]), "--relaunch", json.dumps([exe])]
+                "--check", json.dumps(check), "--relaunch", json.dumps([exe])]
 
     def apply(self) -> Ready:
         """Start the helper that swaps in the staged build. The caller must exit right after this returns."""
@@ -531,7 +539,20 @@ class SelfUpdater:
         self._spawn(["--rollback"] + self._common_args("previous"))
 
     # ---- the helper's verdict, read at the next start
+    def _cleanup_helper_dir(self) -> None:
+        d = self.st.get("helper_dir")
+        if not d:
+            return
+        p = Path(d)
+        if p.name.startswith("cogitator-update-") and p.parent.resolve() == Path(tempfile.gettempdir()).resolve() and p.is_dir():
+            shutil.rmtree(p, ignore_errors=True)
+            if p.exists():
+                return  # still in use; try again at the next start
+        self.st.pop("helper_dir", None)
+        self._save()
+
     def absorb_result(self) -> dict | None:
+        self._cleanup_helper_dir()
         p = config_dir() / RESULT_FILE
         try:
             res = json.loads(p.read_text(encoding="utf-8"))

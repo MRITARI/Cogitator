@@ -140,7 +140,7 @@ class NexusClient:
             raise NoApiKey("No Nexus API key set (create one in Nexus account settings > API).")
         self._key = api_key
         self._own = client is None
-        self._c = client or httpx.Client(timeout=30.0, verify=True, follow_redirects=True)
+        self._c = client or httpx.Client(timeout=30.0, verify=True, follow_redirects=False)
         self._sleep = sleep
         self.quota = Quota()
         self.exhausted = False
@@ -181,6 +181,8 @@ class NexusClient:
                 last = NexusError(f"Network error talking to Nexus: {type(e).__name__}")
             else:
                 self._note_quota(r)
+                if 300 <= r.status_code < 400:
+                    raise NexusError(f"Nexus sent a redirect (HTTP {r.status_code}) for {path}; refused so the API key is never sent elsewhere.")
                 if r.status_code == 429:
                     self.exhausted = True
                     raise RateLimited("Nexus API rate limit reached (HTTP 429); try again later.")

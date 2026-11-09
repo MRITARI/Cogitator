@@ -3,6 +3,7 @@ import base64
 import hashlib
 import io
 import json
+from pathlib import Path
 import zipfile
 
 import httpx
@@ -342,7 +343,7 @@ def test_apply_spawns_helper_with_the_right_arguments_and_rejects_tampered_stagi
     argv = spawned[0]
     assert argv[0] == "HELPER" and argv[argv.index("--staged") + 1] == str(rd.dir)
     assert argv[argv.index("--wait-pid") + 1] == "4242" and argv[argv.index("--app") + 1] == str(root / "app")
-    assert json.loads(argv[argv.index("--check") + 1])[-1] == "--self-check"
+    assert json.loads(argv[argv.index("--check") + 1])[1] == "--self-check"
 
 
 def test_failed_result_is_remembered_so_the_update_is_never_retried(root):
@@ -375,3 +376,78 @@ def test_update_state_survives_in_registry_and_other_data_is_untouched(root):
 def test_raw_signature_with_whitespace_edge_bytes_is_not_mangled():
     raw = b" " + bytes(range(61)) + b"\n\t"
     assert len(raw) == 64 and su._signature_bytes(raw) == raw
+
+
+def test_check_command_binds_the_release_version(root):
+    spawned = []
+    u = updater(FakeGitHub(), root, popen=lambda argv, **k: spawned.append(argv))
+    u.stage(u.check().latest)
+    u.apply()
+    cmd = json.loads(spawned[0][spawned[0].index("--check") + 1])
+    assert cmd[1:] == ["--self-check", "--expect-version", "1.1.0"]
+
+
+def test_replayed_old_build_fails_the_version_check_and_is_recorded(tmp_path):
+    from cogitator import cli, updater as up
+
+    # an old signed zip re-attached under a newer tag: the staged build reports its real (older) version
+    root = tmp_path / "R"
+    (root / "app").mkdir(parents=True)
+    (root / "app" / "cogitator.exe").write_bytes(b"CUR")
+    (root / "staging" / "v9").mkdir(parents=True)
+    (root / "staging" / "v9" / "cogitator.exe").write_bytes(b"OLDSIGNED")
+    expect = "99.0.0"  # the tag's version; the "staged build" is really cli's __version__
+
+    def check(cmd):
+        assert cmd[-2:] == ["--expect-version", expect]
+        return cli.main(["--self-check", "--expect-version", expect]) == 0
+
+    res = tmp_path / "res.json"
+    rc = up.run(["--app", str(root / "app"), "--previous", str(root / "app.previous"), "--staged", str(root / "staging" / "v9"),
+                 "--version", expect, "--result", str(res), "--check", json.dumps(["x", "--self-check", "--expect-version", expect]),
+                 "--relaunch", "[]"], check=check)
+    assert rc == 1 and (root / "app" / "cogitator.exe").read_bytes() == b"CUR"
+    assert json.loads(res.read_text())["status"] == "reverted"
+    config_dir().mkdir(parents=True, exist_ok=True)
+    (config_dir() / su.RESULT_FILE).write_text(res.read_text())
+    u = updater(FakeGitHub(ver=expect), root)
+    u.absorb_result()
+    assert u.failed() == [expect]
+
+
+@pytest.mark.parametrize("bad", ["abc", "-5", "1.5"])
+def test_bad_content_length_is_an_update_error(root, bad):
+    gh = FakeGitHub()
+    orig = gh.handler
+
+    def handler(req):
+        r = orig(req)
+        if req.url.path.endswith(".zip"):
+            r.headers["content-length"] = bad
+        return r
+
+    gh.handler = handler
+    u = updater(gh, root)
+    with pytest.raises(UpdateError):
+        u.stage(u.check().latest)
+
+
+def test_helper_temp_folder_is_deleted_on_next_start_only_if_ours(root, tmp_path, monkeypatch):
+    import tempfile
+
+    tmp = tmp_path / "tmp"
+    tmp.mkdir()
+    monkeypatch.setattr(tempfile, "tempdir", str(tmp))
+    app = root / "app"
+    (app / "cogitator-updater.exe").write_bytes(b"H")
+    u = updater(FakeGitHub(), root, layout=Layout("installer", root))
+    u._helper_argv()
+    ours = Path(u.st["helper_dir"])
+    assert ours.is_dir() and ours.name.startswith("cogitator-update-")
+    u.absorb_result()
+    assert not ours.exists() and "helper_dir" not in u.st
+    other = tmp_path / "precious"
+    other.mkdir()
+    u.st["helper_dir"] = str(other)  # not a folder this feature created
+    u.absorb_result()
+    assert other.is_dir()

@@ -73,17 +73,29 @@ def _write_result(path: str | None, status: str, version: str, detail: str = "")
         pass
 
 
-def swap_in(app: Path, previous: Path, staged: Path) -> None:
-    """app -> app.previous, staged -> app. Undoes itself if the second step fails."""
+def swap_in(app: Path, previous: Path, staged: Path) -> Path | None:
+    """app -> app.previous, staged -> app. Any existing app.previous is set aside (not deleted) and returned; the caller
+    drops it once the new build has passed its check. If a rename fails, app and app.previous are left as they were."""
     if not staged.is_dir():
         raise OSError("nothing staged")
-    _rm(previous)
-    app.rename(previous)
+    stash = previous.with_name(previous.name + ".old") if previous.exists() else None
+    if stash is not None:
+        _rm(stash)
+        previous.rename(stash)
+    try:
+        app.rename(previous)
+    except OSError:
+        if stash is not None:
+            stash.rename(previous)
+        raise
     try:
         staged.rename(app)
     except OSError:
         previous.rename(app)
+        if stash is not None:
+            stash.rename(previous)
         raise
+    return stash
 
 
 def swap_back(app: Path, previous: Path) -> None:
@@ -113,7 +125,7 @@ def exchange(app: Path, previous: Path) -> None:
 
 def run(argv: list[str], *, alive: Callable[[int], bool] = pid_alive, check: Callable[[list[str]], bool] = _check,
         relaunch: Callable[[list[str]], None] = _launch, wait_timeout: float = 60.0) -> int:
-    if argv == ["--self-check"]:
+    if argv[:1] == ["--self-check"]:  # extra flags (e.g. --expect-version) are accepted and ignored here
         print(f"ok    updater: frozen={getattr(sys, 'frozen', False)}")
         return 0
     p = argparse.ArgumentParser()
@@ -127,6 +139,8 @@ def run(argv: list[str], *, alive: Callable[[int], bool] = pid_alive, check: Cal
     p.add_argument("--check", default="[]")
     p.add_argument("--relaunch", default="[]")
     a = p.parse_args(argv)
+    if not a.rollback and not a.staged:
+        p.error("--staged is required unless --rollback is given")
     app, previous = Path(a.app), Path(a.previous)
     check_cmd, relaunch_cmd = json.loads(a.check), json.loads(a.relaunch)
 
@@ -140,11 +154,12 @@ def run(argv: list[str], *, alive: Callable[[int], bool] = pid_alive, check: Cal
     if a.wait_pid and not wait_for_exit(a.wait_pid, wait_timeout, alive):
         _write_result(a.result, "aborted", a.version, "Cogitator did not close in time.")
         return 3
+    stash: Path | None = None
     try:
         if a.rollback:
             exchange(app, previous)
         else:
-            swap_in(app, previous, Path(a.staged or ""))
+            stash = swap_in(app, previous, Path(a.staged))
     except OSError as e:
         _write_result(a.result, "aborted", a.version, f"Could not replace the app folder: {e}")
         start()
@@ -155,12 +170,16 @@ def run(argv: list[str], *, alive: Callable[[int], bool] = pid_alive, check: Cal
                 exchange(app, previous)
             else:
                 swap_back(app, previous)
+                if stash is not None:
+                    stash.rename(previous)  # the older previous build comes back too
         except OSError as e:
             _write_result(a.result, "broken", a.version, f"The new build failed its check and the old one could not be restored: {e}")
             return 5
         _write_result(a.result, "reverted", a.version, "The new build failed its self-check; the previous version was restored.")
         start()
         return 1
+    if stash is not None:
+        _rm(stash)  # only now, with the new build in place and checked, is the older previous build dropped
     _write_result(a.result, "rolled-back" if a.rollback else "ok", a.version)
     start()
     return 0

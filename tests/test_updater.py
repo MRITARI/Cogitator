@@ -107,3 +107,50 @@ def test_an_older_previous_build_is_replaced_by_the_newer_one(tmp_path):
     (root / "app.previous" / "cogitator.exe").write_bytes(b"ANCIENT")
     rc, _ = go(args(root, tmp_path))
     assert rc == 0 and (root / "app.previous" / "cogitator.exe").read_bytes() == b"OLD"  # exactly one previous version is kept
+
+
+def test_staged_is_required_unless_rolling_back(tmp_path):
+    root = layout(tmp_path)
+    a = [x for x in args(root, tmp_path)]
+    i = a.index("--staged")
+    del a[i:i + 2]
+    with pytest.raises(SystemExit):
+        go(a)
+    assert (root / "app" / "cogitator.exe").read_bytes() == b"OLD" and not (root / "app.previous").exists()
+
+
+def test_swap_in_failure_leaves_app_and_previous_untouched(tmp_path, monkeypatch):
+    root = layout(tmp_path)
+    (root / "app.previous").mkdir()
+    (root / "app.previous" / "cogitator.exe").write_bytes(b"OLDER")
+    real = type(root).rename
+
+    def flaky(self, target):
+        if self.name == "v2":
+            raise OSError("locked")
+        return real(self, target)
+
+    monkeypatch.setattr(type(root), "rename", flaky)
+    with pytest.raises(OSError):
+        up.swap_in(root / "app", root / "app.previous", root / "staging" / "v2")
+    assert (root / "app" / "cogitator.exe").read_bytes() == b"OLD"
+    assert (root / "app.previous" / "cogitator.exe").read_bytes() == b"OLDER" and not (root / "app.previous.old").exists()
+
+
+def test_older_previous_survives_until_the_new_build_passes_and_returns_if_it_fails(tmp_path):
+    root = layout(tmp_path)
+    (root / "app.previous").mkdir()
+    (root / "app.previous" / "cogitator.exe").write_bytes(b"OLDER")
+    seen = {}
+
+    def check(cmd):
+        seen["older_kept"] = (root / "app.previous.old" / "cogitator.exe").read_bytes()
+        return False
+
+    rc = up.run(args(root, tmp_path), alive=lambda p: False, check=check, relaunch=lambda c: None)
+    assert seen["older_kept"] == b"OLDER" and rc == 1
+    assert (root / "app" / "cogitator.exe").read_bytes() == b"OLD" and (root / "app.previous" / "cogitator.exe").read_bytes() == b"OLDER"
+
+
+def test_self_check_accepts_extra_flags():
+    assert up.run(["--self-check", "--expect-version", "9.9.9"]) == 0

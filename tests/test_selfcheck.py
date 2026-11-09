@@ -22,4 +22,13 @@ def test_self_check_flag_and_failure_is_reported(capsys, monkeypatch):
 
 def test_module_entry_point_matches_console_script():
     out = subprocess.run([sys.executable, "-I", "-m", "cogitator", "--version"], capture_output=True, text=True, timeout=60)
-    assert out.returncode == 0 and out.stdout.strip() == "0.1.0"
+    assert out.returncode == 0 and out.stdout.strip() == __import__("cogitator").__version__
+
+
+def test_expect_version_must_match_the_build(capsys):
+    from cogitator import __version__
+
+    assert cli.main(["--self-check", "--expect-version", __version__]) == 0
+    capsys.readouterr()
+    assert cli.main(["--self-check", "--expect-version", "99.0.0"]) == 1
+    assert "expected 99.0.0" in capsys.readouterr().err

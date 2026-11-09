@@ -216,3 +216,13 @@ def test_cli_check_updates_without_key(capsys, fake_game):
     Registry.load().set_framework("dml", version="26.06.24", source_kind="local", source="x")
     assert cli.main(["--game-dir", str(fake_game), "check-updates"]) == 2
     assert "set-key" in capsys.readouterr().err
+
+
+@respx.mock
+def test_redirects_are_never_followed_so_the_key_cannot_leak():
+    respx.get(f"{B}/users/validate.json").respond(302, headers={"location": "https://evil.example/x"})
+    evil = respx.get("https://evil.example/x").respond(200, json={})
+    with NexusClient("SECRET-KEY-123", sleep=lambda s: None) as c:
+        with pytest.raises(NexusError):
+            c.validate()
+    assert not evil.called
