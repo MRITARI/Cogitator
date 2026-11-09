@@ -51,7 +51,7 @@ def serve(files, mk=None):
 
 def test_the_assets_the_script_makes_are_accepted_by_the_updater(built):
     files, pub, tmp = built
-    assert [f.name for f in files] == ["Cogitator-1.2.3-win-x64.zip", "Cogitator-1.2.3-win-x64.zip.sig", "SHA256SUMS"]
+    assert [f.name for f in files] == ["Cogitator-1.2.3-win-x64.zip", "Cogitator-1.2.3-win-x64.zip.sig", "SHA256SUMS", "SHA256SUMS.sig"]
     root = tmp / "Cogitator"
     (root / "app").mkdir(parents=True)
     (root / "install.json").write_text("{}")

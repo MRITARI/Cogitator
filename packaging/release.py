@@ -5,7 +5,7 @@
 The private key (PKCS8 PEM) comes from --key or the COGITATOR_SIGNING_KEY_FILE environment variable and is never copied
 anywhere. Output goes to release/ (git-ignored):
     Cogitator-<ver>-win-x64.zip, Cogitator-<ver>-win-x64.zip.sig (base64),
-    Cogitator-<ver>-win-x64-installer.exe, SHA256SUMS (covers the zip and the installer)
+    Cogitator-<ver>-win-x64-installer.exe, SHA256SUMS (covers the zip and the installer), SHA256SUMS.sig (signature of that list)
 """
 from __future__ import annotations
 
@@ -67,7 +67,9 @@ def build(version: str, app_dir: Path, out: Path, key_path: Path, installer: boo
         assets.append(build_installer(version, out))
     sums = out / "SHA256SUMS"
     sums.write_text("".join(f"{hashlib.sha256(a.read_bytes()).hexdigest()}  {a.name}\n" for a in assets), encoding="utf-8", newline="\n")
-    return [*assets, sig, sums]
+    sums_sig = out / "SHA256SUMS.sig"  # lets anyone check the installer too: cogitator verify-download SHA256SUMS <file>
+    sums_sig.write_bytes(base64.b64encode(key.sign(sums.read_bytes())) + b"\n")
+    return [*assets, sig, sums, sums_sig]
 
 
 def check_versions(version: str) -> None:

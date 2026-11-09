@@ -1,7 +1,7 @@
 <#
   Builds the three programs with PyInstaller (no Python needed to run them) and self-checks each.
   Run from the repository root inside a virtual environment:
-      pip install . pyinstaller
+      pip install . "pyinstaller==6.22.3"   (the version the releases are built and tested with)
       powershell -ExecutionPolicy Bypass -File packaging\build_exe.ps1
   Output: dist\cogitator\cogitator.exe (+ cogitator-updater.exe beside it)
           dist\Cogitator Setup\Cogitator Setup.exe
@@ -14,6 +14,9 @@ $base = (& $py -c "import sys; print(sys.base_prefix)").Trim()
 if ($base -match "conda") {
     throw "This Python is based on conda ($base). Build from a venv created with a python.org or Microsoft Store Python."
 }
+$pin = "6.22.3"
+$have = (& $py -m PyInstaller --version).Trim()
+if ($have -ne $pin) { throw "PyInstaller $have is installed; releases are built with $pin. Run: pip install pyinstaller==$pin" }
 function Check($exe) {
     & $exe --self-check
     if ($LASTEXITCODE -ne 0) { throw "self-check failed: $exe" }
