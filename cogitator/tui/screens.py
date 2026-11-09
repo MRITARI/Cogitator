@@ -1,0 +1,169 @@
+"""Modal dialogs. Text is rendered with markup disabled (paths contain brackets); results come back via dismiss()."""
+from __future__ import annotations
+
+from textual.app import ComposeResult
+from textual.binding import Binding
+from textual.containers import Horizontal, Vertical, VerticalScroll
+from textual.css.query import NoMatches
+from textual.screen import ModalScreen
+from textual.widgets import Button, Input, OptionList, Static
+from textual.widgets.option_list import Option
+
+
+class _Base(ModalScreen):
+    DEFAULT_CSS = """
+    _Base { align: center middle; }
+    _Base > Vertical { width: 80%; max-width: 100; height: auto; max-height: 90%;
+                       background: $panel; border: round $primary; padding: 1 2; }
+    _Base .title { text-style: bold; margin-bottom: 1; }
+    _Base .body { margin-bottom: 1; }
+    _Base Horizontal { height: auto; align-horizontal: right; }
+    _Base Button { margin-left: 2; }
+    """
+
+    def focus_later(self, selector: str) -> None:
+        """Focus after the first refresh. Dialogs pushed back-to-back (one dismissed, next pushed from a worker) can
+        run on_mount before their children exist; a failed focus must never take the app down."""
+        def go() -> None:
+            try:
+                self.query_one(selector).focus()
+            except NoMatches:
+                pass
+
+        self.call_after_refresh(go)
+
+
+class ConfirmScreen(_Base):
+    """Yes/no. `default_yes=False` focuses No, so a stray Enter never confirms something destructive."""
+
+    BINDINGS = [Binding("y", "answer(True)", "Yes"), Binding("n,escape", "answer(False)", "No")]
+
+    def __init__(self, title: str, body: str = "", default_yes: bool = True):
+        super().__init__()
+        self._title, self._body, self._default_yes = title, body, default_yes
+
+    def compose(self) -> ComposeResult:
+        with Vertical():
+            yield Static(self._title, classes="title", markup=False)
+            if self._body:
+                yield Static(self._body, classes="body", markup=False)
+            with Horizontal():
+                yield Button("Yes (y)", id="yes", variant="primary")
+                yield Button("No (n)", id="no")
+
+    def on_mount(self) -> None:
+        self.focus_later("#yes" if self._default_yes else "#no")
+
+    def on_button_pressed(self, event: Button.Pressed) -> None:
+        self.dismiss(event.button.id == "yes")
+
+    def action_answer(self, value: bool) -> None:
+        self.dismiss(value)
+
+
+class InputScreen(_Base):
+    """Single-line prompt. With password=True the field is masked; the value is only ever returned, never logged."""
+
+    BINDINGS = [Binding("escape", "cancel", "Cancel")]
+
+    def __init__(self, title: str, placeholder: str = "", password: bool = False, body: str = ""):
+        super().__init__()
+        self._title, self._ph, self._pw, self._body = title, placeholder, password, body
+
+    def compose(self) -> ComposeResult:
+        with Vertical():
+            yield Static(self._title, classes="title", markup=False)
+            if self._body:
+                yield Static(self._body, classes="body", markup=False)
+            yield Input(placeholder=self._ph, password=self._pw, id="value")
+            yield Static("Enter = OK, Esc = cancel", markup=False)
+
+    def on_mount(self) -> None:
+        self.focus_later("Input")
+
+    def on_input_submitted(self, event: Input.Submitted) -> None:
+        event.stop()
+        self.dismiss(event.value.strip() or None)
+
+    def action_cancel(self) -> None:
+        self.dismiss(None)
+
+
+class ChoiceScreen(_Base):
+    BINDINGS = [Binding("escape", "cancel", "Cancel")]
+
+    def __init__(self, question: str, options: list[str]):
+        super().__init__()
+        self._q, self._opts = question, options
+
+    def compose(self) -> ComposeResult:
+        with Vertical():
+            yield Static(self._q, classes="title", markup=False)
+            yield OptionList(*[Option(o, id=str(i)) for i, o in enumerate(self._opts)], id="choices")
+            yield Static("Enter = choose, Esc = cancel", markup=False)
+
+    def on_mount(self) -> None:
+        self.focus_later("OptionList")
+
+    def on_option_list_option_selected(self, event: OptionList.OptionSelected) -> None:
+        event.stop()
+        self.dismiss(int(event.option.id))
+
+    def action_cancel(self) -> None:
+        self.dismiss(None)
+
+
+class NoticeScreen(_Base):
+    BINDINGS = [Binding("enter,escape", "ok", "OK")]
+
+    def __init__(self, title: str, body: str):
+        super().__init__()
+        self._title, self._body = title, body
+
+    def compose(self) -> ComposeResult:
+        with Vertical():
+            yield Static(self._title, classes="title", markup=False)
+            yield Static(self._body, classes="body", markup=False)
+            with Horizontal():
+                yield Button("OK", id="ok", variant="primary")
+
+    def on_mount(self) -> None:
+        self.focus_later("Button")
+
+    def on_button_pressed(self, event: Button.Pressed) -> None:
+        self.dismiss(None)
+
+    def action_ok(self) -> None:
+        self.dismiss(None)
+
+
+class DoctorScreen(_Base):
+    """Scrollable doctor report. Esc / Enter / D close it."""
+
+    BINDINGS = [Binding("escape,enter,d,D", "close", "Close")]
+    DEFAULT_CSS = """
+    DoctorScreen > Vertical { width: 95%; max-width: 160; height: 90%; }
+    DoctorScreen VerticalScroll { height: 1fr; border: round $primary-darken-2; padding: 0 1; }
+    """
+
+    def __init__(self, report, exit_code: int):
+        super().__init__()
+        self._report, self._code = report, exit_code
+
+    def compose(self) -> ComposeResult:
+        verdict = {0: "all good", 1: "warnings", 2: "failures"}[self._code]
+        with Vertical():
+            yield Static(f"Doctor - {verdict} (exit code {self._code})", classes="title", markup=False)
+            with VerticalScroll():
+                yield Static(self._report, id="report", markup=False)
+            with Horizontal():
+                yield Button("Close", id="close", variant="primary")
+
+    def on_mount(self) -> None:
+        self.focus_later("#close")
+
+    def on_button_pressed(self, event: Button.Pressed) -> None:
+        self.dismiss(None)
+
+    def action_close(self) -> None:
+        self.dismiss(None)

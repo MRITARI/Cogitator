@@ -1,0 +1,367 @@
+{
+  "file_updates": [
+    {
+      "new_file_id": 115,
+      "new_file_name": "Darktide Mod Framework-8-23-3-04-1677966575.zip",
+      "old_file_id": 50,
+      "old_file_name": "Darktide Mod Framework-8-23-2-25-1677388900.zip",
+      "uploaded_time": "2023-03-04T21:49:35.000+00:00",
+      "uploaded_timestamp": 1677966575
+    },
+    {
+      "new_file_id": 240,
+      "new_file_name": "Darktide Mod Framework-8-23-3-19-1679212180.zip",
+      "old_file_id": 115,
+      "old_file_name": "Darktide Mod Framework-8-23-3-04-1677966575.zip",
+      "uploaded_time": "2023-03-19T07:49:40.000+00:00",
+      "uploaded_timestamp": 1679212180
+    },
+    {
+      "new_file_id": 440,
+      "new_file_name": "Darktide Mod Framework-8-23-4-05-1680676779.zip",
+      "old_file_id": 240,
+      "old_file_name": "Darktide Mod Framework-8-23-3-19-1679212180.zip",
+      "uploaded_time": "2023-04-05T06:39:39.000+00:00",
+      "uploaded_timestamp": 1680676779
+    },
+    {
+      "new_file_id": 730,
+      "new_file_name": "Darktide Mod Framework-8-23-5-10-1683750324.zip",
+      "old_file_id": 440,
+      "old_file_name": "Darktide Mod Framework-8-23-4-05-1680676779.zip",
+      "uploaded_time": "2023-05-10T20:25:24.000+00:00",
+      "uploaded_timestamp": 1683750324
+    },
+    {
+      "new_file_id": 1009,
+      "new_file_name": "Darktide Mod Framework-8-23-10-04-1696478703.zip",
+      "old_file_id": 730,
+      "old_file_name": "Darktide Mod Framework-8-23-5-10-1683750324.zip",
+      "uploaded_time": "2023-10-05T04:05:03.000+00:00",
+      "uploaded_timestamp": 1696478703
+    },
+    {
+      "new_file_id": 1649,
+      "new_file_name": "Darktide Mod Framework-8-24-04-02-1712090828.zip",
+      "old_file_id": 1009,
+      "old_file_name": "Darktide Mod Framework-8-23-10-04-1696478703.zip",
+      "uploaded_time": "2024-04-02T20:47:08.000+00:00",
+      "uploaded_timestamp": 1712090828
+    },
+    {
+      "new_file_id": 1948,
+      "new_file_name": "Darktide Mod Framework-8-24-07-12-1720764449.zip",
+      "old_file_id": 1649,
+      "old_file_name": "Darktide Mod Framework-8-24-04-02-1712090828.zip",
+      "uploaded_time": "2024-07-12T06:07:29.000+00:00",
+      "uploaded_timestamp": 1720764449
+    },
+    {
+      "new_file_id": 4070,
+      "new_file_name": "Darktide Mod Framework-8-25-12-02-1764721271.zip",
+      "old_file_id": 1948,
+      "old_file_name": "Darktide Mod Framework-8-24-07-12-1720764449.zip",
+      "uploaded_time": "2025-12-03T00:21:11.000+00:00",
+      "uploaded_timestamp": 1764721271
+    },
+    {
+      "new_file_id": 5820,
+      "new_file_name": "36/84/4a/36844ae8-0ed1-4646-a4f5-1ad89be182ad",
+      "old_file_id": 4070,
+      "old_file_name": "Darktide Mod Framework-8-25-12-02-1764721271.zip",
+      "uploaded_time": "2026-06-24T18:31:33.000+00:00",
+      "uploaded_timestamp": 1782325893
+    },
+    {
+      "new_file_id": 7495,
+      "new_file_name": "6c/63/9d/6c639d0a-3b58-44ca-b3ea-807766ec9662",
+      "old_file_id": 5820,
+      "old_file_name": "36/84/4a/36844ae8-0ed1-4646-a4f5-1ad89be182ad",
+      "uploaded_time": "2026-08-19T21:00:31.000+00:00",
+      "uploaded_timestamp": 1787173231
+    },
+    {
+      "new_file_id": 9330,
+      "new_file_name": "b4/c3/e2/b4c3e218-c2f2-4938-bf27-cc605dbc0a2f",
+      "old_file_id": 7495,
+      "old_file_name": "6c/63/9d/6c639d0a-3b58-44ca-b3ea-807766ec9662",
+      "uploaded_time": "2026-10-23T02:11:45.000+00:00",
+      "uploaded_timestamp": 1792721505
+    }
+  ],
+  "files": [
+    {
+      "category_id": 7,
+      "category_name": "ARCHIVED",
+      "detected_file_extension": null,
+      "file_id": 38,
+      "file_name": "Darktide Mod Framework-8-23-2-24-1677293674.zip",
+      "id": [
+        38,
+        4943
+      ],
+      "is_primary": false,
+      "mod_version": "Deprecated-23.2.24",
+      "name": "Darktide Mod Framework",
+      "size": 147,
+      "size_in_bytes": 150075,
+      "size_kb": 147,
+      "uid": 21230023344166,
+      "uploaded_time": "2023-02-25T02:54:34.000+00:00",
+      "uploaded_timestamp": 1677293674,
+      "version": "Deprecated-23.2.24"
+    },
+    {
+      "category_id": 4,
+      "category_name": "OLD_VERSION",
+      "detected_file_extension": null,
+      "file_id": 50,
+      "file_name": "Darktide Mod Framework-8-23-2-25-1677388900.zip",
+      "id": [
+        50,
+        4943
+      ],
+      "is_primary": false,
+      "mod_version": "23.2.25",
+      "name": "Darktide Mod Framework",
+      "size": 81,
+      "size_in_bytes": 82576,
+      "size_kb": 81,
+      "uid": 21230023344178,
+      "uploaded_time": "2023-02-26T05:21:40.000+00:00",
+      "uploaded_timestamp": 1677388900,
+      "version": "23.2.25"
+    },
+    {
+      "category_id": 4,
+      "category_name": "OLD_VERSION",
+      "detected_file_extension": null,
+      "file_id": 115,
+      "file_name": "Darktide Mod Framework-8-23-3-04-1677966575.zip",
+      "id": [
+        115,
+        4943
+      ],
+      "is_primary": false,
+      "mod_version": "23.3.04",
+      "name": "Darktide Mod Framework",
+      "size": 82,
+      "size_in_bytes": 84026,
+      "size_kb": 82,
+      "uid": 21230023344243,
+      "uploaded_time": "2023-03-04T21:49:35.000+00:00",
+      "uploaded_timestamp": 1677966575,
+      "version": "23.3.04"
+    },
+    {
+      "category_id": 4,
+      "category_name": "OLD_VERSION",
+      "detected_file_extension": null,
+      "file_id": 240,
+      "file_name": "Darktide Mod Framework-8-23-3-19-1679212180.zip",
+      "id": [
+        240,
+        4943
+      ],
+      "is_primary": false,
+      "mod_version": "23.3.19",
+      "name": "Darktide Mod Framework",
+      "size": 82,
+      "size_in_bytes": 84177,
+      "size_kb": 82,
+      "uid": 21230023344368,
+      "uploaded_time": "2023-03-19T07:49:40.000+00:00",
+      "uploaded_timestamp": 1679212180,
+      "version": "23.3.19"
+    },
+    {
+      "category_id": 4,
+      "category_name": "OLD_VERSION",
+      "detected_file_extension": null,
+      "file_id": 440,
+      "file_name": "Darktide Mod Framework-8-23-4-05-1680676779.zip",
+      "id": [
+        440,
+        4943
+      ],
+      "is_primary": false,
+      "mod_version": "23.4.05",
+      "name": "Darktide Mod Framework",
+      "size": 83,
+      "size_in_bytes": 85137,
+      "size_kb": 83,
+      "uid": 21230023344568,
+      "uploaded_time": "2023-04-05T06:39:39.000+00:00",
+      "uploaded_timestamp": 1680676779,
+      "version": "23.4.05"
+    },
+    {
+      "category_id": 7,
+      "category_name": "ARCHIVED",
+      "detected_file_extension": null,
+      "file_id": 730,
+      "file_name": "Darktide Mod Framework-8-23-5-10-1683750324.zip",
+      "id": [
+        730,
+        4943
+      ],
+      "is_primary": false,
+      "mod_version": "23.5.10",
+      "name": "Darktide Mod Framework",
+      "size": 84,
+      "size_in_bytes": 86207,
+      "size_kb": 84,
+      "uid": 21230023344858,
+      "uploaded_time": "2023-05-10T20:25:24.000+00:00",
+      "uploaded_timestamp": 1683750324,
+      "version": "23.5.10"
+    },
+    {
+      "category_id": 4,
+      "category_name": "OLD_VERSION",
+      "detected_file_extension": null,
+      "file_id": 1009,
+      "file_name": "Darktide Mod Framework-8-23-10-04-1696478703.zip",
+      "id": [
+        1009,
+        4943
+      ],
+      "is_primary": false,
+      "mod_version": "23.10.04",
+      "name": "Darktide Mod Framework",
+      "size": 84,
+      "size_in_bytes": 86469,
+      "size_kb": 84,
+      "uid": 21230023345137,
+      "uploaded_time": "2023-10-05T04:05:03.000+00:00",
+      "uploaded_timestamp": 1696478703,
+      "version": "23.10.04"
+    },
+    {
+      "category_id": 4,
+      "category_name": "OLD_VERSION",
+      "detected_file_extension": null,
+      "file_id": 1649,
+      "file_name": "Darktide Mod Framework-8-24-04-02-1712090828.zip",
+      "id": [
+        1649,
+        4943
+      ],
+      "is_primary": false,
+      "mod_version": "24.04.02",
+      "name": "Darktide Mod Framework",
+      "size": 87,
+      "size_in_bytes": 89131,
+      "size_kb": 87,
+      "uid": 21230023345777,
+      "uploaded_time": "2024-04-02T20:47:08.000+00:00",
+      "uploaded_timestamp": 1712090828,
+      "version": "24.04.02"
+    },
+    {
+      "category_id": 4,
+      "category_name": "OLD_VERSION",
+      "detected_file_extension": null,
+      "file_id": 1948,
+      "file_name": "Darktide Mod Framework-8-24-07-12-1720764449.zip",
+      "id": [
+        1948,
+        4943
+      ],
+      "is_primary": false,
+      "mod_version": "24.07.12",
+      "name": "Darktide Mod Framework",
+      "size": 87,
+      "size_in_bytes": 89221,
+      "size_kb": 87,
+      "uid": 21230023346076,
+      "uploaded_time": "2024-07-12T06:07:29.000+00:00",
+      "uploaded_timestamp": 1720764449,
+      "version": "24.07.12"
+    },
+    {
+      "category_id": 7,
+      "category_name": "ARCHIVED",
+      "detected_file_extension": null,
+      "file_id": 4070,
+      "file_name": "Darktide Mod Framework-8-25-12-02-1764721271.zip",
+      "id": [
+        4070,
+        4943
+      ],
+      "is_primary": false,
+      "mod_version": "25.12.02",
+      "name": "Darktide Mod Framework",
+      "size": 87,
+      "size_in_bytes": 89356,
+      "size_kb": 87,
+      "uid": 21230023348198,
+      "uploaded_time": "2025-12-03T00:21:11.000+00:00",
+      "uploaded_timestamp": 1764721271,
+      "version": "25.12.02"
+    },
+    {
+      "category_id": 4,
+      "category_name": "OLD_VERSION",
+      "detected_file_extension": null,
+      "file_id": 5820,
+      "file_name": "Darktide Mod Framework 8 26.06.24 2026-06-24T18-31Z SDWlwDHJj.zip",
+      "id": [
+        5820,
+        4943
+      ],
+      "is_primary": false,
+      "mod_version": "26.06.24",
+      "name": "Darktide Mod Framework",
+      "size": 88,
+      "size_in_bytes": 0,
+      "size_kb": 88,
+      "uid": 21230023349948,
+      "uploaded_time": "2026-06-24T18:31:33.000+00:00",
+      "uploaded_timestamp": 1782325893,
+      "version": "26.06.24"
+    },
+    {
+      "category_id": 4,
+      "category_name": "OLD_VERSION",
+      "detected_file_extension": null,
+      "file_id": 7495,
+      "file_name": "Darktide Mod Framework 8 26.08.19 2026-08-19T21-00Z L8cAq8xWz.zip",
+      "id": [
+        7495,
+        4943
+      ],
+      "is_primary": false,
+      "mod_version": "26.08.19",
+      "name": "Darktide Mod Framework",
+      "size": 135,
+      "size_in_bytes": 138966,
+      "size_kb": 135,
+      "uid": 21230023351623,
+      "uploaded_time": "2026-08-19T21:00:31.000+00:00",
+      "uploaded_timestamp": 1787173231,
+      "version": "26.08.19"
+    },
+    {
+      "category_id": 1,
+      "category_name": "MAIN",
+      "detected_file_extension": "zip",
+      "file_id": 9330,
+      "file_name": "Darktide Mod Framework 8 26.10.22 2026-10-23T02-11Z FQPKZQIuu.zip",
+      "id": [
+        9330,
+        4943
+      ],
+      "is_primary": true,
+      "mod_version": "26.10.22",
+      "name": "Darktide Mod Framework",
+      "size": 135,
+      "size_in_bytes": 139238,
+      "size_kb": 135,
+      "uid": 21230023353458,
+      "uploaded_time": "2026-10-23T02:11:45.000+00:00",
+      "uploaded_timestamp": 1792721505,
+      "version": "26.10.22"
+    }
+  ]
+}

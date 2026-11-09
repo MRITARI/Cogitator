@@ -1,0 +1,45 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "cogitator"
+version = "0.1.0"
+description = "Terminal mod manager for Warhammer 40,000: Darktide"
+readme = "README.md"
+requires-python = ">=3.10"
+keywords = ["darktide", "warhammer", "mods", "mod manager", "tui", "nexus"]
+classifiers = [
+  "Environment :: Console",
+  "Intended Audience :: End Users/Desktop",
+  "Operating System :: Microsoft :: Windows",
+  "Programming Language :: Python :: 3",
+  "Topic :: Games/Entertainment",
+]
+dependencies = [
+  "textual>=0.80",
+  "httpx>=0.27",
+  "platformdirs>=4",
+  "vdf>=3.4",
+  "tomli>=2; python_version < '3.11'",
+  # Windows Credential Locker for the Nexus key by default; elsewhere it stays optional (0600-file fallback).
+  "keyring>=24; sys_platform == 'win32'",
+]
+
+[project.optional-dependencies]
+keyring = ["keyring>=24"]
+dev = ["pytest", "respx", "pytest-asyncio"]
+
+[project.scripts]
+cogitator = "cogitator.cli:main"
+
+[project.gui-scripts]
+cogitator-setup = "cogitator_setup.app:main"
+
+[tool.setuptools.packages.find]
+include = ["cogitator*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+asyncio_mode = "auto"
+asyncio_default_fixture_loop_scope = "function"
