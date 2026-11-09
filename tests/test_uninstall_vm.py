@@ -164,7 +164,7 @@ def test_finish_lines_are_at_most_three_plain_lines(installed):
 def test_maintenance_choices_and_summary(installed):
     g, reg, tool = installed
     mm = MaintenanceModel(detect(svc(g, reg, app=FakeApp())))
-    assert mm.enabled("repair") and mm.enabled("uninstall") and not mm.enabled("update")  # Update is disabled until self-update exists
+    assert mm.enabled("repair") and mm.enabled("uninstall") and not mm.enabled("update")  # nothing newer announced
     s = mm.summary()
     assert "already installed" in s and "Mod Loader: installed" in s and "mods are on" in s
 
@@ -179,3 +179,48 @@ def test_the_demo_game_tool_builds_a_valid_fake_folder(tmp_path):
     assert mod.PATCH_ANCHOR in db and db.index(mod.PATCH_ANCHOR) + 8 + mod.OLD_SIZE <= len(db)  # what dtkit-patch needs
     assert b"patch_999" not in db and b"patch_001" not in db
     assert (g / "mods" / "mod_load_order.txt").read_bytes().startswith(b"-- my demo mods") and (g / "mods" / "demo_hud" / "demo_hud.mod").is_file()
+
+
+class FakeUpdater:
+    def __init__(self, in_place=True, shown=True):
+        from cogitator.selfupdate import Layout, ReleaseInfo, Version
+        self.layout = Layout("installer" if in_place else "pipx")
+        self.rel = ReleaseInfo(Version.parse("2.0.0"), "v2.0.0", False, "<b>Fixes</b> & more", "u", 1, "s", "c")
+        self.shown, self.log, self._ready = shown, [], False
+
+    def announcement(self): return self.rel if self.shown else None
+    def ready(self):
+        from types import SimpleNamespace
+        return SimpleNamespace(version="2.0.0") if self._ready else None
+    def stage(self, info): self.log.append("stage"); self._ready = True
+    def apply(self): self.log.append("apply")
+    def skip_version(self, v): self.log.append(("skip", v)); self.shown = False
+    def remind_later(self): self.log.append("remind"); self.shown = False
+
+
+def test_update_is_offered_only_when_a_newer_release_is_announced(installed):
+    g, reg, tool = installed
+    det = detect(svc(g, reg, app=FakeApp()))
+    assert not MaintenanceModel(det).enabled("update")
+    assert not MaintenanceModel(det, FakeUpdater(shown=False)).enabled("update")
+    mm = MaintenanceModel(det, FakeUpdater())
+    assert mm.enabled("update") and "v2.0.0" in mm.notes() and "<b>Fixes</b> & more" in mm.notes()  # shown verbatim, never interpreted
+
+
+def test_install_downloads_then_applies_and_skip_remind_are_recorded(installed):
+    g, reg, tool = installed
+    det = detect(svc(g, reg, app=FakeApp()))
+    u = FakeUpdater()
+    mm = MaintenanceModel(det, u)
+    assert "Installing v2.0.0" in mm.install() and u.log == ["stage", "apply"]
+    u = FakeUpdater(); mm = MaintenanceModel(det, u); mm.skip()
+    assert u.log == [("skip", "2.0.0")] and not mm.enabled("update")
+    u = FakeUpdater(); mm = MaintenanceModel(det, u); mm.remind_later()
+    assert u.log == ["remind"] and not mm.enabled("update")
+
+
+def test_non_installer_installs_get_guidance_and_nothing_is_applied(installed):
+    g, reg, tool = installed
+    u = FakeUpdater(in_place=False)
+    out = MaintenanceModel(detect(svc(g, reg, app=FakeApp())), u).install()
+    assert "pipx upgrade cogitator" in out and u.log == []

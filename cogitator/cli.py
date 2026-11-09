@@ -11,7 +11,7 @@ from dataclasses import asdict
 from pathlib import Path
 
 from . import __version__
-from .config import Settings, get_api_key, set_api_key, setup_logging
+from .config import SchemaTooNew, Settings, get_api_key, set_api_key, setup_logging
 from .doctor import exit_code as doctor_exit_code, format_report, run_doctor, to_json as doctor_json
 from .frameworks import Plan, describe_plan, detect_framework, plan_github, plan_local
 from .fwupdate import install_framework_plan
@@ -22,7 +22,7 @@ from .mods import ModError, scan_mods, set_mod_enabled
 from .nexus import NexusClient, NexusError
 from .patcher import ON, PatcherError, banner, patch_state
 from .patcher import toggle as toggle_mods
-from .registry import Registry
+from .registry import Registry, check_data_versions
 from .archives import parse_archive_name
 from .linking import link_mod
 from .loader import LoaderError
@@ -71,6 +71,11 @@ def build_parser() -> argparse.ArgumentParser:
     up.add_argument("--wait", type=int, default=180, metavar="SECONDS", help="free accounts: how long to watch Downloads")
     up.add_argument("--no-browser", action="store_true")
     up.add_argument("--yes", "-y", action="store_true")
+    su_ = sub.add_parser("self-update", help="update Cogitator itself from its signed GitHub releases")
+    su_.add_argument("--check", action="store_true", help="only look for a newer version")
+    su_.add_argument("--apply", action="store_true", help="install the downloaded update and restart")
+    su_.add_argument("--rollback", action="store_true", help="go back to the previous version")
+    su_.add_argument("--channel", choices=["stable", "beta"], help="release channel (remembered)")
     dr = sub.add_parser("doctor", help="diagnose the install and print fixes (exit 0 ok, 1 warnings, 2 failures)")
     dr.add_argument("--json", action="store_true")
     dr.add_argument("--offline", action="store_true", help="skip the Nexus and GitHub network checks")
@@ -537,6 +542,51 @@ def cmd_install_framework(args) -> int:
         wd_ctx.cleanup()
 
 
+def cmd_self_update(args) -> int:
+    from .config import Settings
+    from .registry import Registry
+    from .selfupdate import SelfUpdater, UpdateError
+
+    settings = Settings.load()
+    if args.channel and args.channel != settings.update_channel:
+        settings.update_channel = args.channel
+        settings.save()
+    u = SelfUpdater(Registry.load(), settings)
+    try:
+        if args.rollback:
+            u.rollback()
+            print("Going back to the previous version; Cogitator will restart.")
+            return 0
+        if args.apply:
+            rd = u.apply()
+            print(f"Installing {rd.version}; Cogitator will restart.")
+            return 0
+        res = u.check(force=True)
+        if res.status == "disabled":
+            print(res.detail)
+            return 1
+        if res.status in ("offline", "rate-limited", "error"):
+            print(res.detail or "Could not check for updates right now.")
+            return 1
+        if not res.latest:
+            print("Cogitator is up to date.")
+            return 0
+        print(f"Update available: v{res.latest.version}")
+        if res.latest.notes:
+            print(res.latest.notes)
+        if args.check:
+            return 0
+        if not u.layout.in_place:
+            print(u.layout.guidance())
+            return 0
+        rd = u.stage(res.latest)
+        print(f"Downloaded and verified v{rd.version}. Run  cogitator self-update --apply  to install it.")
+        return 0
+    except UpdateError as e:
+        print(str(e), file=sys.stderr)
+        return 1
+
+
 def main(argv: list[str] | None = None) -> int:
     setup_logging()
     args = build_parser().parse_args(argv)
@@ -544,6 +594,15 @@ def main(argv: list[str] | None = None) -> int:
         from .selfcheck import run as self_check
 
         return self_check()
+    try:
+        check_data_versions()  # an older app must not touch files written by a newer one
+        return _dispatch(args)
+    except SchemaTooNew as e:
+        print(str(e), file=sys.stderr)
+        return 2
+
+
+def _dispatch(args) -> int:
     if args.cmd == "status":
         return cmd_status(args)
     if args.cmd == "doctor":
@@ -568,6 +627,8 @@ def main(argv: list[str] | None = None) -> int:
         return cmd_install_framework(args)
     if args.cmd == "mod":
         return cmd_mod(args)
+    if args.cmd == "self-update":
+        return cmd_self_update(args)
     if args.cmd is None:
         from .tui.app import run_tui  # imported lazily: headless commands must not pay for Textual
 

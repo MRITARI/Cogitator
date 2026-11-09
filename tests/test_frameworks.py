@@ -12,7 +12,7 @@ from cogitator.frameworks import (LoaderError, classify_zip, describe_plan, dete
                                   version_from_filename)
 from cogitator.loader import GITHUB_API, make_client
 from cogitator.mods import INTERNAL_FOLDERS
-from cogitator.registry import Registry, migrate
+from cogitator.registry import SCHEMA, Registry, migrate
 
 DML_FILES = {
     "binaries/mod_loader": b"\x7fELF-ish",
@@ -277,11 +277,11 @@ def test_cli_rejects_duplicate_component(game, zips, tmp_path, capsys):
 # ---- registry
 
 def test_registry_migrate_and_corrupt(tmp_path):
-    assert migrate("garbage")["schema"] == 3
+    assert migrate("garbage")["schema"] == SCHEMA
     m = migrate({"frameworks": "bad", "mods": {"1": {}, "2": "junk"}, "extra": 1})
     assert m["frameworks"] == {} and m["mods"] == {"1": {}} and m["extra"] == 1 and m["updates"] == {}
     v1 = migrate({"schema": 1, "frameworks": {"dml": {"version": "26.06.24"}}, "mods": {}, "patch": {"last_patch_at": 5}})
-    assert v1["schema"] == 3 and v1["updates"] == {} and v1["manifests"] == {} and v1["frameworks"]["dml"]["version"] == "26.06.24" \
+    assert v1["schema"] == SCHEMA and v1["updates"] == {} and v1["manifests"] == {} and v1["frameworks"]["dml"]["version"] == "26.06.24" \
         and v1["patch"] == {"last_patch_at": 5}  # v1 data survives untouched
     p = tmp_path / "registry.json"
     p.write_text("{not json")

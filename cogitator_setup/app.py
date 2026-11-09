@@ -721,6 +721,14 @@ def main(argv: list[str] | None = None, *, build=_DETECT, show_error: Callable[[
     if not platform_gate.is_supported(b):
         (show_error or _default_show_error)(TITLE, platform_gate.MESSAGE)
         return 1  # nothing has been created, read or changed
+    from cogitator.config import SchemaTooNew
+    from cogitator.registry import check_data_versions
+
+    try:
+        check_data_versions()
+    except SchemaTooNew as e:
+        (show_error or _default_show_error)(TITLE, str(e))
+        return 2
     from .uninstall_app import UninstallApp, run_silent
     from .uninstall_vm import detect
 

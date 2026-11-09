@@ -56,7 +56,7 @@ EMPTY_STATE = ("The machine spirit stirs, but no mods are consecrated here. "
                "Press I to import a mod archive, or install the Mod Loader first.")
 
 _MAIN_ACTIONS = {"toggle_mods", "toggle_mod", "update_selected", "update_all", "recheck", "link", "import_archive",
-                 "set_key", "cycle_sort", "quit_app", "framework_update", "doctor"}
+                 "set_key", "cycle_sort", "quit_app", "framework_update", "doctor", "apply_update"}
 SORT_COLUMNS = ("mod", "status", "installed", "latest", "en")
 
 
@@ -192,6 +192,8 @@ class CogitatorApp(App):
         Binding("I", "import_archive", show=False),
         Binding("k", "set_key", "Key", key_display="K"),
         Binding("K", "set_key", show=False),
+        Binding("a", "apply_update", "Update Cogitator", key_display="A"),
+        Binding("A", "apply_update", show=False),
         Binding("o", "cycle_sort", "Sort", key_display="O", show=False),  # works; hidden to keep Q Quit on screen
         Binding("q", "quit_app", "Quit", key_display="Q"),
         Binding("Q", "quit_app", show=False),
@@ -223,6 +225,8 @@ class CogitatorApp(App):
         self.patch_runner = default_runner
         self.download_wait_s = 180.0
         self.doctor_offline = False
+        self.selfupdater = None  # SelfUpdater; created once the registry is loaded. Tests inject their own.
+        self.selfupdate_on_start = True
         self.show_notice = True
 
     # -------------------------------------------------------------- layout
@@ -305,6 +309,7 @@ class CogitatorApp(App):
 
     def _after_notice(self) -> None:
         self._offer_bootstrap()
+        self.start_selfupdate_check()
         if self._check_on_start and self.settings.check_updates_on_start:
             self.start_check()
 
@@ -335,6 +340,9 @@ class CogitatorApp(App):
         spin = ""
         if self.checking:
             spin = f"{self.glyphs.spinner[self._spin % len(self.glyphs.spinner)]} checking for updates{self.glyphs.ellipsis}"
+        ann = self._update_banner()
+        if ann:
+            hdr.append(ann + "\n", "bold")
         upd = self.registry.data["updates"]
         hdr.append_text(nexus_text(bool(get_api_key()), upd.get("premium"), quota_text(self.registry), spin))
         self.query_one("#hdr", Static).update(hdr)
@@ -342,6 +350,83 @@ class CogitatorApp(App):
         bn = self.query_one("#banner", Static)
         bn.update(Text(b or ""))
         bn.set_class(bool(b), "on")
+
+    # -------------------------------------------------------------- Cogitator's own updates
+    def _selfupdater(self):
+        if self.selfupdater is None and self.registry is not None:
+            from ..selfupdate import SelfUpdater
+
+            self.selfupdater = SelfUpdater(self.registry, self.settings)
+        return self.selfupdater
+
+    def update_ready(self):
+        u = self.selfupdater
+        return u.ready() if u and u.layout.in_place else None
+
+    def _update_banner(self) -> str:
+        u = self.selfupdater
+        if u is None or u.settings.update_mode == "off":
+            return ""
+        a = u.announcement()
+        if not a:
+            return ""
+        if self.update_ready():
+            return f"Update available v{a.version} - downloaded and verified. Press A to install."
+        if u.layout.in_place:
+            return f"Update available v{a.version}."
+        return f"Update available v{a.version}. {u.layout.guidance()}"
+
+    def start_selfupdate_check(self) -> None:
+        if not (self.selfupdate_on_start and self._check_on_start) or self.settings.update_mode == "off" or self._selfupdater() is None:
+            return
+        self._bg(self._job_selfupdate, name="cogitator update check", group="selfupdate", exclusive=True)
+
+    def _job_selfupdate(self) -> None:
+        u = self.selfupdater
+        with self._lock:
+            u.absorb_result()
+            res = u.run_automatic()
+        self._ui(self.refresh_header)
+        self._ui(self.refresh_bindings)
+        if res.status == "available" and res.latest:
+            self._ui(self.log_line, f"Cogitator v{res.latest.version} is available.", "bold")
+        if u.should_apply_automatically():
+            self._ui(self._apply_update_now)
+
+    def action_apply_update(self) -> None:
+        u, a = self.selfupdater, None
+        rd = self.update_ready()
+        if not rd:
+            return
+        a = u.latest() or u.announcement()
+        notes = (a.notes if a else rd.notes) or "(no release notes)"
+        self.push_screen(ChoiceScreen(f"Cogitator v{rd.version}\n\n{notes}", ["Install now and restart", "Remind me later", "Skip this version", "Cancel"]),
+                         self._update_choice)
+
+    def _update_choice(self, i) -> None:
+        u, rd = self.selfupdater, self.update_ready()
+        if i is None or not rd:
+            return
+        with self._lock:
+            if i == 0:
+                self._apply_update_now()
+            elif i == 1:
+                u.remind_later()
+            elif i == 2:
+                u.skip_version(rd.version)
+        self.refresh_header()
+        self.refresh_bindings()
+
+    def _apply_update_now(self) -> None:
+        from ..selfupdate import UpdateError
+
+        try:
+            rd = self.selfupdater.apply()
+        except UpdateError as e:
+            self.log_line(str(e), "bold red")
+            return
+        self.log_line(f"Installing v{rd.version}; Cogitator will restart.", "bold")
+        self.action_quit_app()
 
     def _tick(self) -> None:
         if self.checking:
@@ -442,6 +527,10 @@ class CogitatorApp(App):
 
     # -------------------------------------------------------------- guards / workers
     def check_action(self, action: str, parameters) -> bool | None:
+        if action == "apply_update":
+            if len(self.screen_stack) > 1 or not self.update_ready():
+                return False  # the key only appears while a downloaded update is waiting
+            return True
         if action in _MAIN_ACTIONS and len(self.screen_stack) > 1:
             return False  # a dialog is open: main-screen keys are inert
         return True
@@ -887,5 +976,13 @@ class CogitatorApp(App):
 
 
 def run_tui(game_override: str | None = None, check_updates: bool = True) -> int:
+    from ..config import SchemaTooNew
+    from ..registry import check_data_versions
+
+    try:
+        check_data_versions()
+    except SchemaTooNew as e:
+        print(str(e), file=sys.stderr)
+        return 2
     CogitatorApp(game_override=game_override, check_updates=check_updates).run()
     return 0

@@ -50,7 +50,7 @@ class UninstallApp:
         self.root.bind("<Control-0>", lambda e: self.scale_text(0))
         self.model.load()
         if start == "maintenance":
-            self.maint = MaintenanceModel(self.model.det)
+            self.maint = MaintenanceModel(self.model.det, self.model.svc.selfupdater())
             self._show_maintenance()
         else:
             self._goto(UPage.CHOOSE)
@@ -110,18 +110,65 @@ class UninstallApp:
         row = ttk.Frame(f)
         row.grid(row=2, column=0, sticky="w", pady=14)
         self.btn_repair = ttk.Button(row, text="Repair", command=self.on_repair)
-        self.btn_update = ttk.Button(row, text="Update", state="disabled")
+        self.btn_update = ttk.Button(row, text="Update", state="disabled", command=self.on_update)
         self.btn_uninstall = ttk.Button(row, text="Uninstall...", command=lambda: self._goto(UPage.CHOOSE))
         for b in (self.btn_repair, self.btn_update, self.btn_uninstall):
             b.pack(side="left", padx=(0, 10), ipadx=14, ipady=6)
-        self._wrapped(f, "Repair reinstalls what Cogitator put in place and keeps your mods and mod list. Updating Cogitator itself "
-                         "arrives in a later version.", row=3, foreground="#555")
+        self._wrapped(f, "Repair reinstalls what Cogitator put in place and keeps your mods and mod list.", row=3, foreground="#555")
+        self.update_box = ttk.Frame(f)
+        self.update_box.grid(row=4, column=0, sticky="we", pady=(12, 0))
+        self.update_box.columnconfigure(0, weight=1)
+        self.update_notes = tk.Text(self.update_box, height=8, wrap="word", state="disabled")  # plain text: release notes are never interpreted
+        self.update_notes.grid(row=0, column=0, sticky="we")
+        r2 = ttk.Frame(self.update_box)
+        r2.grid(row=1, column=0, sticky="w", pady=6)
+        self.btn_remind = ttk.Button(r2, text="Remind me later", command=self.on_remind)
+        self.btn_skip = ttk.Button(r2, text="Skip this version", command=self.on_skip)
+        self.btn_remind.pack(side="left", padx=(0, 8))
+        self.btn_skip.pack(side="left")
+        self.update_msg = self._wrapped(f, "", row=5, foreground="#555")
 
     def _show_maintenance(self) -> None:
         self.maint_summary.configure(text=self.maint.summary())
-        self.btn_update.configure(state="normal" if self.maint.enabled("update") else "disabled")
+        has = self.maint.enabled("update")
+        self.btn_update.configure(state="normal" if has else "disabled")
+        self.update_notes.configure(state="normal")
+        self.update_notes.delete("1.0", "end")
+        self.update_notes.insert("1.0", self.maint.notes())
+        self.update_notes.configure(state="disabled")
+        if has:
+            self.update_box.grid()
+        else:
+            self.update_box.grid_remove()
         self.nav.pack_forget()
         self.pages["maintenance"].tkraise()
+
+    def on_update(self) -> None:
+        from cogitator.selfupdate import UpdateError
+
+        self.btn_update.configure(state="disabled")
+        self.update_msg.configure(text="Downloading and checking the update...")
+        self.root.update_idletasks()
+        try:
+            msg = self.maint.install()
+        except UpdateError as e:
+            self.update_msg.configure(text=str(e))
+            self.btn_update.configure(state="normal")
+            return
+        self.update_msg.configure(text=msg)
+        if self.maint.updater.layout.in_place:
+            self.action = "update"
+            self.root.after(300, self.root.destroy)
+        else:
+            self.btn_update.configure(state="normal")
+
+    def on_remind(self) -> None:
+        self.maint.remind_later()
+        self._show_maintenance()
+
+    def on_skip(self) -> None:
+        self.maint.skip()
+        self._show_maintenance()
 
     def on_repair(self) -> None:
         self.action = "repair"

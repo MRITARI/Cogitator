@@ -204,7 +204,7 @@ def test_maintenance_page_offers_repair_update_uninstall(root, installed):
     assert win.pages["maintenance"].winfo_exists()
     txt = win.maint_summary.cget("text")
     assert "already installed" in txt and "Mod Loader: installed" in txt and "mods are on" in txt
-    assert "disabled" in win.btn_update.state()  # self-update arrives later
+    assert "disabled" in win.btn_update.state()  # no newer release announced
     assert "disabled" not in win.btn_repair.state() and "disabled" not in win.btn_uninstall.state()
     win.btn_uninstall.invoke()
     assert win.model.page is UPage.CHOOSE
@@ -385,3 +385,21 @@ def test_the_platform_gate_still_comes_first():
     shown = []
     assert main(["--uninstall", "--silent"], build=19045, show_error=lambda t, b: shown.append(b), silent_fn=lambda s: pytest.fail("ran")) == 1
     assert shown == ["Cogitator Setup supports Windows 11 only"]
+
+
+def test_maintenance_update_panel_shows_plain_notes_and_installs(root, installed):
+    from test_uninstall_vm import FakeUpdater
+    g, reg, t = installed
+    u = FakeUpdater()
+    svc = UServices(game_dir=lambda: g, registry=lambda: reg, is_running=lambda: False, app_remover=FakeApp(),
+                    data_dirs=lambda: [(cfg.config_dir(), 4096)], selfupdater=lambda: u)
+    win = UninstallApp(services=svc, deps=UninstallDeps(runner=t, is_running=lambda: False, registry=reg), dialogs=FakeDialogs(), root=root, start="maintenance")
+    assert "disabled" not in win.btn_update.state()
+    assert "<b>Fixes</b> & more" in win.update_notes.get("1.0", "end")
+    win.btn_skip.invoke()
+    assert u.log == [("skip", "2.0.0")] and "disabled" in win.btn_update.state() and not win.update_box.winfo_ismapped()
+    u2 = FakeUpdater()
+    svc.selfupdater = lambda: u2
+    win2 = UninstallApp(services=svc, deps=UninstallDeps(runner=t, is_running=lambda: False, registry=reg), dialogs=FakeDialogs(), root=root, start="maintenance")
+    win2.btn_update.invoke()
+    assert u2.log == ["stage", "apply"] and win2.action == "update"

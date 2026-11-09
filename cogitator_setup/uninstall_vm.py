@@ -41,6 +41,7 @@ class UServices:
     is_running: Callable[[], bool] = darktide_running
     app_remover: AppRemover | None = None  # supplied by the installed app (build steps 7 and 9)
     data_dirs: Callable[[], list[tuple[Path, int]]] = data_dirs
+    selfupdater: Callable[[], object | None] = lambda: None  # a SelfUpdater for the installed app; None until the installed layout exists
 
 
 @dataclass
@@ -226,12 +227,41 @@ class MaintenanceModel:
 
     CHOICES = ("repair", "update", "uninstall")
 
-    def __init__(self, detected: Detected, update_available: str | None = None):
-        self.det, self.update_available = detected, update_available
+    def __init__(self, detected: Detected, updater=None):
+        self.det, self.updater = detected, updater
+
+    def info(self):
+        """The release to announce (None = nothing newer, or the user chose to be reminded later / skip it)."""
+        return self.updater.announcement() if self.updater else None
 
     def enabled(self, choice: str) -> bool:
-        # Cogitator's own update is not available yet, so Update is offered but disabled.
+        if choice == "update":
+            return self.info() is not None
         return choice in ("repair", "uninstall")
+
+    def notes(self) -> str:
+        i = self.info()
+        return f"Cogitator v{i.version} is available.\n\n{i.notes or '(no release notes)'}" if i else ""
+
+    def skip(self) -> None:
+        if (i := self.info()):
+            self.updater.skip_version(str(i.version))
+
+    def remind_later(self) -> None:
+        if self.updater:
+            self.updater.remind_later()
+
+    def install(self) -> str:
+        """Download + verify if needed, then hand over to the helper. Returns a message; raises UpdateError on refusal."""
+        u, i = self.updater, self.info()
+        if not u or not i:
+            raise RuntimeError("no update to install")
+        if not u.layout.in_place:
+            return u.layout.guidance()
+        if not u.ready() or u.ready().version != str(i.version):
+            u.stage(i)
+        u.apply()
+        return f"Installing v{i.version}. Cogitator will restart."
 
     def summary(self) -> str:
         d = self.det

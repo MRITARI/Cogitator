@@ -36,8 +36,26 @@ def log_path() -> Path:
 
 # ---------------------------------------------------------------- settings
 
+CONFIG_SCHEMA = 1
+UPDATE_MODES = ("off", "notify", "download", "auto")
+UPDATE_CHANNELS = ("stable", "beta")
+
+
+class SchemaTooNew(Exception):
+    """A data file was written by a newer Cogitator than this one. Never rewritten, never repaired."""
+
+    def __init__(self, what: str, found: int, supported: int):
+        self.what, self.found, self.supported = what, found, supported
+        super().__init__(f"Your {what} were written by a newer Cogitator (data version {found}; this version understands up to "
+                         f"{supported}). Update Cogitator, or restore the file from a backup. Nothing was changed.")
+
+
 @dataclass
 class Settings:
+    schema: int = CONFIG_SCHEMA
+    update_mode: str = "download"  # off | notify | download | auto (auto = apply on the next quit/start, opt-in)
+    update_channel: str = "stable"  # stable | beta
+    update_check_hours: int = 24
     game_dir: str = ""
     check_updates_on_start: bool = True
     update_ttl_minutes: int = 60
@@ -61,12 +79,22 @@ class Settings:
         except (tomllib.TOMLDecodeError, OSError) as e:
             logging.getLogger(__name__).warning("config unreadable (%s); using defaults", e)
             return s
+        found = data.get("schema", 1)
+        if isinstance(found, int) and found > CONFIG_SCHEMA:
+            raise SchemaTooNew("settings", found, CONFIG_SCHEMA)
         for k, v in data.items():
             if hasattr(s, k) and isinstance(v, type(getattr(s, k))):
                 setattr(s, k, v)
+        if s.update_mode not in UPDATE_MODES:
+            s.update_mode = "download"
+        if s.update_channel not in UPDATE_CHANNELS:
+            s.update_channel = "stable"
+        if s.update_check_hours < 1:
+            s.update_check_hours = 24
         return s
 
     def save(self, path: Path | None = None) -> None:
+        self.schema = CONFIG_SCHEMA
         lines = []
         for k, v in asdict(self).items():
             if isinstance(v, bool):

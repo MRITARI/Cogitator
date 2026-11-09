@@ -41,7 +41,7 @@ update with one key.
 
 The same things work without the interface: `cogitator status`, `toggle`, `mod enable|disable <folder>`,
 `install-framework --zip <file>`, `check-updates`, `link`, `import`, `update`, `uninstall-framework`, `set-key` and
-`doctor` (exit code 0 ok, 1 warnings, 2 failures).
+`doctor` (exit code 0 ok, 1 warnings, 2 failures) and `self-update [--check|--apply|--rollback]` (signed GitHub releases only).
 
 `cogitator-setup` opens a step-by-step installer window (add `--dry-run` to look without changing anything, or
 `--uninstall` to remove the Mod Loader and Framework). Uninstalling never deletes your own mods.

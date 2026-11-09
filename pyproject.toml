@@ -21,6 +21,7 @@ dependencies = [
   "httpx>=0.27",
   "platformdirs>=4",
   "vdf>=3.4",
+  "cryptography>=42",
   "tomli>=2; python_version < '3.11'",
   # Windows Credential Locker for the Nexus key by default; elsewhere it stays optional (0600-file fallback).
   "keyring>=24; sys_platform == 'win32'",

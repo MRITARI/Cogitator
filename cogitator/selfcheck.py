@@ -22,8 +22,11 @@ def run() -> int:
 
     def core():
         for m in ("config", "gamefinder", "loadorder", "mods", "loader", "frameworks", "fwupdate", "patcher", "nexus",
-                  "updates", "modinstall", "doctor", "registry", "archives", "linking", "procs"):
+                  "updates", "modinstall", "doctor", "registry", "archives", "linking", "procs", "selfupdate", "updater"):
             importlib.import_module(f"cogitator.{m}")
+        from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PublicKey  # signature checks need it
+
+        Ed25519PublicKey.from_public_bytes(bytes(32))
 
     def tui():
         app = importlib.import_module("cogitator.tui.app")

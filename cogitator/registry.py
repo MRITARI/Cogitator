@@ -7,15 +7,15 @@ import logging
 import time
 from pathlib import Path
 
-from .config import config_dir
+from .config import SchemaTooNew, Settings, config_dir
 from .fsutil import atomic_write_text
 
 log = logging.getLogger(__name__)
-SCHEMA = 3  # v1: frameworks/mods/patch.  v2: "updates" (check cache) + mod links.  v3: "manifests" (files each framework install placed).
+SCHEMA = 4  # v1: frameworks/mods/patch.  v2: "updates" + mod links.  v3: "manifests".  v4: "selfupdate" (Cogitator's own update state).
 
 
 def empty() -> dict:
-    return {"schema": SCHEMA, "frameworks": {}, "mods": {}, "updates": {}, "manifests": {}}
+    return {"schema": SCHEMA, "frameworks": {}, "mods": {}, "updates": {}, "manifests": {}, "selfupdate": {}}
 
 
 def migrate(data: object) -> dict:
@@ -24,7 +24,7 @@ def migrate(data: object) -> dict:
         return empty()
     out = empty()
     out.update({k: v for k, v in data.items() if k not in ("schema",)})
-    for key in ("frameworks", "mods", "updates", "manifests"):
+    for key in ("frameworks", "mods", "updates", "manifests", "selfupdate"):
         if not isinstance(out.get(key), dict):
             out[key] = {}
     # drop mod records that are not dicts (hand-edited / corrupt) rather than crash later
@@ -53,6 +53,9 @@ class Registry:
             except OSError:
                 pass
             return r
+        found = raw.get("schema") if isinstance(raw, dict) else None
+        if isinstance(found, int) and found > SCHEMA:
+            raise SchemaTooNew("saved Cogitator state", found, SCHEMA)
         r.data = migrate(raw)
         return r
 
@@ -106,3 +109,9 @@ class Registry:
     def forget_mod(self, folder: str) -> None:
         if self.data["mods"].pop(folder, None) is not None:
             self.save()
+
+
+def check_data_versions() -> None:
+    """Raise SchemaTooNew if settings or the registry were written by a newer Cogitator. Used by every entry point."""
+    Settings.load()
+    Registry.load()
