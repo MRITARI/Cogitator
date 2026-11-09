@@ -8,16 +8,20 @@ start. Mods are not supported by Fatshark and are used at your own risk.
 
 ## Install
 
-Needs Windows 11 and Python 3.10 or newer.
+Windows 11 (x64) only.
+
+1. Download `Cogitator-<version>-win-x64-installer.exe` from the [Releases](https://github.com/MRITARI/Cogitator/releases) page.
+2. Run it. It installs per user and needs no administrator rights.
+
+The installer is not code-signed, so Windows SmartScreen may warn about it. Click **More info**, then **Run anyway**.
+
+To run from source instead (Python 3.10 or newer):
 
 ```powershell
 git clone https://github.com/MRITARI/Cogitator.git
 cd Cogitator
 pipx install .
 ```
-
-`pip install .` works too. For a standalone folder that needs no Python, run `packaging\build_exe.ps1` from a virtual
-environment that has the project and PyInstaller installed.
 
 ## Use
 
@@ -45,3 +49,9 @@ The same things work without the interface: `cogitator status`, `toggle`, `mod e
 
 `cogitator-setup` opens a step-by-step installer window (add `--dry-run` to look without changing anything, or
 `--uninstall` to remove the Mod Loader and Framework). Uninstalling never deletes your own mods.
+
+## Updates
+
+Installed copies check GitHub Releases for a newer version. An update is downloaded, its SHA-256 and Ed25519 signature
+are verified, and only then is the app folder replaced; the previous version is kept so `cogitator self-update --rollback`
+can restore it. `cogitator self-update --check` looks without changing anything.
