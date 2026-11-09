@@ -10,6 +10,10 @@
 $ErrorActionPreference = "Stop"
 # Use the active virtual environment's interpreter, not whichever `python` is first on PATH.
 $py = if ($env:VIRTUAL_ENV) { Join-Path $env:VIRTUAL_ENV "Scripts\python.exe" } else { "python" }
+$base = (& $py -c "import sys; print(sys.base_prefix)").Trim()
+if ($base -match "conda") {
+    throw "This Python is based on conda ($base). Build from a venv created with a python.org or Microsoft Store Python."
+}
 function Check($exe) {
     & $exe --self-check
     if ($LASTEXITCODE -ne 0) { throw "self-check failed: $exe" }
