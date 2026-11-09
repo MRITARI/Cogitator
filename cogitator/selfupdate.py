@@ -261,6 +261,45 @@ def detect_layout(*, frozen: bool | None = None, executable: str | None = None, 
     return Layout("pip")
 
 
+def repair_install(root: Path, *, full: bool = False) -> list[str]:
+    """Undo what an update swap that was cut off (power loss, killed helper) left behind. Without `full` it only acts when the
+    app folder is missing altogether, which is the one state where Cogitator cannot start. Returns what it did."""
+    done: list[str] = []
+    app, prev = root / "app", root / "app.previous"
+    swap, failed, old = root / "app.swap", root / "app.failed", root / "app.previous.old"
+
+    def mv(a: Path, b: Path) -> None:
+        a.rename(b)
+        done.append(f"{a.name} -> {b.name}")
+
+    def usable(d: Path) -> bool:
+        return (d / REQUIRED_EXE).is_file()
+
+    try:
+        if not app.exists():
+            if swap.is_dir() and usable(swap):
+                mv(swap, app)
+            elif prev.is_dir() and usable(prev):
+                mv(prev, app)
+                if old.is_dir():
+                    mv(old, prev)
+        elif full and usable(app):  # nothing is deleted unless the running folder looks complete
+            if swap.is_dir() and not prev.exists():
+                mv(swap, prev)
+            if old.is_dir():
+                if prev.exists():
+                    shutil.rmtree(old, ignore_errors=True)
+                else:
+                    mv(old, prev)
+            for leftover in (swap, failed):
+                shutil.rmtree(leftover, ignore_errors=True)
+    except OSError as e:
+        log.warning("could not repair the app folder: %s", e)
+    if done:
+        log.warning("repaired an interrupted update: %s", ", ".join(done))
+    return done
+
+
 # ---------------------------------------------------------------- the updater
 
 def make_client(transport: httpx.BaseTransport | None = None) -> httpx.Client:
@@ -340,6 +379,9 @@ class SelfUpdater:
     def check(self, *, force: bool = False) -> CheckResult:
         if not self.public_key:
             return CheckResult("disabled", detail="This build has no release key configured, so Cogitator does not look for updates.")
+        if force and self.st.get("failed"):
+            self.st.pop("failed", None)  # a manual re-check may try a version again (e.g. after antivirus blocked it)
+            self._save()
         if not force and self.settings.update_mode == "off":
             return CheckResult("off")
         now = self.now()
@@ -435,18 +477,24 @@ class SelfUpdater:
         verify_signature(zip_bytes, sig, self.public_key)
         dest = self.layout.staging_dir / f"v{info.version}"
         shutil.rmtree(dest, ignore_errors=True)
-        dest.parent.mkdir(parents=True, exist_ok=True)
-        tmp = Path(tempfile.mkdtemp(prefix="dl-", dir=dest.parent))
         try:
-            zp = tmp / "update.zip"
-            zp.write_bytes(zip_bytes)
+            dest.parent.mkdir(parents=True, exist_ok=True)
+            if shutil.disk_usage(dest.parent).free < max(len(zip_bytes), 1) * 4:  # zip + unpacked copy + the old build kept as backup
+                raise UpdateError("There is not enough free disk space for the update. Free some space and try again.")
+            tmp = Path(tempfile.mkdtemp(prefix="dl-", dir=dest.parent))
             try:
-                safe_extract(zp, dest, MAX_UNPACKED, MAX_FILES)
-            except LoaderError as e:
-                shutil.rmtree(dest, ignore_errors=True)
-                raise UpdateError(f"The update archive was rejected as unsafe: {e}") from e
-        finally:
-            shutil.rmtree(tmp, ignore_errors=True)
+                zp = tmp / "update.zip"
+                zp.write_bytes(zip_bytes)
+                try:
+                    safe_extract(zp, dest, MAX_UNPACKED, MAX_FILES)
+                except LoaderError as e:
+                    shutil.rmtree(dest, ignore_errors=True)
+                    raise UpdateError(f"The update archive was rejected as unsafe: {e}") from e
+            finally:
+                shutil.rmtree(tmp, ignore_errors=True)
+        except OSError as e:
+            shutil.rmtree(dest, ignore_errors=True)
+            raise UpdateError(f"The update could not be saved to disk ({e.strerror or e}). Check the free space and try again.") from e
         if not (dest / REQUIRED_EXE).is_file():
             shutil.rmtree(dest, ignore_errors=True)
             raise UpdateError("The update does not contain the program, so it was not installed.")
@@ -492,7 +540,8 @@ class SelfUpdater:
             return list(self.layout.helper)
         src = self.layout.app_dir / "cogitator-updater.exe"
         if not src.is_file():
-            raise UpdateError("The updater program is missing from this installation.")
+            raise UpdateError("The updater program (cogitator-updater.exe) is missing from this installation. Antivirus software "
+                              "may have removed it. Run the Cogitator installer again to repair it.")
         tmp = Path(tempfile.mkdtemp(prefix="cogitator-update-"))
         dst = tmp / "cogitator-updater.exe"
         shutil.copy2(src, dst)  # run from outside the folder that is about to be replaced
@@ -555,6 +604,8 @@ class SelfUpdater:
 
     def absorb_result(self) -> dict | None:
         self._cleanup_helper_dir()
+        if self.layout.in_place and self.layout.root:
+            repair_install(self.layout.root, full=True)
         p = config_dir() / RESULT_FILE
         try:
             res = json.loads(p.read_text(encoding="utf-8"))

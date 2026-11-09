@@ -23,7 +23,7 @@ from .loader import GITHUB_API, make_client
 from .mods import INTERNAL_FOLDERS, load_order_path, mods_dir
 from .nexus import InvalidKey, NexusClient, NexusError, RateLimited
 from .patcher import (BAK_NAME, MTIME_SLACK_S, OFF, ON, UNKNOWN, bak_path, bundle_dir, db_path, file_has_tag, find_tool,
-                      patch_state, PatcherUnavailable)
+                      patch_state, PatcherUnavailable, interrupted_patch)
 from .procs import darktide_running
 from .registry import Registry, SCHEMA
 
@@ -97,6 +97,10 @@ def _patch(game: Path, reg: Registry) -> list[Check]:
         return [Check("patch_state", "Mods patch", WARN, "ON, but the Mod Loader is not (fully) installed", "Reinstall DML."),
                 _patch_consistency(game, reg, st)]
     out: list[Check] = []
+    if interrupted_patch(reg):
+        out.append(Check("patch_interrupted", "Mods patch", FAIL,
+                         "an earlier attempt to switch mods on was cut off, so the game database may be damaged",
+                         "Run: cogitator restore-database  (or in Steam: Properties > Installed Files > Verify integrity)"))
     if st == ON:
         out.append(Check("patch_state", "Mods patch", OK, "ON (bundle_database.data contains the patch_999 entry)"))
     elif st == OFF:

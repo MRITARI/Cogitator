@@ -16,6 +16,10 @@ def attach(app, gh, root, spawned):
     app._selfupdater = lambda: app.selfupdater or setattr(app, "selfupdater", factory()) or app.selfupdater
 
 
+def consent(app):
+    app.settings.update_mode, app.settings.update_consent = "download", True
+
+
 def hdr(app):
     return str(app.query_one("#hdr", Static).render())
 
@@ -24,6 +28,7 @@ async def test_update_is_announced_downloaded_and_installed_with_a(game, root):
     spawned = []
     app = make_app(game, check_updates=True)
     attach(app, FakeGitHub(), root, spawned)
+    consent(app)
     async with app.run_test(size=(140, 45)) as pilot:
         await settle(app, pilot)
         assert "Update available v1.1.0" in hdr(app) and "Press A to install" in hdr(app)
@@ -50,6 +55,7 @@ async def test_remind_later_and_skip_hide_the_banner(game, root):
     for choice in (1, 2):
         app = make_app(game, check_updates=True)
         attach(app, FakeGitHub(), root, [])
+        consent(app)
         async with app.run_test(size=(140, 45)) as pilot:
             await settle(app, pilot)
             await pilot.press("a")
@@ -74,3 +80,23 @@ async def test_a_failed_update_is_explained_at_the_next_start(game):
         app._report_update_result({"status": "ok", "version": "0.1.3"})
         await pilot.pause()
         assert "Updated to v0.1.3" in "\n".join(l.text for l in app.query_one("#log").lines)
+
+
+async def test_nothing_is_downloaded_until_the_user_agrees(game, root):
+    spawned = []
+    app = make_app(game, check_updates=True)
+    attach(app, FakeGitHub(), root, spawned)  # default mode: notify
+    async with app.run_test(size=(140, 45)) as pilot:
+        await settle(app, pilot)
+        assert "Press A to download and install it" in hdr(app)
+        assert app.selfupdater.ready() is None
+        await pilot.press("a")
+        await pilot.pause()
+        app.screen.dismiss(1)  # Cancel
+        await pilot.pause()
+        assert app.selfupdater.ready() is None
+        await pilot.press("a")
+        await pilot.pause()
+        app.screen.dismiss(0)  # Download
+        await settle(app, pilot)
+        assert app.selfupdater.ready() is not None

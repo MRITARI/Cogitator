@@ -41,6 +41,9 @@ UPDATE_MODES = ("off", "notify", "download", "auto")
 UPDATE_CHANNELS = ("stable", "beta")
 
 
+RECOVERED: list[Path] = []  # unreadable settings files that were set aside in this run (the interface tells the user)
+
+
 class SchemaTooNew(Exception):
     """A data file was written by a newer Cogitator than this one. Never rewritten, never repaired."""
 
@@ -53,7 +56,8 @@ class SchemaTooNew(Exception):
 @dataclass
 class Settings:
     schema: int = CONFIG_SCHEMA
-    update_mode: str = "download"  # off | notify | download | auto (auto = apply on the next quit/start, opt-in)
+    update_mode: str = "notify"  # off | notify | download | auto (auto = apply on the next quit/start). Nothing is downloaded unasked:
+    update_consent: bool = False  # download/auto only count when the file also says update_consent = true
     update_channel: str = "stable"  # stable | beta
     update_check_hours: int = 24
     game_dir: str = ""
@@ -76,7 +80,16 @@ class Settings:
             data = tomllib.loads(path.read_text(encoding="utf-8"))
         except FileNotFoundError:
             return s
-        except (tomllib.TOMLDecodeError, OSError) as e:
+        except tomllib.TOMLDecodeError as e:
+            bad = path.with_name(path.name + ".corrupt")
+            logging.getLogger(__name__).warning("config unreadable (%s); kept as %s, using defaults", e, bad)
+            try:
+                path.replace(bad)  # never overwrite the user's file with defaults without keeping a copy
+                RECOVERED.append(bad)
+            except OSError:
+                pass
+            return s
+        except OSError as e:
             logging.getLogger(__name__).warning("config unreadable (%s); using defaults", e)
             return s
         found = data.get("schema", 1)
@@ -86,7 +99,9 @@ class Settings:
             if hasattr(s, k) and isinstance(v, type(getattr(s, k))):
                 setattr(s, k, v)
         if s.update_mode not in UPDATE_MODES:
-            s.update_mode = "download"
+            s.update_mode = "notify"
+        if s.update_mode in ("download", "auto") and not s.update_consent:
+            s.update_mode = "notify"  # older versions wrote "download" by default; downloading needs an explicit yes
         if s.update_channel not in UPDATE_CHANNELS:
             s.update_channel = "stable"
         if s.update_check_hours < 1:
@@ -122,8 +137,8 @@ def get_api_key() -> str | None:
         v = keyring.get_password(APP, "nexus_api_key")
         if v:
             return v
-    except Exception:
-        pass
+    except Exception as e:
+        logging.getLogger(__name__).debug("credential store unavailable: %s", type(e).__name__)
     try:
         v = _key_file().read_text(encoding="utf-8").strip()
         return v or None
@@ -134,6 +149,7 @@ def get_api_key() -> str | None:
 def set_api_key(key: str) -> str:
     """Store key. Returns where it went: 'keyring' or 'file' (0600)."""
     key = key.strip()
+    _KEY_CACHE.clear()
     try:
         import keyring
 
@@ -150,12 +166,13 @@ def set_api_key(key: str) -> str:
 
 def clear_api_key() -> None:
     """Remove the stored key from the keyring and the fallback file (used by rollback and uninstall)."""
+    _KEY_CACHE.clear()
     try:
         import keyring
 
         keyring.delete_password(APP, "nexus_api_key")
-    except Exception:
-        pass
+    except Exception as e:  # nothing stored, or no credential store: both fine when clearing
+        logging.getLogger(__name__).debug("credential delete skipped: %s", type(e).__name__)
     try:
         _key_file().unlink()
     except OSError:
@@ -167,10 +184,22 @@ def clear_api_key() -> None:
 _APIKEY_PAT = re.compile(r"(?i)(apikey['\"]?\s*[:=]\s*['\"]?)[^\s'\",}]+")
 
 
+_KEY_CACHE: list = []  # [key]; looked up once per run, since every log line passes through redact()
+
+
+def _known_key() -> str | None:
+    env = os.environ.get("COGITATOR_NEXUS_KEY")
+    if env:
+        return env.strip()
+    if not _KEY_CACHE:
+        _KEY_CACHE.append(get_api_key())
+    return _KEY_CACHE[0]
+
+
 def redact(text: str, *extra_secrets: str) -> str:
     """Strip the stored Nexus key, any `apikey=...` values, and any explicitly supplied secrets from text."""
     text = _APIKEY_PAT.sub(r"\1***", text)
-    for s in (get_api_key(), *extra_secrets):
+    for s in (_known_key(), *extra_secrets):
         if s and len(s) >= 6:
             text = text.replace(s, "***")
     return text

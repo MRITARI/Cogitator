@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "cogitator"
-version = "0.1.5"
+version = "0.1.6"
 description = "Terminal mod manager for Warhammer 40,000: Darktide"
 readme = "README.md"
 requires-python = ">=3.10"
@@ -26,6 +26,10 @@ dependencies = [
   # Windows Credential Locker for the Nexus key by default; elsewhere it stays optional (0600-file fallback).
   "keyring>=24; sys_platform == 'win32'",
 ]
+
+[project.urls]
+Homepage = "https://github.com/MRITARI/Cogitator"
+Issues = "https://github.com/MRITARI/Cogitator/issues"
 
 [project.optional-dependencies]
 keyring = ["keyring>=24"]

@@ -158,10 +158,12 @@ def patch(game_dir: Path, registry: Registry | None = None, *, runner: Runner = 
     if not mine.exists():
         atomic_write_bytes(mine, pre)
     t0 = time.time()
+    _mark_in_progress(registry, key)  # if the process dies from here on, doctor / restore-database can undo it
     try:
         rc, out, err = runner([tool, "--patch", bundle_dir(game_dir)], game_dir)
     except (OSError, subprocess.SubprocessError) as e:
         _restore(game_dir, pre)
+        _mark_in_progress(registry, None)
         raise PatcherError(f"Could not run dtkit-patch: {e}") from e
     problem = None
     if rc != 0:
@@ -176,13 +178,61 @@ def patch(game_dir: Path, registry: Registry | None = None, *, runner: Runner = 
             problem = "dtkit-patch did not leave a .bak of the original database."
     if problem:
         restored = _restore(game_dir, pre)
+        _mark_in_progress(registry, None)
         log.error("patch failed: %s (restored=%s)", problem, restored)
         raise PatcherError(problem + (" The original database was restored." if restored else " The database was not modified."))
     if registry is not None:
-        registry.data["patch"] = {"last_patch_at": t0, "build_key": key}
+        registry.data["patch"] = {"last_patch_at": t0, "build_key": key}  # also clears the in-progress marker
         registry.save()
     log.info("patched bundle_database.data (build %s)", key)
     return PatchResult(True, ON, "Mods enabled (database patched).")
+
+
+def _mark_in_progress(registry: Registry | None, key: str | None) -> None:
+    if registry is None:
+        return
+    rec = registry.data.setdefault("patch", {})
+    if key:
+        rec["in_progress"] = {"build_key": key, "at": time.time()}
+    else:
+        rec.pop("in_progress", None)
+    registry.save()
+
+
+def interrupted_patch(registry: Registry | None) -> dict | None:
+    """The marker left by a patch run that never finished (the process was killed), else None."""
+    rec = ((registry.data.get("patch") or {}).get("in_progress")) if registry else None
+    return rec if isinstance(rec, dict) and rec.get("build_key") else None
+
+
+def restore_database(game_dir: Path, registry: Registry | None, *, is_running: Callable[[], bool] = darktide_running) -> str:
+    """Put back the original database saved before an interrupted patch. Returns a plain-language result."""
+    rec = interrupted_patch(registry)
+    if rec is None:
+        raise PatcherError("No interrupted patch is recorded, so there is nothing to restore.")
+    if is_running():
+        raise PatcherError("Darktide is running. Close the game first.")
+    steam_hint = "In Steam: Properties > Installed Files > Verify integrity of game files."
+    mine = cache_dir() / "db-backups" / f"{rec['build_key']}.data"
+    try:
+        data = mine.read_bytes()
+    except OSError as e:
+        raise PatcherError("Cogitator's saved copy of the database is missing. " + steam_hint) from e
+    if hashlib.sha256(data).hexdigest()[:16] != rec["build_key"] or file_has_tag(mine):
+        raise PatcherError("Cogitator's saved copy of the database is damaged. " + steam_hint)
+    try:
+        already_original = hashlib.sha256(db_path(game_dir).read_bytes()).hexdigest()[:16] == rec["build_key"]
+    except OSError:
+        already_original = False
+    if not already_original:
+        atomic_write_bytes(db_path(game_dir), data)
+    try:
+        bak_path(game_dir).unlink()
+    except OSError:
+        pass
+    _mark_in_progress(registry, None)
+    log.warning("restored bundle_database.data from Cogitator's backup after an interrupted patch")
+    return "The game database was put back to its original state. Mods are off; switch them on again when you like."
 
 
 def unpatch_refusal(game_dir: Path, registry: Registry | None) -> str | None:

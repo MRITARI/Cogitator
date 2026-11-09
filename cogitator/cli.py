@@ -11,7 +11,7 @@ from dataclasses import asdict
 from pathlib import Path
 
 from . import __version__
-from .config import SchemaTooNew, Settings, get_api_key, set_api_key, setup_logging
+from .config import InstanceLock, LockError, SchemaTooNew, Settings, get_api_key, set_api_key, setup_logging
 from .doctor import exit_code as doctor_exit_code, format_report, run_doctor, to_json as doctor_json
 from .frameworks import Plan, describe_plan, detect_framework, plan_github, plan_local
 from .fwupdate import install_framework_plan
@@ -85,10 +85,18 @@ def build_parser() -> argparse.ArgumentParser:
     uf.add_argument("--yes", "-y", action="store_true", help="skip the confirmation")
     ul = sub.add_parser("unlink", help="forget the Nexus link of a mod folder (does not touch the mod itself)")
     ul.add_argument("folder")
+    sub.add_parser("restore-database", help="undo a mod patch that was cut off half-way (restores the saved original game database)")
+    vd = sub.add_parser("verify-download", help="check a downloaded SHA256SUMS file (and optionally a download listed in it) against the release key")
+    vd.add_argument("sums", help="path to SHA256SUMS (the SHA256SUMS.sig file must sit next to it)")
+    vd.add_argument("file", nargs="?", help="a downloaded release file to check against the list")
     mod = sub.add_parser("mod", help="enable/disable a mod")
     mod.add_argument("action", choices=["enable", "disable"])
     mod.add_argument("folder")
     return p
+
+
+_MUTATING = {"restore-database", "toggle", "mod", "link", "unlink", "import", "update", "install-framework", "uninstall-framework"}
+_LOCKS: list = []  # held until the process exits
 
 
 def _resolve(args) -> Resolution:
@@ -97,6 +105,11 @@ def _resolve(args) -> Resolution:
     if res.game_dir and res.source in ("steam", "override") and str(res.game_dir) != s.game_dir:
         s.game_dir = str(res.game_dir)
         s.save()
+    if res.game_dir and getattr(args, "cmd", None) in _MUTATING:
+        try:  # the interface holds the same lock: two writers on registry.json / the load order would lose changes
+            _LOCKS.append(InstanceLock(res.game_dir).acquire())
+        except LockError as e:
+            return Resolution(None, "locked", message=f"{e} Close it first, or use it instead of the command line.")
     return res
 
 
@@ -144,6 +157,57 @@ def cmd_status(args) -> int:
             u = urows.get(m.folder)
             print(f"  {m.state:<9} {m.folder}{flags}" + (f"   [{u.status}]" if u else ""))
     return 0 if res.game_dir else 2
+
+
+def cmd_restore_database(args) -> int:
+    from .patcher import PatcherError, restore_database
+
+    res = _resolve(args)
+    if not res.game_dir:
+        print(res.message or "Game not found.", file=sys.stderr)
+        return 2
+    try:
+        print(restore_database(res.game_dir, Registry.load()))
+    except PatcherError as e:
+        print(f"Error: {e}", file=sys.stderr)
+        return 2
+    return 0
+
+
+def cmd_verify_download(args) -> int:
+    import hashlib
+
+    from .selfupdate import RELEASE_PUBLIC_KEY_HEX, UpdateError, verify_signature
+
+    sums = Path(args.sums)
+    try:
+        data = sums.read_bytes()
+        sig = sums.with_name(sums.name + ".sig").read_bytes()
+        verify_signature(data, sig, RELEASE_PUBLIC_KEY_HEX)
+    except OSError as e:
+        print(f"Could not read the file: {e}", file=sys.stderr)
+        return 2
+    except UpdateError as e:
+        print(f"NOT VALID: {e}", file=sys.stderr)
+        return 1
+    print("The checksum list is signed by the Cogitator release key.")
+    if args.file:
+        target = Path(args.file)
+        lines = data.decode("utf-8", "replace").splitlines()
+        listed = {p[1].lstrip("*"): p[0].lower() for p in (ln.split() for ln in lines) if len(p) == 2}
+        want = listed.get(target.name)
+        if want is None:
+            print(f"{target.name} is not in the list.", file=sys.stderr)
+            return 1
+        h = hashlib.sha256()
+        with open(target, "rb") as f:
+            for chunk in iter(lambda: f.read(1 << 20), b""):
+                h.update(chunk)
+        if h.hexdigest() != want:
+            print(f"NOT VALID: {target.name} does not match the signed list. Do not run it.", file=sys.stderr)
+            return 1
+        print(f"{target.name} matches the signed list.")
+    return 0
 
 
 def cmd_mod(args) -> int:
@@ -456,6 +520,11 @@ def cmd_update(args) -> int:
     return cmd_import(ns)
 
 
+def _where(where: str) -> str:
+    return ("in the Windows credential store" if where == "keyring"
+            else "in a plain-text file in your settings folder (the Windows credential store was not available)")
+
+
 def cmd_set_key(args) -> int:
     import getpass
 
@@ -470,7 +539,7 @@ def cmd_set_key(args) -> int:
         print(f"Key not saved: {e}", file=sys.stderr)
         return 2
     where = set_api_key(key)
-    print(f"Key valid ({'premium' if who.get('is_premium') else 'free'}); stored in {where}.")
+    print(f"Key valid ({'premium' if who.get('is_premium') else 'free'}); stored {_where(where)}.")
     return 0
 
 
@@ -510,7 +579,7 @@ def cmd_install_framework(args) -> int:
             comps = [args.only] if args.only else ["dml", "dmf"]
             have = {p.component for p in plans}
             comps = [c for c in comps if c not in have and (args.update or detect_framework(game, c).status != "installed")]
-            with make_client() as client:
+            with make_client(github_only=True) as client:
                 for c in comps:
                     plans.append(plan_github(c, client, Path(wd_ctx.name)))
         if not plans:
@@ -588,22 +657,42 @@ def cmd_self_update(args) -> int:
         return 1
 
 
-def main(argv: list[str] | None = None) -> int:
-    setup_logging()
-    args = build_parser().parse_args(argv)
-    if args.self_check:
-        if args.expect_version and args.expect_version != __version__:
-            print(f"FAIL  version: this build is {__version__}, expected {args.expect_version}", file=sys.stderr)
-            return 1
-        from .selfcheck import run as self_check
-
-        return self_check()
+def _pause_if_console(argv) -> None:
+    """Started from a shortcut the console closes with the process: keep it open so the message can be read."""
     try:
+        if argv is None and len(sys.argv) == 1 and sys.stdin and sys.stdin.isatty() and sys.stdout.isatty():
+            input("Press Enter to close this window. ")
+    except (EOFError, OSError):
+        pass
+
+
+def main(argv: list[str] | None = None) -> int:
+    try:
+        setup_logging()
+        args = build_parser().parse_args(argv)
+        if args.self_check:
+            if args.expect_version and args.expect_version != __version__:
+                print(f"FAIL  version: this build is {__version__}, expected {args.expect_version}", file=sys.stderr)
+                return 1
+            from .selfcheck import run as self_check
+
+            return self_check()
         check_data_versions()  # an older app must not touch files written by a newer one
         return _dispatch(args)
     except SchemaTooNew as e:
         print(str(e), file=sys.stderr)
+        _pause_if_console(argv)
         return 2
+    except Exception as e:  # last resort: say what happened and where the log is, instead of a vanishing window
+        import logging
+
+        from .config import log_path, redact
+
+        logging.getLogger(__name__).exception("unhandled error")
+        print(f"Cogitator stopped because of an unexpected error: {redact(f'{type(e).__name__}: {e}')}\n"
+              f"Details are in {log_path()}. Please include that file when you report the problem.", file=sys.stderr)
+        _pause_if_console(argv)
+        return 3
 
 
 def _dispatch(args) -> int:
@@ -631,6 +720,10 @@ def _dispatch(args) -> int:
         return cmd_install_framework(args)
     if args.cmd == "mod":
         return cmd_mod(args)
+    if args.cmd == "restore-database":
+        return cmd_restore_database(args)
+    if args.cmd == "verify-download":
+        return cmd_verify_download(args)
     if args.cmd == "self-update":
         return cmd_self_update(args)
     if args.cmd is None:

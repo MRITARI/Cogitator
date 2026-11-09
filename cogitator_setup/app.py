@@ -2,6 +2,7 @@
 this file draws the pages and moves messages between the UI thread and the worker threads."""
 from __future__ import annotations
 
+import logging
 import sys
 import tkinter as tk
 import tkinter.font as tkfont
@@ -289,6 +290,9 @@ class SetupApp:
 
     def _on_escape(self) -> None:
         if self.in_wizard and self.model.page not in (Page.PROGRESS, Page.FINISH):
+            if self.model.page is not Page.WELCOME and not self.dlg.ask_yes_no(
+                    "Close setup?", "Nothing has been installed yet. Close this window and lose what you entered?"):
+                return  # an accidental Escape must not throw away the choices
             self.on_cancel()
 
     # ---------------------------------------------------------------- 1 Welcome
@@ -733,6 +737,29 @@ def _default_show_error(title: str, body: str) -> None:
         print(f"{title}: {body}", file=sys.stderr)
 
 
+def _repair_app_folder() -> None:
+    """This program lives in <root>/setup. If an interrupted update left <root>/app missing, put the previous version back."""
+    try:
+        if getattr(sys, "frozen", False):
+            root = Path(sys.executable).resolve().parent.parent
+            if (root / "install.json").is_file():
+                from cogitator.selfupdate import repair_install
+
+                repair_install(root)
+    except Exception:
+        logging.getLogger(__name__).exception("app folder repair failed")
+
+
+def _make_dpi_aware() -> None:
+    """Without this Windows stretches the window as a bitmap on scaled displays and the text is blurry."""
+    try:
+        import ctypes
+
+        ctypes.windll.shcore.SetProcessDpiAwareness(1)
+    except Exception:
+        pass
+
+
 def main(argv: list[str] | None = None, *, build=_DETECT, show_error: Callable[[str, str], None] | None = None,
          app_factory: Callable[..., object] | None = None, uninstall_factory: Callable[..., object] | None = None,
          installed: bool | None = None, silent_fn: Callable[..., int] | None = None) -> int:
@@ -757,12 +784,14 @@ def main(argv: list[str] | None = None, *, build=_DETECT, show_error: Callable[[
     except SchemaTooNew as e:
         (show_error or _default_show_error)(TITLE, str(e))
         return 2
+    _repair_app_folder()
     from .uninstall_app import UninstallApp, run_silent
     from .uninstall_vm import detect
 
     usvc = uninstall_services(flags.game_dir)
     if installed is None:
         installed = detect(usvc).any_installed
+    _make_dpi_aware()
     mode = choose_mode(flags, installed)
     make_setup = app_factory or (lambda **kw: SetupApp(services=setup_services(flags.game_dir), dry_run=flags.dry_run, **kw))
     make_uninstall = uninstall_factory or (lambda **kw: UninstallApp(services=usvc, dry_run=flags.dry_run, **kw))

@@ -128,6 +128,9 @@ class ChoiceScreen(_Base):
 
 class NoticeScreen(_Base):
     BINDINGS = [Binding("enter,escape", "ok", "OK")]
+    DEFAULT_CSS = """
+    NoticeScreen VerticalScroll { height: auto; max-height: 55vh; }
+    """
 
     def __init__(self, title: str, body: str):
         super().__init__()
@@ -136,7 +139,8 @@ class NoticeScreen(_Base):
     def compose(self) -> ComposeResult:
         with Vertical():
             yield Static(self._title, classes="title", markup=False)
-            yield Static(self._body, classes="body", markup=False)
+            with VerticalScroll():  # a long text scrolls; the OK button always stays on screen
+                yield Static(self._body, classes="body", markup=False)
             with Horizontal():
                 yield Button("OK", id="ok", variant="primary")
 

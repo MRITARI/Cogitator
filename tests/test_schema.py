@@ -65,12 +65,12 @@ def test_settings_from_a_newer_app_are_refused_and_left_untouched():
 
 def test_update_settings_have_safe_defaults_and_bad_values_fall_back():
     s = Settings()
-    assert (s.update_mode, s.update_channel, s.update_check_hours) == ("download", "stable", 24)
+    assert (s.update_mode, s.update_channel, s.update_check_hours) == ("notify", "stable", 24)
     Settings.path().parent.mkdir(parents=True, exist_ok=True)
     Settings.path().write_text('update_mode = "yolo"\nupdate_channel = "nightly"\nupdate_check_hours = 0\n', encoding="utf-8")
     t = Settings.load()
-    assert (t.update_mode, t.update_channel, t.update_check_hours) == ("download", "stable", 24)
-    Settings.path().write_text('update_mode = "auto"\nupdate_channel = "beta"\nupdate_check_hours = 6\n', encoding="utf-8")
+    assert (t.update_mode, t.update_channel, t.update_check_hours) == ("notify", "stable", 24)
+    Settings.path().write_text('update_mode = "auto"\nupdate_consent = true\nupdate_channel = "beta"\nupdate_check_hours = 6\n', encoding="utf-8")
     t = Settings.load()
     assert (t.update_mode, t.update_channel, t.update_check_hours) == ("auto", "beta", 6)
 

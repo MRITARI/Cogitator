@@ -129,7 +129,7 @@ async def test_empty_state_message(tmp_path):
     async with app.run_test(size=SIZE) as pilot:
         await settle(app, pilot)
         assert app.query_one("#mods", DataTable).row_count == 0
-        assert "machine spirit" in str(app.query_one("#hint", Static).render())
+        assert "No mods installed yet" in str(app.query_one("#hint", Static).render())
 
 
 def test_pure_view_helpers():
@@ -842,3 +842,13 @@ async def test_empty_import_box_falls_back_to_the_newest_download(game, tmp_path
         await pilot.press("enter")  # nothing typed or dropped
         await settle(app, pilot)
         assert "No .zip from the last hour" in log_text(app)
+
+
+async def test_question_mark_opens_help_with_log_path_and_quit_is_listed_first(game):
+    app = make_app(game)
+    async with app.run_test(size=SIZE) as pilot:
+        await settle(app, pilot)
+        assert [b.key for b in app.BINDINGS][:2] == ["question_mark,f1", "q"]
+        await pilot.press("question_mark")
+        await pilot.pause()
+        assert len(app.screen_stack) == 2 and str(log_path()) in "".join(str(w.render()) for w in app.screen.query(Static))

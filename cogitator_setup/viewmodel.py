@@ -371,7 +371,7 @@ def default_resolve_options(kind: str, premium: bool | None, key: str | None = N
     github = nexus = None
     problem = ""
     try:
-        with make_client(timeout=15.0) as client:
+        with make_client(timeout=15.0, github_only=True) as client:
             github = resolve_github(kind, client)
     except LoaderError as e:
         problem = str(e)

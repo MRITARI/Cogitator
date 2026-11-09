@@ -77,7 +77,10 @@ def _log(result: str | None, text: str) -> None:
     if not result:
         return
     try:
-        with open(Path(result).with_name("update.log"), "a", encoding="utf-8") as f:
+        path = Path(result).with_name("update.log")
+        if path.is_file() and path.stat().st_size > 200_000:
+            path.replace(path.with_name("update.log.1"))  # keep the log from growing for ever
+        with open(path, "a", encoding="utf-8") as f:
             f.write(time.strftime("%Y-%m-%d %H:%M:%S ") + text + "\n")
     except OSError:
         pass

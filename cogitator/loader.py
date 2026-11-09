@@ -59,8 +59,20 @@ class Release:
     assets: list[Asset] = field(default_factory=list)
 
 
-def make_client(timeout: float = 30.0) -> httpx.Client:
+ALLOWED_HOSTS = frozenset({"github.com", "api.github.com", "codeload.github.com", "objects.githubusercontent.com",
+                           "github-releases.githubusercontent.com", "release-assets.githubusercontent.com"})
+
+
+def _only_github(request: httpx.Request) -> None:
+    """Runs for every request including each redirect hop: a download may not be sent anywhere but GitHub."""
+    if request.url.scheme != "https" or request.url.port not in (None, 443) or (request.url.host or "").lower() not in ALLOWED_HOSTS:
+        raise LoaderError(f"Refused to contact {request.url.host}: downloads only come from GitHub.")
+
+
+def make_client(timeout: float = 30.0, github_only: bool = False) -> httpx.Client:
+    """github_only: refuse any request (redirects included) that leaves GitHub; used for the Mod Loader / Framework downloads."""
     return httpx.Client(
+        event_hooks={"request": [_only_github]} if github_only else {},
         timeout=timeout,
         follow_redirects=True,
         verify=True,

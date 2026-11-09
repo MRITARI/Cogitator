@@ -160,4 +160,5 @@ def resolve_game_dir(override: str | None, saved: str | None, roots: list[Path] 
         return Resolution(cands[0], "steam", cands)
     if len(cands) > 1:
         return Resolution(None, "ambiguous", cands, "Multiple Darktide installs found; choose one.")
-    return Resolution(None, "none", message="Darktide not found via Steam. Use --game-dir or set game_dir in config.")
+    return Resolution(None, "none", message="Cogitator could not find Darktide in your Steam libraries (only the Steam version is supported). "
+                                                    "Type or paste the folder that contains the 'bundle' and 'binaries' folders.")

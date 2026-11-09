@@ -52,12 +52,29 @@ NOTICE_BODY = (
     "malware. Only install mods you trust.\n\n"
     "Fatshark disallows mods that affect other players, progression, or servers. Cogitator does not include or "
     "recommend any such mods.\n\n"
-    "Cogitator only writes inside the game folder and its own config/cache folders, and sends no telemetry.")
+    "Cogitator only writes inside the game folder and its own config/cache folders. It contacts GitHub to look for new "
+    "versions of itself and Nexus Mods (with your key, if you set one) to look for mod updates; nothing else leaves your "
+    "computer, there is no telemetry, and nothing is downloaded without you asking.")
 
-EMPTY_STATE = ("The machine spirit stirs, but no mods are consecrated here. "
-               "Press I to import a mod archive, or install the Mod Loader first.")
+EMPTY_STATE = ("No mods installed yet. Download mods from nexusmods.com/warhammer40kdarktide, then press I to import the "
+               "zip (or drop it onto this window). Press ? for help.")
 
-_MAIN_ACTIONS = {"link_all", "toggle_mods", "toggle_mod", "move_up", "move_down", "update_selected", "update_all", "recheck", "link", "import_archive",
+HELP_BODY = (
+    "T  mods on/off (the game patch)\n"
+    "Space  enable/disable the selected mod\n"
+    "Shift+Up/Down or [ ]  move in the load order\n"
+    "O  sort    U  update selected    Ctrl+U  update all\n"
+    "F  update Mod Loader/Framework    R  re-check\n"
+    "L  link to Nexus    M  link all    I  import a zip\n"
+    "K  Nexus key    A  update Cogitator\n"
+    "D  doctor (diagnose problems)    Q  quit\n"
+    "\n"
+    "Log file: {log}\n"
+    "Settings folder: {cfg}\n"
+    "Problems: run the doctor (D), then report at github.com/MRITARI/Cogitator/issues and attach the log file.\n"
+    "Not affiliated with Fatshark, Games Workshop or Nexus Mods.")
+
+_MAIN_ACTIONS = {"help", "link_all", "toggle_mods", "toggle_mod", "move_up", "move_down", "update_selected", "update_all", "recheck", "link", "import_archive",
                  "set_key", "cycle_sort", "quit_app", "framework_update", "doctor", "apply_update"}
 SORT_COLUMNS = ("mod", "status", "installed", "latest", "en")
 
@@ -72,8 +89,19 @@ def enabled_cell(mod: Mod, g: Glyphs) -> Text:
     return Text(g.unlisted, "dim")
 
 
+def _where_text(where: str) -> str:
+    return ("in the Windows credential store" if where == "keyring"
+            else "in a plain-text file in your settings folder (the credential store was not available)")
+
+
+def _config_recovered() -> list:
+    from ..config import RECOVERED
+
+    return list(RECOVERED)
+
+
 def mod_cell(mod: Mod) -> Text:
-    t = Text(mod.folder, "dim" if mod.state == UNLISTED else "")
+    t = Text(mod.folder, "dim" if mod.state == UNLISTED else "", no_wrap=True, overflow="ellipsis")
     if not mod.present:
         t.append("  (folder missing)", "red")
     elif not mod.has_mod_file:
@@ -186,6 +214,9 @@ class CogitatorApp(App):
     #log { height: 8; border-top: solid $primary; padding: 0 1; }
     """
     BINDINGS = [
+        Binding("question_mark,f1", "help", "Help", key_display="?"),  # Help and Quit come first: a narrow footer cuts the end
+        Binding("q", "quit_app", "Quit", key_display="Q"),
+        Binding("Q", "quit_app", show=False),
         Binding("t", "toggle_mods", "Mods", key_display="T"),
         Binding("T", "toggle_mods", show=False),
         Binding("space", "toggle_mod", "On/off", key_display="Space"),
@@ -214,8 +245,6 @@ class CogitatorApp(App):
         Binding("a", "apply_update", "Update Cogitator", key_display="A"),
         Binding("A", "apply_update", show=False),
         Binding("o", "cycle_sort", "Sort", key_display="O", show=False),  # works; hidden to keep Q Quit on screen
-        Binding("q", "quit_app", "Quit", key_display="Q"),
-        Binding("Q", "quit_app", show=False),
     ]
 
     def __init__(self, game_dir: Path | None = None, *, game_override: str | None = None, check_updates: bool = True,
@@ -267,7 +296,9 @@ class CogitatorApp(App):
         t.add_column("Latest", key="latest")
         t.add_column("Status", key="status")
         self.set_interval(0.15, self._tick)
-        self.log_line(f"Cogitator {__version__}   log file: {log_path()}", "dim")
+        self.log_line(f"Cogitator {__version__}   log file: {log_path()}   Press ? for help.", "dim")
+        for bad in _config_recovered():
+            self.log_line(f"Your settings file could not be read, so defaults are used. The old file was kept as {bad}.", "bold yellow")
         if self._given_game:
             self._game_ready(self._given_game, persist=False)
         else:
@@ -392,7 +423,7 @@ class CogitatorApp(App):
         if self.update_ready():
             return f"Update available v{a.version} - downloaded and verified. Press A to install."
         if u.layout.in_place:
-            return f"Update available v{a.version}."
+            return f"Update available v{a.version}. Press A to download and install it."
         return f"Update available v{a.version}. {u.layout.guidance()}"
 
     def start_selfupdate_check(self) -> None:
@@ -431,15 +462,40 @@ class CogitatorApp(App):
             self.log_line(f"Details: {config_dir() / 'update.log'}. If it keeps failing, run the latest installer from the releases page; "
                           "your mods and settings are kept.", "yellow")
 
+    def _update_offer(self):
+        u = self.selfupdater
+        return u.announcement() if u and u.layout.in_place and u.settings.update_mode != "off" else None
+
     def action_apply_update(self) -> None:
         u, a = self.selfupdater, None
         rd = self.update_ready()
         if not rd:
+            offer = self._update_offer()
+            if offer:  # nothing is downloaded without asking
+                mb = f" (about {offer.zip_size // (1024 * 1024)} MB)" if offer.zip_size else ""
+                self.push_screen(ChoiceScreen(f"Cogitator v{offer.version} is available{mb}.\n\n{offer.notes or '(no release notes)'}",
+                                              ["Download it from GitHub now", "Cancel"]),
+                                 lambda i, o=offer: self._bg(self._job_download_update, o, name="download update", group="selfupdate")
+                                 if i == 0 else None)
             return
         a = u.latest() or u.announcement()
         notes = (a.notes if a else rd.notes) or "(no release notes)"
         self.push_screen(ChoiceScreen(f"Cogitator v{rd.version}\n\n{notes}", ["Install now and restart", "Remind me later", "Skip this version", "Cancel"]),
                          self._update_choice)
+
+    def _job_download_update(self, info) -> None:
+        from ..selfupdate import UpdateError
+
+        self._ui(self.log_line, f"Downloading Cogitator v{info.version} ...")
+        try:
+            with self._lock:
+                self.selfupdater.stage(info)
+        except UpdateError as e:
+            self._ui(self.log_line, str(e), "bold red")
+            return
+        self._ui(self.refresh_header)
+        self._ui(self.refresh_bindings)
+        self._ui(self.action_apply_update)
 
     def _update_choice(self, i) -> None:
         u, rd = self.selfupdater, self.update_ready()
@@ -492,11 +548,33 @@ class CogitatorApp(App):
             self._apply_sort()
         self._update_hint()
         self.refresh_header()
+        self.call_after_refresh(self._fit_columns)
 
     def _add_row(self, t: DataTable, m: Mod) -> None:
         r = self.urows.get(m.folder)
         t.add_row(enabled_cell(m, self.glyphs), mod_cell(m), self._installed_cell(m.folder, r),
                   Text((r.latest if r else None) or "-"), status_text(r, self.glyphs, m), key=m.folder)
+
+    def _fit_columns(self) -> None:
+        """One very long mod name must not push Installed / Latest / Status off a narrow console."""
+        try:
+            t = self.query_one("#mods", DataTable)
+            col = t.columns.get("mod")
+            if col is None or not t.size.width:
+                return
+            others = sum(c.get_render_width(t) for k, c in t.columns.items() if k != "mod")
+            want = max(len(m.folder) + 24 for m in self.mods) if self.mods else 16  # name plus its "(not in load order)" tag
+            avail = max(16, t.size.width - others - 2 * t.cell_padding - 2)
+            width = min(want, avail)
+            if col.auto_width or col.width != width:
+                col.auto_width, col.width = False, width
+                t._require_update_dimensions = True
+                t.refresh(layout=True)
+        except Exception:
+            logging.getLogger("cogitator.tui").debug("column fit failed", exc_info=True)
+
+    def on_resize(self, event) -> None:
+        self.call_after_refresh(self._fit_columns)
 
     def _installed_cell(self, folder: str, r: ModRow | None) -> Text:
         m = None if r is not None and r.installed else folder_mtime(mods_dir(self.game_dir) / folder)
@@ -570,8 +648,8 @@ class CogitatorApp(App):
     # -------------------------------------------------------------- guards / workers
     def check_action(self, action: str, parameters) -> bool | None:
         if action == "apply_update":
-            if len(self.screen_stack) > 1 or not self.update_ready():
-                return False  # the key only appears while a downloaded update is waiting
+            if len(self.screen_stack) > 1 or not (self.update_ready() or self._update_offer()):
+                return False  # the key only appears while an update is waiting or offered
             return True
         if action in _MAIN_ACTIONS and len(self.screen_stack) > 1:
             return False  # a dialog is open: main-screen keys are inert
@@ -727,7 +805,7 @@ class CogitatorApp(App):
             upd = self.registry.data["updates"]
             upd["premium"], upd["premium_checked"] = bool(who.get("is_premium")), time.time()
             self.registry.save()
-        self._ui(self.log_line, f"Key valid ({'premium' if who.get('is_premium') else 'free'}); stored in {where}.", "green")
+        self._ui(self.log_line, f"Key valid ({'premium' if who.get('is_premium') else 'free'}); stored {_where_text(where)}.", "green")
         self._ui(self.refresh_header)
         self._ui(lambda: self.start_check(force=True))
 
@@ -1152,7 +1230,7 @@ class CogitatorApp(App):
     def _job_github(self, missing: list[str]) -> None:
         import tempfile
 
-        with tempfile.TemporaryDirectory(prefix="cogitator-gh-") as wd, make_client() as client:
+        with tempfile.TemporaryDirectory(prefix="cogitator-gh-") as wd, make_client(github_only=True) as client:
             for kind in sorted(missing, key=lambda k: k != "dml"):
                 plan = plan_github(kind, client, Path(wd))
                 if not self.ask(ConfirmScreen(f"Install {kind.upper()} from GitHub?", describe_plan(plan))):
@@ -1169,6 +1247,9 @@ class CogitatorApp(App):
         self._exiting = True
         if self._instance_lock:
             self._instance_lock.release()
+
+    def action_help(self) -> None:
+        self.push_screen(NoticeScreen("Cogitator " + __version__, HELP_BODY.format(log=log_path(), cfg=config_dir())), lambda _: None)
 
     def action_quit_app(self) -> None:
         self._release()

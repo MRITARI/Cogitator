@@ -75,7 +75,7 @@ class SetupPlan:
 class SetupDeps:
     """Everything with side effects outside the files we own, injectable for tests."""
 
-    client_factory: Callable[[], object] = make_client
+    client_factory: Callable[[], object] = lambda: make_client(github_only=True)
     nexus_factory: Callable[[str], NexusClient] = NexusClient
     patch_runner: Callable = default_runner
     is_running: Callable[[], bool] = darktide_running

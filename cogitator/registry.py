@@ -60,7 +60,15 @@ class Registry:
         return r
 
     def save(self) -> None:
-        atomic_write_text(self.path, json.dumps(self.data, indent=2, sort_keys=True) + "\n")
+        for attempt in range(5):
+            try:
+                text = json.dumps(self.data, indent=2, sort_keys=True)
+                break
+            except RuntimeError:  # another thread changed a dict while it was being written out: try again
+                if attempt == 4:
+                    raise
+                time.sleep(0.01)
+        atomic_write_text(self.path, text + "\n")
 
     # ---- frameworks
     def framework(self, kind: str) -> dict | None:

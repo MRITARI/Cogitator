@@ -45,6 +45,11 @@ class Line:
     def name(self) -> str | None:
         return self.parsed[1]
 
+    def is_named(self, name: str) -> bool:
+        """Windows folder names ignore case, so `Alpha` and `alpha` are the same mod."""
+        mine = self.parsed[1]
+        return mine is not None and mine.casefold() == name.casefold()
+
     @property
     def enabled(self) -> bool | None:
         return self.parsed[2]
@@ -88,7 +93,10 @@ class LoadOrder:
     def save(self, path: Path | None = None, backup: bool = True) -> None:
         path = Path(path or self.path)  # type: ignore[arg-type]
         if backup and path.is_file() and str(path) not in _backed_up:
-            atomic_write_bytes(path.with_name(path.name + BACKUP_SUFFIX), path.read_bytes())
+            bak = path.with_name(path.name + BACKUP_SUFFIX)
+            if bak.is_file():  # keep the previous backup too: the newest one may already hold a mistake
+                atomic_write_bytes(bak.with_name(bak.name + ".1"), bak.read_bytes())
+            atomic_write_bytes(bak, path.read_bytes())
             _backed_up.add(str(path))
         atomic_write_bytes(path, self.render())
 
@@ -108,7 +116,7 @@ class LoadOrder:
     def state(self, name: str) -> bool | None:
         """True enabled, False disabled, None unlisted. Duplicates: first wins."""
         for l in self.lines:
-            if l.name == name:
+            if l.is_named(name):
                 return l.enabled
         return None
 
@@ -117,7 +125,7 @@ class LoadOrder:
         """Returns True if any line changed. Unlisted -> False (use add)."""
         changed = False
         for l in self.lines:
-            if l.name != name or l.enabled == enabled:
+            if not l.is_named(name) or l.enabled == enabled:
                 continue
             indent = l.text[: len(l.text) - len(l.text.lstrip())]
             body = l.text.lstrip()
@@ -127,7 +135,7 @@ class LoadOrder:
 
     def remove(self, name: str) -> int:
         """Delete every line for `name` (enabled or disabled). Returns how many lines were removed."""
-        keep = [l for l in self.lines if l.name != name]
+        keep = [l for l in self.lines if not l.is_named(name)]
         n = len(self.lines) - len(keep)
         self.lines = keep
         return n
