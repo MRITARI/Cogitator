@@ -1050,12 +1050,12 @@ async def test_bottom_buttons_run_their_actions_and_update_cogitator_is_hidden_u
 
 # ------------------------------------------------------------ themes
 
-async def test_default_theme_is_black(game):
+async def test_default_theme_is_tokyo_night_and_black_is_available(game):
     app = make_app(game)
     async with app.run_test(size=SIZE) as pilot:
         await settle(app, pilot)
-        assert app.theme == "cogitator-black"
-        assert app.available_themes["cogitator-black"].background == "#000000"
+        assert app.theme == "tokyo-night"
+        assert app.available_themes["black"].background == "#000000"
 
 
 async def test_theme_choice_applies_and_is_remembered(game):
@@ -1075,11 +1075,12 @@ async def test_theme_choice_applies_and_is_remembered(game):
         assert app2.theme == "nord"
 
 
-async def test_unknown_saved_theme_falls_back_to_black(game):
+async def test_unknown_or_retired_saved_theme_falls_back_to_the_default(game):
     s = Settings.load()
-    s.theme = "does-not-exist"
-    s.save()
-    app = make_app(game)
-    async with app.run_test(size=SIZE) as pilot:
-        await settle(app, pilot)
-        assert app.theme == "cogitator-black"
+    for bad in ("does-not-exist", "cogitator-black"):  # the second was 0.2.1's black, now called "black"
+        s.theme = bad
+        s.save()
+        app = make_app(game)
+        async with app.run_test(size=SIZE) as pilot:
+            await settle(app, pilot)
+            assert app.theme == "tokyo-night"

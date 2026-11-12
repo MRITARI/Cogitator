@@ -82,16 +82,16 @@ HELP_BODY = (
 _MAIN_ACTIONS = {"help", "app_menu", "choose_theme", "link_all", "toggle_mods", "toggle_mod", "move_up", "move_down", "update_selected", "update_all", "recheck", "link", "import_archive",
                  "set_key", "cycle_sort", "quit_app", "framework_update", "doctor", "apply_update"}
 SORT_COLUMNS = ("mod", "status", "installed", "latest", "en")
-DEFAULT_THEME = "cogitator-black"
+DEFAULT_THEME = "tokyo-night"
 COGITATOR_THEMES = (
-    Theme(name="cogitator-black", primary="#4a90d9", secondary="#7f8c8d", accent="#f1c40f", foreground="#e8e8e8",
+    Theme(name="black", primary="#4a90d9", secondary="#7f8c8d", accent="#f1c40f", foreground="#e8e8e8",
           background="#000000", surface="#000000", panel="#141414", boost="#1c1c1c", warning="#f1c40f", error="#e74c3c",
           success="#2ecc71", dark=True),
     Theme(name="cogitator-graphite", primary="#4a90d9", secondary="#95a5a6", accent="#f1c40f", foreground="#e8e8e8",
           background="#1b1b1f", surface="#1b1b1f", panel="#26262c", boost="#2f2f36", warning="#f1c40f", error="#e74c3c",
           success="#2ecc71", dark=True),
 )
-THEME_CHOICES = ("cogitator-black", "cogitator-graphite", "textual-dark", "nord", "gruvbox", "dracula", "tokyo-night",
+THEME_CHOICES = ("tokyo-night", "black", "cogitator-graphite", "textual-dark", "nord", "gruvbox", "dracula",
                  "monokai", "catppuccin-mocha", "solarized-dark", "textual-light", "solarized-light")
 # bottom button bar: (label, action, tooltip). "Update Cogitator" only shows while an update is waiting or offered.
 ACTION_BUTTONS = (("On/off", "toggle_mod", "Space - enable or disable the selected mod"),

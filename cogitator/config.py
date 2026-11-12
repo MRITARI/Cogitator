@@ -67,7 +67,7 @@ class Settings:
     max_extract_mb: int = 500
     max_extract_files: int = 20000
     notice_accepted: bool = False
-    theme: str = "cogitator-black"  # colours; changed from the Menu (Theme...)
+    theme: str = "tokyo-night"  # colours; changed from the Menu (Theme...)
 
     @classmethod
     def path(cls) -> Path:

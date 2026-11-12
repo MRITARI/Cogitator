@@ -194,3 +194,37 @@ def test_move_at_the_ends_and_unlisted_mods(tmp_path):
         move_mod(tmp_path, "z", -1)
     with pytest.raises(ModError):
         move_mod(tmp_path, "dmf", 1)  # the Framework is not movable
+
+
+# ---- mod folder names with spaces: the Mod Loader reads the whole trimmed line as the name
+
+def test_a_name_with_spaces_is_one_mod():
+    lo = LoadOrder.parse(b"Spidey Sense\n--Other Mod\n  Third One  -- note\n")
+    assert lo.entries() == [("Spidey Sense", True), ("Other Mod", False), ("Third One", True)]
+    assert lo.set_enabled("Spidey Sense", False) and lo.set_enabled("Other Mod", True)
+    assert lo.render() == b"--Spidey Sense\nOther Mod\n  Third One  -- note\n"
+
+
+def test_spaced_folder_is_listed_once_toggled_moved_and_removed(game, tmp_path):
+    from cogitator.mods import move_mod, remove_mod
+    md = game / "mods"
+    (md / "Spidey Sense").mkdir()
+    (md / "Spidey Sense" / "Spidey Sense.mod").write_text("return {}")
+    toggle_mod(game, "Spidey Sense")  # unlisted -> added, enabled
+    by = {m.folder: m for m in scan_mods(game)}
+    assert by["Spidey Sense"].state == ENABLED and by["Spidey Sense"].present and "Spidey" not in by
+    assert (md / "mod_load_order.txt").read_bytes().endswith(b"Spidey Sense\r\n")
+    toggle_mod(game, "Spidey Sense")
+    assert {m.folder: m for m in scan_mods(game)}["Spidey Sense"].state == DISABLED
+    toggle_mod(game, "Spidey Sense")
+    assert "moved up" in move_mod(game, "Spidey Sense", -1)
+    dest = remove_mod(game, "Spidey Sense", tmp_path / "trash")
+    assert dest.is_dir() and not (md / "Spidey Sense").exists()
+    assert "Spidey Sense" not in {m.folder for m in scan_mods(game)}
+    assert b"Spidey" not in (md / "mod_load_order.txt").read_bytes()
+
+
+@pytest.mark.parametrize("bad", ["", "..", "a/b", "a\b", " pad", "pad ", "--off", "#hash", "a -- b"])
+def test_names_that_cannot_be_written_to_the_load_order_are_refused(game, bad):
+    with pytest.raises(ModError):
+        set_mod_enabled(game, bad, True)
