@@ -107,3 +107,33 @@ def move_mod(game_dir: Path, folder: str, delta: int, internal: frozenset[str] |
     a.text, b.text = b.text, a.text  # swap the entries; each line keeps its own position and line ending
     lo.save(path)
     return f"{folder}: moved {'down, after' if delta > 0 else 'up, before'} {neighbour}."
+
+
+def remove_mod(game_dir: Path, folder: str, trash_dir: Path, internal: frozenset[str] | set[str] | None = None) -> Path:
+    """Take a mod out of the game: its folder is MOVED (not deleted) into `trash_dir` and its load-order lines are
+    removed. Returns where the folder went. Raises ModError."""
+    import shutil
+    import time
+
+    internal = INTERNAL_FOLDERS if internal is None else internal
+    if folder in internal:
+        raise ModError(f"'{folder}' is part of the mod loader/framework and is not managed here.")
+    if folder in ("", ".", "..") or any(c in folder for c in "/\\") or any(c.isspace() for c in folder):
+        raise ModError(f"Invalid mod folder name: {folder!r}")
+    src = mods_dir(game_dir) / folder
+    path = load_order_path(game_dir)
+    lo = LoadOrder.load(path)
+    dest = None
+    if src.is_dir():
+        trash_dir.mkdir(parents=True, exist_ok=True)
+        dest = trash_dir / f"{folder}-{time.strftime('%Y%m%d-%H%M%S')}"
+        n = 1
+        while dest.exists():
+            n += 1
+            dest = trash_dir / f"{folder}-{time.strftime('%Y%m%d-%H%M%S')}-{n}"
+        shutil.move(str(src), str(dest))
+    elif lo.state(folder) is None:
+        raise ModError(f"No folder '{folder}' in {mods_dir(game_dir)}.")
+    if lo.remove(folder):
+        lo.save(path)
+    return dest or trash_dir

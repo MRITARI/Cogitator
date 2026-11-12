@@ -10,6 +10,9 @@ def isolated_dirs(tmp_path, monkeypatch):
     import cogitator.gamefinder as gf
 
     monkeypatch.setattr(gf, "steam_roots", lambda: [])
+    import cogitator.tui.app as tui_app
+
+    monkeypatch.setattr(tui_app, "pick_files_available", lambda: False)  # never open a real file dialog from a test
     # keyring must never be hit by tests
     import sys, types
 

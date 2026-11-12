@@ -98,10 +98,10 @@ async def test_boots_and_renders_table_header_and_badge(game):
     async with app.run_test(size=SIZE) as pilot:
         await settle(app, pilot)
         t = app.query_one("#mods", DataTable)
-        assert [c.label.plain for c in t.columns.values()] == ["\u2714/\u2716", "Mod", "Installed", "Latest", "Status"]
+        assert [c.label.plain for c in t.columns.values()] == ["\u2713/\u2717", "Mod", "Installed", "Latest", "Status"]
         keys = [r.value for r in t.rows]
         assert keys == ["alpha", "beta", "ghost", "broken", "gamma"]  # load order first, then unlisted A-Z
-        assert cell(app, "alpha", "en") == "\u2714" and cell(app, "beta", "en") == "\u2716" and cell(app, "gamma", "en") == "\u00b7"
+        assert cell(app, "alpha", "en") == "\u2713" and cell(app, "beta", "en") == "\u2717" and cell(app, "gamma", "en") == "\u00b7"
         assert "(folder missing)" in cell(app, "ghost", "mod") and "(no .mod file!)" in cell(app, "broken", "mod")
         assert cell(app, "alpha", "status") == "not linked"
         hdr = str(app.query_one("#hdr", Static).render())
@@ -117,7 +117,8 @@ async def test_footer_lists_the_key_hints(game):
     async with app.run_test(size=SIZE) as pilot:
         await settle(app, pilot)
         shown = {a.binding.key_display or a.binding.key for a in app.active_bindings.values() if a.binding.show}
-        assert {"T", "Space", "U", "Ctrl+U", "F", "D", "R", "L", "I", "K", "Q"} <= shown
+        assert {"Space", "U", "Ctrl+U", "R", "I", "Q", "F10"} <= shown
+        assert not {"T", "F", "D", "L", "K", "Shift+Up"} & shown  # the rest live in the Menu button and the right-click menu
         assert "Shift+U" not in shown
 
 
@@ -183,10 +184,10 @@ async def test_space_toggles_and_rewrites_file_surgically(game):
         select(app, "alpha")
         await pilot.press("space")
         assert lo.read_bytes() == b"-- header\r\n--alpha\r\n--beta\r\nghost\r\n"
-        assert cell(app, "alpha", "en") == "\u2716"
+        assert cell(app, "alpha", "en") == "\u2717"
         await pilot.press("space")
         assert lo.read_bytes() == b"-- header\r\nalpha\r\n--beta\r\nghost\r\n"
-        assert cell(app, "alpha", "en") == "\u2714"
+        assert cell(app, "alpha", "en") == "\u2713"
         select(app, "beta")
         await pilot.press("space")
         assert LoadOrder.load(lo).state("beta") is True
@@ -194,7 +195,7 @@ async def test_space_toggles_and_rewrites_file_surgically(game):
         await pilot.pause()
         assert "add it to the load order" in str(app.query_one("#hint", Static).render())
         await pilot.press("space")
-        assert lo.read_bytes().endswith(b"ghost\r\ngamma\r\n") and cell(app, "gamma", "en") == "\u2714"
+        assert lo.read_bytes().endswith(b"ghost\r\ngamma\r\n") and cell(app, "gamma", "en") == "\u2713"
         select(app, "ghost")  # folder missing -> error in the log pane, file untouched
         before = lo.read_bytes()
         await pilot.press("space")
@@ -423,7 +424,7 @@ async def test_start_check_runs_in_background_and_updates_rows_in_place(game, mo
         assert cell(app, "alpha", "status") == "unknown" and cell(app, "alpha", "latest") == "-"
         select(app, "beta")
         await pilot.press("space")  # a mod toggle while the check is blocked on the network
-        assert cell(app, "beta", "en") == "\u2714"
+        assert cell(app, "beta", "en") == "\u2713"
         seen_during_wait["spinner"] = "checking for updates" in str(app.query_one("#hdr", Static).render())
         gate.set()
         await settle(app, pilot)
@@ -571,7 +572,7 @@ async def test_import_flow_installs_and_adds_to_load_order(game, tmp_path):
         await settle(app, pilot)
         assert (game / "mods" / "newmod" / "newmod.mod").is_file()
         assert LoadOrder.load(game / "mods" / "mod_load_order.txt").state("newmod") is True
-        assert cell(app, "newmod", "en") == "\u2714" and "Installed newmod" in log_text(app)
+        assert cell(app, "newmod", "en") == "\u2713" and "Installed newmod" in log_text(app)
 
 
 async def test_import_missing_file_is_a_log_line(game):
@@ -852,3 +853,233 @@ async def test_question_mark_opens_help_with_log_path_and_quit_is_listed_first(g
         await pilot.press("question_mark")
         await pilot.pause()
         assert len(app.screen_stack) == 2 and str(log_path()) in "".join(str(w.render()) for w in app.screen.query(Static))
+
+
+async def test_update_choice_never_blocks_the_ui_thread_on_the_worker_lock(game, monkeypatch):
+    """A worker holds the lock while waiting on the UI thread (update check); answering the update dialog must not deadlock."""
+    calls = []
+
+    class RD:
+        version = "9.9.9"
+
+    class U:
+        def remind_later(self): calls.append("later")
+        def skip_version(self, v): calls.append(("skip", v))
+
+    app = make_app(game)
+    async with app.run_test(size=SIZE) as pilot:
+        await settle(app, pilot)
+        monkeypatch.setattr(app, "update_ready", lambda: RD())
+        app.selfupdater = U()
+        with app._lock:  # stands in for a check worker mid-run
+            t0 = time.monotonic()
+            app._update_choice(1)  # UI-thread call: must return at once instead of waiting for the lock
+            assert time.monotonic() - t0 < 1 and not calls
+        await settle(app, pilot)
+        assert calls == ["later"]
+
+
+# ------------------------------------------------------------ mouse: title bar, right-click menu, drag to reorder
+
+def _order(game):
+    from cogitator.loadorder import LoadOrder
+    return [n for n, _ in LoadOrder.load(game / "mods" / "mod_load_order.txt").entries()]
+
+
+async def test_title_bar_menu_help_and_close_buttons(game):
+    from cogitator.tui.screens import MenuScreen
+    app = make_app(game)
+    async with app.run_test(size=SIZE) as pilot:
+        await settle(app, pilot)
+        await pilot.click("#tb_menu")
+        await pilot.pause()
+        assert isinstance(app.screen, MenuScreen)
+        await pilot.press("escape")
+        await pilot.pause()
+        assert not isinstance(app.screen, MenuScreen)
+        await pilot.click("#tb_help")
+        await pilot.pause()
+        assert isinstance(app.screen, NoticeScreen) or len(app.screen_stack) > 1
+        await pilot.press("escape")
+        await pilot.pause()
+        await pilot.click("#tb_close")
+        await pilot.pause()
+    assert app._exiting or not app.is_running
+
+
+async def test_menu_item_runs_the_action(game, monkeypatch):
+    from cogitator.tui.screens import MenuScreen
+    app = make_app(game)
+    async with app.run_test(size=SIZE) as pilot:
+        await settle(app, pilot)
+        called = []
+        monkeypatch.setattr(app, "action_recheck", lambda: called.append(1))
+        await pilot.click("#tb_menu")
+        await pilot.pause()
+        assert isinstance(app.screen, MenuScreen)
+        app.screen.dismiss("recheck")
+        await settle(app, pilot)
+        assert called == [1]
+
+
+async def test_right_click_opens_mod_menu_and_toggle_works(game):
+    from cogitator.tui.screens import MenuScreen
+    app = make_app(game)
+    async with app.run_test(size=SIZE) as pilot:
+        await settle(app, pilot)
+        t = app.query_one("#mods", DataTable)
+        row = t.get_row_index("alpha")
+        await pilot.click("#mods", offset=(8, 1 + row), button=3)
+        await pilot.pause()
+        assert isinstance(app.screen, MenuScreen) and app.selected() == "alpha"
+        app.screen.dismiss("toggle_mod")
+        await settle(app, pilot)
+        assert _order(game)[:1] == ["alpha"] and cell(app, "alpha", "en") != ""
+        assert "alpha: disabled" in log_text(app)
+
+
+async def test_click_outside_the_menu_closes_it(game):
+    from cogitator.tui.screens import MenuScreen
+    app = make_app(game)
+    async with app.run_test(size=SIZE) as pilot:
+        await settle(app, pilot)
+        await pilot.click("#tb_menu")
+        await pilot.pause()
+        assert isinstance(app.screen, MenuScreen)
+        await pilot.click(offset=(SIZE[0] - 3, SIZE[1] - 4))
+        await pilot.pause()
+        assert not isinstance(app.screen, MenuScreen)
+
+
+async def test_dragging_a_mod_reorders_the_load_order(game):
+    app = make_app(game)
+    async with app.run_test(size=SIZE) as pilot:
+        await settle(app, pilot)
+        t = app.query_one("#mods", DataTable)
+        a, g = t.get_row_index("alpha"), t.get_row_index("gamma")
+        before = _order(game)
+        await pilot.mouse_down("#mods", offset=(8, 1 + a))
+        await pilot.hover("#mods", offset=(8, 1 + g))
+        await pilot.mouse_up("#mods", offset=(8, 1 + g))
+        await settle(app, pilot)
+        after = _order(game)
+        assert after != before and after.index("alpha") > after.index("beta"), (before, after)
+        assert app.selected() == "alpha"
+
+
+async def test_plain_click_does_not_reorder(game):
+    app = make_app(game)
+    async with app.run_test(size=SIZE) as pilot:
+        await settle(app, pilot)
+        before = _order(game)
+        t = app.query_one("#mods", DataTable)
+        await pilot.click("#mods", offset=(8, 1 + t.get_row_index("beta")))
+        await settle(app, pilot)
+        assert _order(game) == before and app.selected() == "beta"
+
+
+async def test_remove_moves_the_folder_aside_and_drops_it_from_the_load_order(game, tmp_path):
+    app = make_app(game)
+    async with app.run_test(size=SIZE) as pilot:
+        await settle(app, pilot)
+        app._mod_menu_action("gamma", "remove")
+        await pilot.pause()
+        assert isinstance(app.screen, ConfirmScreen)
+        await pilot.press("y")
+        await settle(app, pilot)
+        assert not (game / "mods" / "gamma").exists() and "gamma" not in _order(game)
+        assert "Removed gamma" in log_text(app)
+        assert any(p.name.startswith("gamma-") for p in (Path(__import__("os").environ["COGITATOR_CACHE_DIR"]) / "removed").iterdir())
+        assert "gamma" not in [m.folder for m in app.mods]
+
+
+def test_remove_mod_refuses_internal_and_bad_names(tmp_path, game):
+    from cogitator.mods import ModError, remove_mod
+    for bad in ("base", "dmf", "..", "a/b", ""):
+        with pytest.raises(ModError):
+            remove_mod(game, bad, tmp_path / "trash")
+    with pytest.raises(ModError):
+        remove_mod(game, "nonexistent", tmp_path / "trash")
+
+
+# ------------------------------------------------------------ button bar and the file chooser
+
+async def test_import_opens_the_file_chooser_and_imports_every_pick(game, monkeypatch):
+    app = make_app(game)
+    got = []
+    monkeypatch.setattr(app, "_job_import", lambda raw, mod_id: got.append(raw))
+    picked = [Path("C:/dl/a.zip"), Path("C:/dl/b.zip")]
+    app.pick_files = lambda initial=None: picked
+    async with app.run_test(size=SIZE) as pilot:
+        await settle(app, pilot)
+        await pilot.click("#ab_import_archive")
+        await settle(app, pilot)
+        await settle(app, pilot)
+        assert got == [str(p) for p in picked] and not isinstance(app.screen, InputScreen)
+
+
+async def test_import_cancelled_chooser_does_nothing_and_unavailable_falls_back_to_typing(game):
+    app = make_app(game)
+    app.pick_files = lambda initial=None: []
+    async with app.run_test(size=SIZE) as pilot:
+        await settle(app, pilot)
+        await pilot.press("i")
+        await settle(app, pilot)
+        assert not isinstance(app.screen, InputScreen)
+        app.pick_files = lambda initial=None: None  # no dialog on this machine
+        await pilot.press("i")
+        await settle(app, pilot)
+        await settle(app, pilot)
+        assert isinstance(app.screen, InputScreen)
+
+
+async def test_bottom_buttons_run_their_actions_and_update_cogitator_is_hidden_until_offered(game, monkeypatch):
+    app = make_app(game)
+    async with app.run_test(size=SIZE) as pilot:
+        await settle(app, pilot)
+        calls = []
+        monkeypatch.setattr(app, "action_recheck", lambda: calls.append("recheck"))
+        await pilot.click("#ab_recheck")
+        await pilot.pause()
+        assert calls == ["recheck"]
+        assert app.query_one("#ab_apply_update").display is False
+        await pilot.click("#ab_quit")
+        await pilot.pause()
+    assert not app.is_running
+
+
+# ------------------------------------------------------------ themes
+
+async def test_default_theme_is_black(game):
+    app = make_app(game)
+    async with app.run_test(size=SIZE) as pilot:
+        await settle(app, pilot)
+        assert app.theme == "cogitator-black"
+        assert app.available_themes["cogitator-black"].background == "#000000"
+
+
+async def test_theme_choice_applies_and_is_remembered(game):
+    from cogitator.tui.screens import ChoiceScreen
+    app = make_app(game)
+    async with app.run_test(size=SIZE) as pilot:
+        await settle(app, pilot)
+        app.action_choose_theme()
+        await pilot.pause()
+        assert isinstance(app.screen, ChoiceScreen)
+        app.screen.dismiss(app.screen._opts.index("nord"))
+        await settle(app, pilot)
+        assert app.theme == "nord" and Settings.load().theme == "nord"
+    app2 = make_app(game)
+    async with app2.run_test(size=SIZE) as pilot:
+        await settle(app2, pilot)
+        assert app2.theme == "nord"
+
+
+async def test_unknown_saved_theme_falls_back_to_black(game):
+    s = Settings.load()
+    s.theme = "does-not-exist"
+    s.save()
+    app = make_app(game)
+    async with app.run_test(size=SIZE) as pilot:
+        await settle(app, pilot)
+        assert app.theme == "cogitator-black"

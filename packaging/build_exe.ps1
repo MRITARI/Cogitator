@@ -26,6 +26,7 @@ function Check($exe) {
     --collect-submodules textual --collect-data textual `
     --collect-submodules rich._unicode_data `
     --collect-submodules keyring --collect-submodules cogitator `
+    --hidden-import tkinter --hidden-import tkinter.filedialog `
     packaging\entry.py
 if ($LASTEXITCODE -ne 0) { throw "PyInstaller failed" }
 # The update helper is a separate small program; it is copied to a temp folder before it replaces the app folder.
