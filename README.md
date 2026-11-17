@@ -24,6 +24,21 @@ To check that your download is genuine, also download `SHA256SUMS` and `SHA256SU
 (from an installed Cogitator): `cogitator verify-download SHA256SUMS Cogitator-<version>-win-x64-installer.exe`. It checks
 the signature of the list against the release key built into Cogitator and the file against the list.
 
+**Before your first install (no Cogitator yet)**, download the installer, `SHA256SUMS` and `SHA256SUMS.sig` into one folder and
+check them by hand. The release public key (Ed25519) is
+`e2d621da43aa9b6cae3d0dde71e65b69bc77cccbf12fb93ba8cbdabf7bb664ce`.
+
+```powershell
+# 1. the installer's hash must appear in SHA256SUMS (a line is printed)
+$h = (Get-FileHash .\Cogitator-<version>-win-x64-installer.exe -Algorithm SHA256).Hash.ToLower()
+Select-String $h .\SHA256SUMS
+
+# 2. SHA256SUMS must be signed by the release key (needs: pip install cryptography)
+python -c "import base64; from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PublicKey as K; K.from_public_bytes(bytes.fromhex('e2d621da43aa9b6cae3d0dde71e65b69bc77cccbf12fb93ba8cbdabf7bb664ce')).verify(base64.b64decode(open('SHA256SUMS.sig','rb').read()), open('SHA256SUMS','rb').read()); print('signature OK')"
+```
+
+If step 1 prints nothing, or step 2 raises `InvalidSignature`, do not run the installer.
+
 To run from source instead (Python 3.10 or newer):
 
 ```powershell
