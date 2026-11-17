@@ -168,6 +168,7 @@ class TableMixin:
                  ("Mods on / off (game patch)   T", "toggle_mods", have_game),
                  ("Nexus API key...   K", "set_key", True),
                  ("Doctor (diagnose problems)   D", "doctor", True),
+                 ("Profiles...   P", "profiles", have_game),
                  ("Sort the list   O", "cycle_sort", have_game),
                  ("Theme (colours)...", "choose_theme", True)]
         if upd:

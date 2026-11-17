@@ -68,6 +68,7 @@ from .view import (  # noqa: F401  (re-exported: tests and callers import these 
 from .selfupdate_mixin import SelfUpdateMixin
 from .table_mixin import TableMixin
 from .framework_mixin import FrameworkMixin
+from .profile_mixin import ProfileMixin
 
 
 
@@ -100,7 +101,7 @@ def pick_files(initial: Path | None = None) -> list[Path] | None:
 
 # ------------------------------------------------------------------ app
 
-class CogitatorApp(SelfUpdateMixin, TableMixin, FrameworkMixin, App):
+class CogitatorApp(SelfUpdateMixin, TableMixin, FrameworkMixin, ProfileMixin, App):
     TITLE = "Cogitator"
     ENABLE_COMMAND_PALETTE = False  # keeps the footer for our keys
     CSS = """
@@ -156,6 +157,8 @@ class CogitatorApp(SelfUpdateMixin, TableMixin, FrameworkMixin, App):
         Binding("a", "apply_update", "Update Cogitator", key_display="A"),
         Binding("A", "apply_update", show=False),
         Binding("o", "cycle_sort", "Sort", key_display="O", show=False),
+        Binding("p", "profiles", "Profiles", key_display="P", show=False),
+        Binding("P", "profiles", show=False),
         Binding("f10", "app_menu", "Menu", key_display="F10"),
     ]
 

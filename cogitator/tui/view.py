@@ -38,6 +38,7 @@ EMPTY_STATE = ("No mods installed yet. Download mods from nexusmods.com/warhamme
 HELP_BODY = (
     "T  mods on/off (the game patch)\n"
     "Space  enable/disable the selected mod\n"
+    "P  profiles: switch, save, share a setup code\n"
     "Shift+Up/Down or [ ]  move in the load order\n"
     "O  sort    U  update selected    Ctrl+U  update all\n"
     "F  update Mod Loader/Framework    R  re-check\n"
@@ -54,7 +55,7 @@ HELP_BODY = (
     "Not affiliated with Fatshark, Games Workshop or Nexus Mods.")
 
 _MAIN_ACTIONS = {"help", "app_menu", "choose_theme", "link_all", "toggle_mods", "toggle_mod", "move_up", "move_down", "update_selected", "update_all", "recheck", "link", "import_archive",
-                 "set_key", "cycle_sort", "quit_app", "framework_update", "doctor", "apply_update"}
+                 "set_key", "cycle_sort", "quit_app", "framework_update", "doctor", "apply_update", "profiles"}
 SORT_COLUMNS = ("mod", "status", "installed", "latest", "en")
 DEFAULT_THEME = "tokyo-night"
 COGITATOR_THEMES = (

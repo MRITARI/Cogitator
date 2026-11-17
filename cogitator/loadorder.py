@@ -146,3 +146,25 @@ class LoadOrder:
         if self.lines and self.lines[-1].eol == "":
             self.lines[-1].eol = self.eol
         self.lines.append(Line(("" if enabled else "--") + name, self.eol))
+
+    def reorder(self, order: list[str], skip=()) -> None:
+        """Rearrange the mod entries: those named in `order` first (in that order), the rest after them in their current
+        order. Entries move between the slots the mod lines occupy now, so comments, blank lines, the `skip` entries and
+        every line ending stay where they are. A mod listed twice keeps only its first line."""
+        skipset = {s.casefold() for s in skip}
+        slots = [i for i, l in enumerate(self.lines) if l.name and l.name.casefold() not in skipset]
+        first: dict[str, tuple[str, str]] = {}
+        for i in slots:
+            l = self.lines[i]
+            first.setdefault(l.name.casefold(), (l.name, l.text))  # type: ignore[union-attr]
+        want: list[str] = []
+        seen: set[str] = set()
+        for n in list(order) + [v[0] for v in first.values()]:
+            k = n.casefold()
+            if k in first and k not in seen:
+                seen.add(k)
+                want.append(first[k][1])
+        for slot, text in zip(slots, want):
+            self.lines[slot].text = text
+        for i in reversed(slots[len(want):]):
+            del self.lines[i]

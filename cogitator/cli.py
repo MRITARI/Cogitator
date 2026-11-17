@@ -10,7 +10,7 @@ import time
 from dataclasses import asdict
 from pathlib import Path
 
-from . import __version__, snapshots
+from . import __version__, profiles, snapshots
 from .config import InstanceLock, LockError, SchemaTooNew, Settings, get_api_key, set_api_key, setup_logging
 from .doctor import exit_code as doctor_exit_code, format_report, run_doctor, to_json as doctor_json
 from .frameworks import Plan, describe_plan, detect_framework, plan_github, plan_local
@@ -81,6 +81,15 @@ def build_parser() -> argparse.ArgumentParser:
     sn.add_argument("--json", action="store_true")
     sn.add_argument("--yes", "-y", action="store_true")
     sn.add_argument("--keep", type=int, help="prune: how many to keep (default: the snapshot_keep setting)")
+    pr = sub.add_parser("profile", help="named mod setups: save, switch, list, show, diff, delete, export, import")
+    pr.add_argument("action", choices=["save", "list", "show", "switch", "delete", "diff", "export", "import"])
+    pr.add_argument("name", nargs="?", help="profile name (import: a setup code, or a .json file)")
+    pr.add_argument("other", nargs="?", help="diff: second profile (default: the current setup)")
+    pr.add_argument("--as", dest="as_name", help="import: save under this name")
+    pr.add_argument("--file", help="export: write the profile to this .json file instead of printing a code")
+    pr.add_argument("--json", action="store_true")
+    pr.add_argument("--yes", "-y", action="store_true")
+    pr.add_argument("--dry-run", action="store_true", help="switch: show what would change; change nothing")
     su_ = sub.add_parser("self-update", help="update Cogitator itself from its signed GitHub releases")
     su_.add_argument("--check", action="store_true", help="only look for a newer version")
     su_.add_argument("--apply", action="store_true", help="install the downloaded update and restart")
@@ -110,7 +119,7 @@ def build_parser() -> argparse.ArgumentParser:
     return p
 
 
-_MUTATING = {"restore-database", "toggle", "mod", "snapshot", "link", "unlink", "import", "update", "install-framework", "uninstall-framework"}
+_MUTATING = {"restore-database", "toggle", "mod", "snapshot", "profile", "link", "unlink", "import", "update", "install-framework", "uninstall-framework"}
 _LOCKS: list = []  # held until the process exits
 
 
@@ -120,7 +129,7 @@ def _resolve(args) -> Resolution:
     if res.game_dir and res.source in ("steam", "override") and str(res.game_dir) != s.game_dir:
         s.game_dir = str(res.game_dir)
         s.save()
-    if res.game_dir and getattr(args, "cmd", None) in _MUTATING and getattr(args, "action", None) not in ("list", "diff"):
+    if res.game_dir and getattr(args, "cmd", None) in _MUTATING and getattr(args, "action", None) not in ("list", "diff", "show", "export"):
         try:  # the interface holds the same lock: two writers on registry.json / the load order would lose changes
             _LOCKS.append(InstanceLock(res.game_dir).acquire())
         except LockError as e:
@@ -300,6 +309,116 @@ def _mod_rollback(game_dir: Path, folder: str) -> int:
     try:
         print(rollback_mod(folder, game_dir, Registry.load()))
     except ModImportError as e:
+        print(str(e), file=sys.stderr)
+        return 2
+    return 0
+
+
+def _profile_missing_report(profile: dict, missing: list[str]) -> None:
+    if not missing:
+        return
+    print(f"Not installed ({len(missing)}):")
+    for n in missing:
+        m = profile["mods"].get(n, {})
+        link = mod_page_url(m["nexus_id"]) if m.get("nexus_id") else "no Nexus link recorded"
+        print(f"  {n}" + (f" v{m['version']}" if m.get("version") else "") + f"  {link}")
+
+
+def cmd_profile(args) -> int:
+    res = _resolve(args)
+    a = args.action
+    try:
+        if a == "list":
+            rows = profiles.list_profiles()
+            if args.json:
+                print(json.dumps(rows, indent=2))
+            else:
+                for r in rows:
+                    print(f"{r['name']}  ({r['enabled']}/{r['mods']} mods enabled)")
+                if not rows:
+                    print("No profiles yet. Save the current setup with: profile save <name>")
+            return 0
+        if a == "import":
+            if not args.name:
+                print("Give a setup code (cog1:...) or a .json file.", file=sys.stderr)
+                return 2
+            src = Path(args.name)
+            try:
+                is_file = src.is_file()
+            except OSError:
+                is_file = False
+            prof = profiles.validate(json.loads(src.read_text(encoding="utf-8"))) if is_file else profiles.decode(args.name)
+            if args.as_name:
+                prof["name"] = profiles.check_name(args.as_name)
+            if profiles._path(prof["name"]).exists() and not _confirm(f"A profile named '{prof['name']}' exists. Replace it?", args.yes):
+                print("Cancelled.")
+                return 2
+            profiles.save(prof)
+            print(f"Imported profile '{prof['name']}' ({len(prof['entries'])} mods).")
+            if res.game_dir:
+                _profile_missing_report(prof, profiles.plan_switch(res.game_dir, prof)["missing"])
+            return 0
+        if a in ("show", "export", "delete") or (a in ("switch", "diff") and args.name):
+            prof = profiles.load(args.name) if args.name else None
+        if a == "show":
+            print(json.dumps(prof, indent=2) if args.json else "\n".join(f"{'on ' if e else 'off'} {n}" for n, e in prof["entries"]))
+            return 0
+        if a == "export":
+            if args.file:
+                Path(args.file).write_text(json.dumps(prof, indent=1), encoding="utf-8")
+                print(f"Wrote {args.file}")
+            else:
+                print(profiles.encode(prof))
+            return 0
+        if a == "delete":
+            if not _confirm(f"Delete profile '{args.name}'?", args.yes):
+                print("Cancelled.")
+                return 2
+            profiles.delete(args.name)
+            print("Deleted.")
+            return 0
+        if not res.game_dir:
+            print(res.message or "Game not found.", file=sys.stderr)
+            return 2
+        reg = Registry.load()
+        if a == "save":
+            if not args.name:
+                print("Give a profile name.", file=sys.stderr)
+                return 2
+            if profiles._path(args.name).exists() and not _confirm(f"A profile named '{args.name}' exists. Replace it?", args.yes):
+                print("Cancelled.")
+                return 2
+            prof = profiles.capture(res.game_dir, reg, args.name)
+            profiles.save(prof)
+            print(f"Saved profile '{prof['name']}' ({len(prof['entries'])} mods).")
+            return 0
+        if a == "diff":
+            if not args.name:
+                print("Give a profile name.", file=sys.stderr)
+                return 2
+            other = profiles.load(args.other) if args.other else profiles.capture(res.game_dir, reg, "current")
+            d = snapshots.diff_states(profiles.as_state(prof), profiles.as_state(other))
+            print(json.dumps(d, indent=2) if args.json else "\n".join(snapshots.format_diff(d)))
+            return 0 if snapshots.diff_empty(d) else 1
+        if a == "switch":
+            if not args.name:
+                print("Give a profile name.", file=sys.stderr)
+                return 2
+            plan = profiles.plan_switch(res.game_dir, prof)
+            print(f"Profile '{prof['name']}': {len(plan['use'])} mod(s) will be set as listed.")
+            if plan["will_disable"]:
+                print("These enabled mods are not in the profile and will be disabled (not deleted): " + ", ".join(plan["will_disable"]))
+            _profile_missing_report(prof, plan["missing"])
+            if args.dry_run:
+                print("Dry run: nothing changed.")
+                return 0
+            if not _confirm("Switch to this profile (a snapshot is taken first)?", args.yes):
+                print("Cancelled.")
+                return 2
+            profiles.switch(res.game_dir, prof, reg)
+            print("Switched.")
+            return 0
+    except (ModError, OSError, ValueError) as e:
         print(str(e), file=sys.stderr)
         return 2
     return 0
@@ -892,6 +1011,8 @@ def _dispatch(args) -> int:
         return cmd_update(args)
     if args.cmd == "install-framework":
         return cmd_install_framework(args)
+    if args.cmd == "profile":
+        return cmd_profile(args)
     if args.cmd == "snapshot":
         return cmd_snapshot(args)
     if args.cmd == "mod":
