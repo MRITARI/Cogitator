@@ -211,6 +211,8 @@ class TableMixin:
                  ("Open Nexus page" if linked else "Link to Nexus...", "open_page" if linked else "link", m.present),
                  ("Open folder in Explorer" if sys.platform == "win32" else "Open folder", "open_folder", m.present), None,
                  ("Remove...", "remove", True)]
+        if (self.registry.mod(f) or {}).get("previous"):
+            items.insert(len(items) - 2, ("Roll back last update", "rollback", m.present))
         self._open_menu(items, msg.x, msg.y, f, lambda aid, f=f: self._mod_menu_action(f, aid))
 
     def _mod_menu_action(self, folder: str, aid: str) -> None:
@@ -223,6 +225,8 @@ class TableMixin:
             row = self.urows.get(folder)
             if row is not None and row.nexus_id:
                 self.log_line(f"Opened {open_files_page(row.nexus_id)}", "cyan")
+        elif aid == "rollback":
+            self._bg(self._job_rollback, folder, name="roll back", group="install", exclusive=True)
         elif aid == "remove":
             self.push_screen(ConfirmScreen(f"Remove {folder}?",
                                            "The mod is taken out of the load order and its folder is moved (not deleted) to "
@@ -243,12 +247,26 @@ class TableMixin:
         except OSError as e:
             self.log_line(f"Could not open {path}: {e}", "bold red")
 
+    def _job_rollback(self, folder: str) -> None:
+        from ..modinstall import ModImportError, rollback_mod
+
+        try:
+            with self._lock:
+                msg = rollback_mod(folder, self.game_dir, self.registry, is_running=self.game_running)
+            self._ui(self.log_line, msg, "green")
+        except (ModImportError, OSError) as e:
+            self._ui(self.log_line, f"Could not roll back {folder}: {e}", "bold red")
+        self._ui(self._after_registry_change, folder)
+
     def _job_remove(self, folder: str) -> None:
         if self.game_running():
             self._ui(self.log_line, "Close Darktide before removing a mod.", "bold yellow")
             return
         try:
             with self._lock:
+                from .. import snapshots
+
+                snapshots.auto(self.game_dir, "remove", folders=[folder], registry=self.registry)
                 dest = remove_mod(self.game_dir, folder, cache_dir() / "removed")
                 self.registry.forget_mod(folder)
             self._ui(self.log_line, f"Removed {folder}. Its files are in {dest}", "green")
@@ -271,6 +289,9 @@ class TableMixin:
             return
         steps = (listed.index(dst) if dst in listed else len(listed) - 1) - listed.index(src)
         last = f"{src}: stays where it is."
+        from .. import snapshots
+
+        snapshots.auto(self.game_dir, "reorder", once=True, registry=self.registry)
         try:
             for _ in range(abs(steps)):
                 last = move_mod(self.game_dir, src, 1 if steps > 0 else -1)

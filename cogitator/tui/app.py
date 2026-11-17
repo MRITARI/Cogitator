@@ -411,6 +411,9 @@ class CogitatorApp(SelfUpdateMixin, TableMixin, FrameworkMixin, App):
         f = self.selected()
         if not (self._need_game() and f):
             return
+        from .. import snapshots
+
+        snapshots.auto(self.game_dir, "reorder", once=True, registry=self.registry)
         try:
             self.log_line(move_mod(self.game_dir, f, delta), "green")
         except ModError as e:

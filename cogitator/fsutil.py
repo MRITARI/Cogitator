@@ -30,3 +30,15 @@ def atomic_write_text(path: Path, text: str, mode: int | None = None, newline: s
     """Write UTF-8 text, normalising line endings to `newline`."""
     data = text.replace("\r\n", "\n").replace("\n", newline).encode("utf-8")
     atomic_write_bytes(path, data, mode)
+
+
+def is_link(p) -> bool:
+    """True for a symlink or a Windows junction/reparse point (never followed when copying, hashing or deleting)."""
+    import os
+    import stat
+
+    try:
+        st = os.lstat(p)
+    except OSError:
+        return False
+    return stat.S_ISLNK(st.st_mode) or bool(getattr(st, "st_file_attributes", 0) & 0x400)

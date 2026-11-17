@@ -110,6 +110,10 @@ def install_mod_archive(zip_path: Path, game_dir: Path, info: ArchiveInfo, *, ma
     work = cache_dir() / "work"
     work.mkdir(parents=True, exist_ok=True)
     tmp = Path(tempfile.mkdtemp(prefix="mod-", dir=work))
+    from . import snapshots
+
+    snapshots.auto(game_dir, "install", folders=[f for f in info.folders if (mods_dir(game_dir) / f).is_dir()])
+    snapshots.prune_rollbacks(10)
     tx = Transaction(cache_dir() / "rollback" / f"{time.strftime('%Y%m%d-%H%M%S')}-mod")
     added: list[str] = []
     try:
@@ -139,6 +143,34 @@ def install_mod_archive(zip_path: Path, game_dir: Path, info: ArchiveInfo, *, ma
 def _describe(f: NexusFile) -> str:
     when = time.strftime("%Y-%m-%d", time.gmtime(f.uploaded)) if f.uploaded else "?"
     return f"{f.file_name or f.name} (file {f.file_id}, v{f.version}, {f.category or '?'}, uploaded {when})"
+
+
+def _previous(old: dict | None, existed: bool, backup: Path) -> dict | None:
+    """What `mod rollback` needs to undo an overwrite; None when the folder was new (nothing to go back to)."""
+    if not existed:
+        return None
+    old = old or {}
+    return {"version": old.get("installed_version"), "file_id": old.get("installed_file_id"),
+            "archive": old.get("installed_archive"), "backup": str(backup), "at": time.time()}
+
+
+def rollback_mod(folder: str, game_dir: Path, registry: Registry, *, is_running: Callable[[], bool] = darktide_running) -> str:
+    """Undo the last update/overwrite of `folder` from its rollback copy. Raises ModImportError."""
+    prev = (registry.mod(folder) or {}).get("previous")
+    if not prev or not prev.get("backup"):
+        raise ModImportError(f"No previous version of '{folder}' is recorded (it was new, or already rolled back).")
+    backup = Path(prev["backup"])
+    if not (backup / "journal.json").is_file():
+        raise ModImportError(f"The backup copy is gone ({backup}); it was probably pruned.")
+    if is_running():
+        raise ModImportError("Darktide is running. Close the game first.")
+    from . import snapshots
+
+    snapshots.auto(game_dir, "rollback", folders=[folder], registry=registry)
+    Transaction.from_journal(backup).rollback()
+    registry.set_mod(folder, installed_version=prev.get("version"), installed_file_id=prev.get("file_id"),
+                     installed_archive=prev.get("archive"), previous=None)
+    return f"{folder}: rolled back to v{prev.get('version') or 'unknown'}."
 
 
 def import_archive(zip_path: Path, game_dir: Path, registry: Registry, nexus: NexusClient | None, *,
@@ -201,6 +233,8 @@ def import_archive(zip_path: Path, game_dir: Path, registry: Registry, nexus: Ne
         else:
             notes.append("Archive name matches no file on Nexus; baseline left unknown.")
 
+    existed = bool(link_folder) and (mods_dir(game_dir) / link_folder).is_dir()
+    old_rec = dict(registry.mod(link_folder) or {}) if link_folder else {}
     backup, added = install_mod_archive(zip_path, game_dir, info, max_bytes=max_bytes, max_files=max_files,
                                         is_running=is_running)
     res = ImportResult(info.folders, backup_dir=backup, added_to_load_order=added, notes=notes)
@@ -213,6 +247,7 @@ def import_archive(zip_path: Path, game_dir: Path, registry: Registry, nexus: Ne
             rec.update(latest=_latest_record(files), checked_at=time.time())
         else:
             rec.update(latest=None, checked_at=None)
+        rec["previous"] = _previous(old_rec, existed, backup)
         registry.set_mod(link_folder, **rec)
         res.linked, res.file_id, res.version = link_folder, rec["installed_file_id"], rec["installed_version"]
         if file is None:
@@ -250,6 +285,8 @@ def apply_update_premium(folder: str, game_dir: Path, registry: Registry, nexus:
     latest = (rec or {}).get("latest")
     if not rec or not rec.get("nexus_id") or not latest or latest.get("file_id") is None:
         raise ModImportError(f"{folder}: not linked or not checked yet; run check-updates first.")
+    existed = (mods_dir(game_dir) / folder).is_dir()
+    old_rec = dict(rec)
     (cache_dir() / "work").mkdir(parents=True, exist_ok=True)
     wd = Path(tempfile.mkdtemp(prefix="dl-", dir=cache_dir() / "work"))
     try:
@@ -261,7 +298,8 @@ def apply_update_premium(folder: str, game_dir: Path, registry: Registry, nexus:
     finally:
         shutil.rmtree(wd, ignore_errors=True)
     registry.set_mod(folder, installed_file_id=latest["file_id"], installed_version=latest.get("version"),
-                     installed_archive=latest.get("file_name"), baseline="import", last_error=None)
+                     installed_archive=latest.get("file_name"), baseline="import", last_error=None,
+                     previous=_previous(old_rec, existed, backup))
     return ImportResult(info.folders, linked=folder, file_id=latest["file_id"], version=latest.get("version"),
                         backup_dir=backup, added_to_load_order=added)
 

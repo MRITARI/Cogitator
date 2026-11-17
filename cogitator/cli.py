@@ -10,7 +10,7 @@ import time
 from dataclasses import asdict
 from pathlib import Path
 
-from . import __version__
+from . import __version__, snapshots
 from .config import InstanceLock, LockError, SchemaTooNew, Settings, get_api_key, set_api_key, setup_logging
 from .doctor import exit_code as doctor_exit_code, format_report, run_doctor, to_json as doctor_json
 from .frameworks import Plan, describe_plan, detect_framework, plan_github, plan_local
@@ -66,12 +66,21 @@ def build_parser() -> argparse.ArgumentParser:
     im.add_argument("archive")
     im.add_argument("--mod-id", type=int, help="Nexus mod id (when the file name does not say)")
     im.add_argument("--yes", "-y", action="store_true", help="confirm the install (ambiguity is still never guessed)")
+    im.add_argument("--dry-run", action="store_true", help="list what would be added or overwritten; change nothing")
     up = sub.add_parser("update", help="update a linked mod (Premium: automatic; free: browser + import)")
     up.add_argument("folder", nargs="?")
     up.add_argument("--all", action="store_true", help="update every mod with an update available")
     up.add_argument("--wait", type=int, default=180, metavar="SECONDS", help="free accounts: how long to watch Downloads")
     up.add_argument("--no-browser", action="store_true")
     up.add_argument("--yes", "-y", action="store_true")
+    up.add_argument("--dry-run", action="store_true", help="show which updates would be installed; download nothing")
+    sn = sub.add_parser("snapshot", help="snapshots of your mod setup: create, list, restore, diff, prune")
+    sn.add_argument("action", choices=["create", "list", "restore", "diff", "prune"])
+    sn.add_argument("name", nargs="?", help="restore/diff: snapshot name; diff compares it with the current setup or with 'other'")
+    sn.add_argument("other", nargs="?")
+    sn.add_argument("--json", action="store_true")
+    sn.add_argument("--yes", "-y", action="store_true")
+    sn.add_argument("--keep", type=int, help="prune: how many to keep (default: the snapshot_keep setting)")
     su_ = sub.add_parser("self-update", help="update Cogitator itself from its signed GitHub releases")
     su_.add_argument("--check", action="store_true", help="only look for a newer version")
     su_.add_argument("--apply", action="store_true", help="install the downloaded update and restart")
@@ -93,7 +102,7 @@ def build_parser() -> argparse.ArgumentParser:
     pa.add_argument("action", choices=["add", "remove", "status"])
     pa.add_argument("--dir", help="folder to use instead of the one containing the running cogitator.exe")
     mod = sub.add_parser("mod", help="list, enable, disable, reorder or remove a mod")
-    mod.add_argument("action", choices=["list", "enable", "disable", "up", "down", "remove"])
+    mod.add_argument("action", choices=["list", "enable", "disable", "up", "down", "remove", "rollback"])
     mod.add_argument("folder", nargs="?")
     mod.add_argument("--json", action="store_true", help="machine-readable output (list)")
     mod.add_argument("--dry-run", action="store_true", help="remove: show the files that would go; change nothing")
@@ -101,7 +110,7 @@ def build_parser() -> argparse.ArgumentParser:
     return p
 
 
-_MUTATING = {"restore-database", "toggle", "mod", "link", "unlink", "import", "update", "install-framework", "uninstall-framework"}
+_MUTATING = {"restore-database", "toggle", "mod", "snapshot", "link", "unlink", "import", "update", "install-framework", "uninstall-framework"}
 _LOCKS: list = []  # held until the process exits
 
 
@@ -111,7 +120,7 @@ def _resolve(args) -> Resolution:
     if res.game_dir and res.source in ("steam", "override") and str(res.game_dir) != s.game_dir:
         s.game_dir = str(res.game_dir)
         s.save()
-    if res.game_dir and getattr(args, "cmd", None) in _MUTATING and getattr(args, "action", None) != "list":
+    if res.game_dir and getattr(args, "cmd", None) in _MUTATING and getattr(args, "action", None) not in ("list", "diff"):
         try:  # the interface holds the same lock: two writers on registry.json / the load order would lose changes
             _LOCKS.append(InstanceLock(res.game_dir).acquire())
         except LockError as e:
@@ -277,10 +286,74 @@ def _mod_remove(game_dir: Path, args) -> int:
     if not _confirm("The folder is moved to Cogitator's removed/ folder (not deleted). Continue?", args.yes):
         print("Cancelled.")
         return 2
-    dest = remove_mod(game_dir, args.folder, cache_dir() / "removed")
     reg = Registry.load()
+    snapshots.auto(game_dir, "remove", folders=[args.folder], registry=reg)
+    dest = remove_mod(game_dir, args.folder, cache_dir() / "removed")
     reg.forget_mod(args.folder)
     print(f"Removed. Moved to {dest}")
+    return 0
+
+
+def _mod_rollback(game_dir: Path, folder: str) -> int:
+    from .modinstall import rollback_mod
+
+    try:
+        print(rollback_mod(folder, game_dir, Registry.load()))
+    except ModImportError as e:
+        print(str(e), file=sys.stderr)
+        return 2
+    return 0
+
+
+def cmd_snapshot(args) -> int:
+    res = _resolve(args)
+    if not res.game_dir:
+        print(res.message or "Game not found.", file=sys.stderr)
+        return 2
+    reg = Registry.load()
+    try:
+        if args.action == "create":
+            print(f"Snapshot saved: {snapshots.create(res.game_dir, args.name or 'manual', registry=reg).name}")
+        elif args.action == "list":
+            rows = snapshots.list_snapshots()
+            if args.json:
+                print(json.dumps(rows, indent=2))
+            for r in ([] if args.json else rows):
+                when = time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(r["created"] or 0))
+                print(f"{r['name']}  {when}  {r['reason']}  ({r['mods']} mods)")
+            if not rows and not args.json:
+                print("No snapshots yet.")
+        elif args.action == "diff":
+            if not args.name:
+                print("Give a snapshot name (see 'snapshot list').", file=sys.stderr)
+                return 2
+            a = snapshots.load_manifest(args.name)
+            b = snapshots.load_manifest(args.other) if args.other else snapshots.current_state(res.game_dir, reg)
+            d = snapshots.diff_states(a, b)
+            print(json.dumps(d, indent=2) if args.json else "\n".join(snapshots.format_diff(d)))
+            return 0 if snapshots.diff_empty(d) else 1
+        elif args.action == "restore":
+            if not args.name:
+                print("Give a snapshot name (see 'snapshot list').", file=sys.stderr)
+                return 2
+            from .procs import darktide_running
+
+            if darktide_running():
+                print("Darktide is running. Close the game first.", file=sys.stderr)
+                return 2
+            m = snapshots.load_manifest(args.name)
+            print("Changes the restore would make:\n  " + "\n  ".join(snapshots.format_diff(
+                snapshots.diff_states(snapshots.current_state(res.game_dir, reg), m))))
+            if not _confirm("Restore this snapshot (your current setup is snapshotted first)?", args.yes):
+                print("Cancelled.")
+                return 2
+            print("\n".join(snapshots.restore(res.game_dir, args.name, reg)) or "Nothing to restore.")
+        elif args.action == "prune":
+            keep = args.keep if args.keep is not None else max(1, Settings.load().snapshot_keep)
+            print(f"Removed {snapshots.prune(keep)} old snapshot(s); keeping the newest {keep}.")
+    except ModError as e:
+        print(str(e), file=sys.stderr)
+        return 2
     return 0
 
 
@@ -297,7 +370,10 @@ def cmd_mod(args) -> int:
     try:
         if args.action == "remove":
             return _mod_remove(res.game_dir, args)
+        if args.action == "rollback":
+            return _mod_rollback(res.game_dir, args.folder)
         if args.action in ("up", "down"):
+            snapshots.auto(res.game_dir, "reorder", once=True, registry=Registry.load())
             print(move_mod(res.game_dir, args.folder, -1 if args.action == "up" else 1))
         else:
             print(set_mod_enabled(res.game_dir, args.folder, args.action == "enable"))
@@ -506,6 +582,13 @@ def cmd_import(args) -> int:
                 print(problem, file=sys.stderr)
                 return 2
     print(f"Archive : {zp.name}\nFolders : {', '.join(info.folders)}\nTarget  : {mods_dir(res.game_dir)}")
+    if args.dry_run:
+        for f in info.folders:
+            have = _mod_files(res.game_dir, f)
+            old = (reg.mod(f) or {}).get("installed_version")
+            print(f"  {f}: " + (f"OVERWRITE existing folder ({len(have)} files" + (f", installed v{old}" if old else "") + ")" if have else "new folder"))
+        print("Dry run: nothing changed.")
+        return 0
     if not _confirm("Install this mod?", args.yes):
         print("Cancelled.")
         return 2
@@ -552,6 +635,13 @@ def cmd_update(args) -> int:
         return 2
     if not targets:
         print("No mods with an update available (run `check-updates` first).")
+        return 0
+    if args.dry_run:
+        for f in targets:
+            lat = (reg.mod(f) or {}).get("latest") or {}
+            print(f"{f}: {rows[f].status} - would install {lat.get('file_name') or 'the latest main file'}"
+                  f" (v{lat.get('version') or '?'}), replacing v{(reg.mod(f) or {}).get('installed_version') or '?'}")
+        print("Dry run: nothing downloaded or changed.")
         return 0
     premium = bool(reg.data["updates"].get("premium"))
     key = get_api_key()
@@ -802,6 +892,8 @@ def _dispatch(args) -> int:
         return cmd_update(args)
     if args.cmd == "install-framework":
         return cmd_install_framework(args)
+    if args.cmd == "snapshot":
+        return cmd_snapshot(args)
     if args.cmd == "mod":
         return cmd_mod(args)
     if args.cmd == "restore-database":

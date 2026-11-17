@@ -95,6 +95,7 @@ class Settings:
     max_extract_files: int = 20000
     notice_accepted: bool = False
     theme: str = "tokyo-night"  # colours; changed from the Menu (Theme...)
+    snapshot_keep: int = 20  # how many snapshots of the mod setup are kept
 
     @classmethod
     def path(cls) -> Path:
