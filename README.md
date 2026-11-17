@@ -9,6 +9,10 @@ start. Mods are not supported by Fatshark and are used at your own risk.
 Cogitator is an independent fan project. It is not affiliated with, endorsed by or connected to Fatshark, Games Workshop or
 Nexus Mods.
 
+---
+---
+---
+
 ## Install
 
 Windows 11 (x64) only. The Steam version of Darktide is supported; other stores (Game Pass / Microsoft Store) are not.
@@ -18,6 +22,9 @@ Follow the window that opens: it asks for your Nexus key (optional) and installs
 Framework. It installs per user and needs no administrator rights. A ticked option adds `cogitator` to your user PATH, so the
 commands below work in any new terminal window (open a new one after installing).
 
+---
+---
+---
 The installer is not code-signed, so Windows SmartScreen may warn about it. Click **More info**, then **Run anyway**.
 
 To check that your download is genuine, also download `SHA256SUMS` and `SHA256SUMS.sig` from the same release, then run
