@@ -50,6 +50,10 @@ Copy-Item build\nxm\cogitator-nxm.exe dist\cogitator\cogitator-nxm.exe -Force
     packaging\setup_entry.py
 if ($LASTEXITCODE -ne 0) { throw "PyInstaller (setup) failed" }
 Copy-Item LICENSE dist\cogitator\LICENSE -Force
+# The licence texts of everything bundled (the generator fails, and so does this script, if one is missing).
+& $py packaging\make_notices.py --out dist\cogitator\THIRD-PARTY-NOTICES.txt --pyz build\pyi\cogitator\PYZ-00.toc `
+    --pyz "build\pyi-setup\Cogitator Setup\PYZ-00.toc" --app-dir dist\cogitator
+if ($LASTEXITCODE -ne 0) { throw "THIRD-PARTY-NOTICES.txt could not be generated" }
 Check "dist\cogitator\cogitator.exe"
 Check "dist\cogitator\cogitator-updater.exe"
 Check "dist\cogitator\cogitator-nxm.exe"

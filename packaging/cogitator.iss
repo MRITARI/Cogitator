@@ -44,6 +44,7 @@ Source: "..\dist\cogitator\*"; DestDir: "{app}\app"; Flags: recursesubdirs creat
 Source: "..\dist\Cogitator Setup\*"; DestDir: "{app}\setup"; Flags: recursesubdirs createallsubdirs ignoreversion
 Source: "cogitator.ico"; DestDir: "{app}"; Flags: ignoreversion
 Source: "..\LICENSE"; DestDir: "{app}"; Flags: ignoreversion
+Source: "..\dist\cogitator\THIRD-PARTY-NOTICES.txt"; DestDir: "{app}"; Flags: ignoreversion
 
 [Icons]
 Name: "{autoprograms}\Cogitator"; Filename: "{app}\app\cogitator.exe"; WorkingDir: "{%USERPROFILE}"; IconFilename: "{app}\cogitator.ico"
