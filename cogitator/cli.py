@@ -37,6 +37,7 @@ from .updates import cached_rows, run_checks
 def build_parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(prog="cogitator", description="Darktide mod manager")
     p.add_argument("--game-dir", help="Darktide install folder (overrides config/auto-detect)")
+    p.add_argument("--instance", metavar="NAME", help="use a separate named setup (own settings, registry, snapshots and profiles)")
     p.add_argument("--no-update-check", action="store_true", help="TUI: do not check for updates on start")
     p.add_argument("--version", action="version", version=__version__)
     p.add_argument("--self-check", action="store_true", help=argparse.SUPPRESS)  # verifies a pipx/PyInstaller build
@@ -114,6 +115,8 @@ def build_parser() -> argparse.ArgumentParser:
     nx_ = sub.add_parser("nxm", help="Nexus 'Mod Manager Download' links: register this program as the nxm:// handler")
     nx_.add_argument("action", choices=["register", "unregister", "status", "handle"])
     nx_.add_argument("url", nargs="?", help="handle: the nxm:// link (what the browser passes)")
+    se = sub.add_parser("search", help="search Nexus Mods for Darktide mods by name")
+    se.add_argument("text", nargs="+")
     sub.add_parser("diag", help="write a redacted diagnostics zip to attach to a bug report (nothing is uploaded)")
     cf = sub.add_parser("conflicts", help="the signed known-conflicts list used by doctor")
     cf.add_argument("action", choices=["update", "show"])
@@ -787,6 +790,26 @@ def cmd_nxm(args) -> int:
     return 0
 
 
+def cmd_search(args) -> int:
+    key = get_api_key()
+    if not key:
+        print("A Nexus API key is needed (run 'set-key').", file=sys.stderr)
+        return 2
+    try:
+        with NexusClient(key) as nx:
+            rows = nx.search_mods(" ".join(args.text), count=10)
+    except NexusError as e:
+        print(str(e), file=sys.stderr)
+        return 2
+    for r in rows:
+        print(f"{r['mod_id']:>7}  {r['name']}  https://www.nexusmods.com/warhammer40kdarktide/mods/{r['mod_id']}")
+    if not rows:
+        print("No mods found.")
+    elif len(rows) == 10:
+        print("(first 10 results; refine the search to narrow it)")
+    return 0
+
+
 def cmd_diag(args) -> int:
     from . import diag
 
@@ -1224,8 +1247,19 @@ def _pause_if_console(argv) -> None:
         pass
 
 
+def _early_instance(argv: list[str] | None) -> None:
+    """--instance must be known before logging starts (the log file lives in the instance's cache folder)."""
+    a = list(sys.argv[1:] if argv is None else argv)
+    for i, x in enumerate(a):
+        if x == "--instance" and i + 1 < len(a):
+            os.environ["COGITATOR_INSTANCE"] = a[i + 1]
+        elif x.startswith("--instance="):
+            os.environ["COGITATOR_INSTANCE"] = x.split("=", 1)[1]
+
+
 def main(argv: list[str] | None = None) -> int:
     try:
+        _early_instance(argv)
         setup_logging()
         args = build_parser().parse_args(argv)
         if args.self_check:
@@ -1288,6 +1322,8 @@ def _dispatch(args) -> int:
         return cmd_changelog(args)
     if args.cmd == "nxm":
         return cmd_nxm(args)
+    if args.cmd == "search":
+        return cmd_search(args)
     if args.cmd == "diag":
         return cmd_diag(args)
     if args.cmd == "conflicts":

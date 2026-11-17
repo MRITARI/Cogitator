@@ -295,6 +295,41 @@ class WorkflowMixin:
             shutil.rmtree(work, ignore_errors=True)
             self._nxm_busy = False
 
+    # ------------------------------------------------------------ search Nexus
+    def action_search(self) -> None:
+        if self._need_game():
+            self.push_screen(InputScreen("Search Nexus Mods", "part of a mod's name"), self._search_entered)
+
+    def _search_entered(self, text: str | None) -> None:
+        if text:
+            self._bg(self._job_search, text, name="search", group="net", exclusive=True)
+
+    def _job_search(self, text: str) -> None:
+        from ..modinstall import mod_page_url
+
+        key = get_api_key()
+        if not key:
+            self._ui(self.log_line, "Set your Nexus API key first (K).", "yellow")
+            return
+        try:
+            with NexusClient(key) as nx:
+                rows = nx.search_mods(text, count=10)
+        except NexusError as e:
+            self._ui(self.log_line, f"Search: {e}", "bold red")
+            return
+        if not rows:
+            self._ui(self.log_line, f"Nothing found for '{text}'.", "yellow")
+            return
+        i = self.ask(ChoiceScreen(f"Results for '{text}' (Enter opens the page)", [f"{r['name']}  (#{r['mod_id']})" for r in rows]))
+        if i is None:
+            return
+        url = mod_page_url(rows[i]["mod_id"]).replace("?tab=files", "")
+        import webbrowser
+
+        webbrowser.open(url)
+        self._ui(self.log_line, f"{rows[i]['name']}: {url}", "cyan")
+        self._ui(self.log_line, "Download it from the page, then press I to import it (or use the website's Mod Manager Download button if Cogitator handles nxm links).", "dim")
+
     # ------------------------------------------------------------ crash log leads
     def action_crashlog(self) -> None:
         if self._need_game():

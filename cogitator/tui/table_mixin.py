@@ -175,6 +175,7 @@ class TableMixin:
                  (tr("menu.crash_log_leads", "Crash-log leads   C"), "crashlog", have_game),
                  (tr("menu.find_a_crashing_mod_bisect", "Find a crashing mod (bisect)..."), "bisect", have_game),
                  (tr("menu.filter_the_list", "Filter the list   /"), "filter", have_game),
+                 (tr("menu.search_nexus", "Search Nexus Mods...   F3"), "search", have_game),
                  (tr("menu.sort_the_list", "Sort the list   O"), "cycle_sort", have_game),
                  (tr("menu.theme_colours", "Theme (colours)..."), "choose_theme", True)]
         if upd:

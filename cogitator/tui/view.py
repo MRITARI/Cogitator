@@ -59,7 +59,7 @@ HELP_BODY = (
 
 _MAIN_ACTIONS = {"help", "app_menu", "choose_theme", "link_all", "toggle_mods", "toggle_mod", "move_up", "move_down", "update_selected", "update_all", "recheck", "link", "import_archive",
                  "set_key", "cycle_sort", "quit_app", "framework_update", "doctor", "apply_update", "profiles", "toggle_mark", "bulk",
-                 "launch", "edit_note", "toggle_fav", "filter", "crashlog", "bisect"}
+                 "launch", "edit_note", "toggle_fav", "filter", "crashlog", "bisect", "search"}
 SORT_COLUMNS = ("mod", "status", "installed", "latest", "en")
 DEFAULT_THEME = "tokyo-night"
 COGITATOR_THEMES = (

@@ -41,20 +41,34 @@ def is_portable() -> bool:
     return portable_root() is not None
 
 
+def instance_name() -> str | None:
+    """A named, fully separate setup (its own settings, registry, snapshots, profiles and lock), e.g. a test install.
+    Chosen with --instance NAME or COGITATOR_INSTANCE; the default setup is unchanged."""
+    import re
+
+    n = os.environ.get("COGITATOR_INSTANCE", "").strip()
+    return n if re.fullmatch(r"[A-Za-z0-9_\-]{1,30}", n) else None
+
+
+def _with_instance(base: Path) -> Path:
+    n = instance_name()
+    return base / "instances" / n if n else base
+
+
 def config_dir() -> Path:
     if env := os.environ.get("COGITATOR_CONFIG_DIR"):
-        return Path(env)
+        return _with_instance(Path(env))
     if root := portable_root():
-        return root / "config"
-    return Path(platformdirs.user_config_dir(APP, appauthor=False))
+        return _with_instance(root / "config")
+    return _with_instance(Path(platformdirs.user_config_dir(APP, appauthor=False)))
 
 
 def cache_dir() -> Path:
     if env := os.environ.get("COGITATOR_CACHE_DIR"):
-        return Path(env)
+        return _with_instance(Path(env))
     if root := portable_root():
-        return root / "cache"
-    return Path(platformdirs.user_cache_dir(APP, appauthor=False))
+        return _with_instance(root / "cache")
+    return _with_instance(Path(platformdirs.user_cache_dir(APP, appauthor=False)))
 
 
 def log_path() -> Path:

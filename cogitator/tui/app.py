@@ -168,6 +168,7 @@ class CogitatorApp(SelfUpdateMixin, TableMixin, FrameworkMixin, ProfileMixin, Wo
         Binding("asterisk", "toggle_fav", "Favourite", key_display="*", show=False),
         Binding("slash", "filter", "Filter", key_display="/", show=False),
         Binding("c,C", "crashlog", "Crash log", key_display="C", show=False),
+        Binding("f3", "search", "Search", key_display="F3", show=False),
         Binding("f10", "app_menu", "Menu", key_display="F10"),
     ]
 
