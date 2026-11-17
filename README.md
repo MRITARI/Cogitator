@@ -9,6 +9,8 @@ start. Mods are not supported by Fatshark and are used at your own risk.
 Cogitator is an independent fan project. It is not affiliated with, endorsed by or connected to Fatshark, Games Workshop or
 Nexus Mods.
 
+Cogitator is released under the MIT licence (see `LICENSE`).
+
 ---
 ---
 ---
@@ -101,7 +103,7 @@ and `update_consent = true` in `config.toml`; `update_mode = "off"` turns the ch
 
 - **Sent:** a request to the GitHub API for Cogitator's own releases (at most once per 24 hours; GitHub sees your IP address and
   `User-Agent: Cogitator/<version>`). If you set a Nexus key: requests to `api.nexusmods.com` carrying that key, the
-  application name and version, and the default `python-httpx` User-Agent. Downloading the Mod Loader/Framework from GitHub, if you choose it, contacts GitHub only.
+  application name and version, and `User-Agent: Cogitator/<version> (Windows; Python x.y)`. Downloading the Mod Loader/Framework from GitHub, if you choose it, contacts GitHub only.
   No telemetry, no analytics, no crash reports.
 - **Stored on your PC:** your Nexus key (Windows Credential Manager; if that is unavailable, a plain-text file in the settings
   folder), `config.toml`, `registry.json`, the log and caches in `%LOCALAPPDATA%\cogitator`, and the files Cogitator puts in
