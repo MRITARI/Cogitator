@@ -35,6 +35,10 @@ class NxmError(Exception):
     pass
 
 
+class NxmExpired(NxmError):
+    pass
+
+
 @dataclass(frozen=True)
 class NxmLink:
     mod_id: int
@@ -51,15 +55,24 @@ def parse(url: str) -> NxmLink:
     """Strict parse. Raises NxmError for anything that is not a Darktide mod-file link with a key and expiry."""
     if not isinstance(url, str) or len(url) > MAX_URL or any(ord(c) < 32 for c in url):
         raise NxmError("Not a valid nxm link.")
-    u = urlsplit(url.strip())
+    try:
+        u = urlsplit(url.strip())
+        has_extras = u.username is not None or u.password is not None or u.port is not None or bool(u.fragment)
+    except ValueError:
+        raise NxmError("Not a valid nxm link.") from None
     if u.scheme.lower() != SCHEME:
         raise NxmError("Not an nxm:// link.")
-    if (u.hostname or "").lower() != GAME:
-        raise NxmError("This nxm link is for another game.")
+    if has_extras:
+        raise NxmError("Not a valid nxm link.")
+    host = (u.hostname or "").lower()
+    if host != GAME:
+        raise NxmError(f"This nxm link is for another game ('{host[:60]}'); Cogitator only handles {GAME} links. Nothing was done.")
     m = _PATH.match(u.path)
     if not m:
         raise NxmError("Only single mod-file links are supported (not collections).")
     q = parse_qs(u.query, keep_blank_values=True)
+    if any(len(q.get(n, [])) > 1 for n in ("key", "expires", "user_id")):
+        raise NxmError("The link repeats a parameter.")
     key = (q.get("key") or [""])[0]
     exp = (q.get("expires") or [""])[0]
     uid = (q.get("user_id") or [""])[0]
@@ -73,7 +86,12 @@ def parse(url: str) -> NxmLink:
 
 
 def redact_url(url: str) -> str:
-    return re.sub(r"(?i)(key=)[^&\s]+", r"\1***", url)
+    return re.sub(r"(?i)((?<![\w-])(?:key|user_id)=)[^&\s]+", r"\1***", url)
+
+
+def check_expiry(link: NxmLink, now: Callable[[], float] = time.time) -> None:
+    if link.expires <= now():
+        raise NxmExpired("link expired (click the Mod Manager Download button on the website again)")
 
 
 # ------------------------------------------------------------------ the queue
@@ -84,6 +102,7 @@ def queue_dir() -> Path:
 
 def enqueue(url: str, now: Callable[[], float] = time.time) -> Path:
     link = parse(url)  # refuse to queue anything invalid
+    check_expiry(link, now)  # ... or already expired
     d = queue_dir()
     d.mkdir(parents=True, exist_ok=True)
     p = d / f"{int(now() * 1000)}-{link.mod_id}-{link.file_id}.json"
@@ -91,8 +110,8 @@ def enqueue(url: str, now: Callable[[], float] = time.time) -> Path:
     return p
 
 
-def pending(now: Callable[[], float] = time.time) -> list[tuple[Path, NxmLink]]:
-    """Valid, fresh queued links (oldest first). Invalid, expired or stale files are deleted."""
+def pending(now: Callable[[], float] = time.time, on_expired: Callable[[NxmLink], None] | None = None) -> list[tuple[Path, NxmLink]]:
+    """Valid, fresh queued links (oldest first). Invalid, expired or stale files are deleted (on_expired hears about expired ones)."""
     out = []
     d = queue_dir()
     for p in sorted(d.glob("*.json")) if d.is_dir() else []:
@@ -100,6 +119,8 @@ def pending(now: Callable[[], float] = time.time) -> list[tuple[Path, NxmLink]]:
             rec = json.loads(p.read_text(encoding="utf-8"))
             link = parse(rec["url"])
             fresh = now() - float(rec["at"]) <= MAX_AGE_S and link.expires > now()
+            if link.expires <= now() and on_expired:
+                on_expired(link)
         except (OSError, ValueError, KeyError, TypeError, NxmError):
             fresh, link = False, None
         if fresh and link is not None:
@@ -115,10 +136,13 @@ def done(path: Path) -> None:
 
 # ------------------------------------------------------------------ downloading
 
-def download(link: NxmLink, nexus, dest_dir: Path, client=None) -> tuple[Path, object]:
-    """Download the linked file with the link's own key. Returns (zip path, NexusFile). Raises NxmError/NexusError."""
-    from .loader import Asset, download_asset, make_client
+def download(link: NxmLink, nexus, dest_dir: Path, client=None, now: Callable[[], float] = time.time) -> tuple[Path, object]:
+    """Download the linked file with the link's own key. Returns (zip path, NexusFile). Raises NxmError/NexusError.
+    The download link is requested fresh every time and never stored."""
+    from .loader import Asset, download_asset
+    from .nexus import make_download_client
 
+    check_expiry(link, now)
     files = [f for f in nexus.files(link.mod_id) if f.file_id == link.file_id]
     if not files:
         raise NxmError("Nexus does not list that file for the mod (it may have been removed).")
@@ -127,7 +151,7 @@ def download(link: NxmLink, nexus, dest_dir: Path, client=None) -> tuple[Path, o
     if not links:
         raise NxmError("Nexus returned no download link (the link may have expired; click the button on the website again).")
     own = client is None
-    client = client or make_client(timeout=60.0)
+    client = client or make_download_client(timeout=60.0)
     try:
         return download_asset(client, Asset(f.file_name or f"{link.mod_id}-{link.file_id}.zip", links[0]["URI"], int(f.size_bytes or 0)),
                               Path(dest_dir)), f
@@ -158,12 +182,28 @@ def interface_running(settings: Settings | None = None) -> bool | None:
     return False
 
 
-def handle_click(url: str, popen=subprocess.Popen, running: Callable[[], bool | None] = interface_running) -> int:
-    """What the registered handler runs: validate, queue, and open Cogitator when it is not already open."""
+def _say(msg: str) -> None:
+    print(msg, file=sys.stderr)
+
+
+def _message_box(msg: str) -> None:  # the windowless handler has no console, so a rejected click is shown in a dialog
+    try:
+        import ctypes
+
+        ctypes.windll.user32.MessageBoxW(0, msg, "Cogitator", 0x40)  # type: ignore[attr-defined]
+    except Exception:
+        pass
+
+
+def handle_click(url: str, popen=subprocess.Popen, running: Callable[[], bool | None] = interface_running,
+                 notify: Callable[[str], None] = _say) -> int:
+    """What the registered handler runs: validate, queue, and open Cogitator when it is not already open.
+    A link for another game, a malformed one or an expired one is refused with a message and nothing else happens."""
     try:
         enqueue(url)
     except NxmError as e:
         log.warning("ignored nxm link: %s", e)
+        notify(f"Cogitator ignored this nxm link: {e}")
         return 2
     if running() is True:
         return 0  # the open interface picks the link up within a couple of seconds
@@ -179,7 +219,7 @@ def click_main(argv: list[str]) -> int:
     setup_logging()
     if len(argv) != 1:
         return 2
-    return handle_click(argv[0])
+    return handle_click(argv[0], notify=_message_box)
 
 
 # ------------------------------------------------------------------ registering as the nxm: handler (HKCU, no admin)

@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import logging
 import re
+import sys
 import time
 from dataclasses import dataclass
 from typing import Any, Callable
@@ -16,10 +17,28 @@ log = logging.getLogger(__name__)
 BASE = "https://api.nexusmods.com/v1"
 GRAPHQL = "https://api.nexusmods.com/v2/graphql"
 GAME = "warhammer40kdarktide"
+APP_NAME = "Cogitator"
 # Category ids seen in files.json: 1=MAIN, 4=OLD_VERSION, 7=ARCHIVED; category 6 arrives with category_name null.
 # Ids 2, 3, 5 and the name DELETED for 6 come from Nexus's documentation. `category_name` is preferred whenever present.
 _CATEGORY_IDS = {1: "MAIN", 2: "UPDATE", 3: "OPTIONAL", 4: "OLD_VERSION", 5: "MISCELLANEOUS", 6: "DELETED", 7: "ARCHIVED"}
 VERIFIED_CATEGORY_IDS = frozenset({1, 4, 6, 7})
+
+
+def user_agent() -> str:
+    return f"{APP_NAME}/{__version__} (Windows; Python {sys.version_info.major}.{sys.version_info.minor})"
+
+
+def app_headers() -> dict[str, str]:
+    """The identity every request to Nexus Mods carries (API Acceptable Use Policy). The ONLY place these are built."""
+    h = {"Application-Name": APP_NAME, "Application-Version": __version__, "User-Agent": user_agent()}
+    if not all(v.strip() for v in h.values()):
+        raise RuntimeError("Nexus application headers must not be blank")
+    return h
+
+
+def make_download_client(timeout: float = 60.0) -> httpx.Client:
+    """Client for the file downloads Nexus hands out (download_link.json URIs): same identity, no API key."""
+    return httpx.Client(timeout=timeout, verify=True, follow_redirects=True, headers=app_headers())
 
 
 class NexusError(Exception):
@@ -158,8 +177,7 @@ class NexusClient:
         self.close()
 
     def _headers(self) -> dict[str, str]:
-        return {"apikey": self._key, "Application-Name": "Cogitator", "Application-Version": __version__,
-                "Accept": "application/json"}
+        return {**app_headers(), "apikey": self._key, "Accept": "application/json"}
 
     def _note_quota(self, r: httpx.Response) -> None:
         d, h = _int(r.headers.get("x-rl-daily-remaining")), _int(r.headers.get("x-rl-hourly-remaining"))

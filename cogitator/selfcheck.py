@@ -30,6 +30,17 @@ def run() -> int:
 
         Ed25519PublicKey.from_public_bytes(bytes(32))
 
+    def nexus_identity():
+        import re
+
+        from cogitator import __version__
+        from cogitator.nexus import app_headers
+
+        h = app_headers()
+        assert h["Application-Name"] == "Cogitator" and h["Application-Version"] == __version__, h
+        assert re.fullmatch(r"Cogitator/\S+ \(Windows; Python \d+\.\d+\)", h["User-Agent"]), h["User-Agent"]
+        return f"Cogitator {__version__}"
+
     def tui():
         app = importlib.import_module("cogitator.tui.app")
         importlib.import_module("cogitator.tui.screens")
@@ -64,7 +75,7 @@ def run() -> int:
         get = getattr(keyring, "get_keyring", None)
         return f"backend {type(get()).__name__}" if get else "keyring module present"
 
-    for label, fn in (("core modules", core), ("TUI", tui), ("rich unicode tables", rich_unicode), ("TLS", tls),
+    for label, fn in (("core modules", core), ("TUI", tui), ("rich unicode tables", rich_unicode), ("TLS", tls), ("Nexus identity", nexus_identity),
                       ("VDF parser", vdf), ("keyring", keyring_backend)):
         step(label, fn)
     print(f"python {sys.version.split()[0]}, frozen={getattr(sys, 'frozen', False)}")

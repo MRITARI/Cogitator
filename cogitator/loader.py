@@ -14,6 +14,7 @@ from typing import Callable
 import httpx
 
 from . import __version__
+from .config import redact
 
 log = logging.getLogger(__name__)
 
@@ -163,7 +164,7 @@ def download_asset(client: httpx.Client, asset: Asset, dest_dir: Path, max_bytes
         except httpx.HTTPError as e:
             last = e
             if attempt == 2:
-                raise LoaderError(f"Download failed: {e}") from e
+                raise LoaderError(f"Download failed: {redact(str(e))}") from e
             sleep(2 ** attempt)
     if asset.size and dest.stat().st_size != asset.size:
         raise LoaderError(f"Size mismatch for {asset.name}: expected {asset.size}, got {dest.stat().st_size}.")

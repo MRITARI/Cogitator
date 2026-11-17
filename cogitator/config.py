@@ -234,6 +234,8 @@ def clear_api_key() -> None:
 # ---------------------------------------------------------------- logging
 
 _APIKEY_PAT = re.compile(r"(?i)(apikey['\"]?\s*[:=]\s*['\"]?)[^\s'\",}]+")
+# nxm:// links and download_link requests carry `key=` and `user_id=` in the query string
+_QUERY_SECRET_PAT = re.compile(r"(?i)(?<![\w-])((?:key|user_id)=)[^&\s'\"<>#]*")
 
 
 _KEY_CACHE: list = []  # [key]; looked up once per run, since every log line passes through redact()
@@ -249,8 +251,9 @@ def _known_key() -> str | None:
 
 
 def redact(text: str, *extra_secrets: str) -> str:
-    """Strip the stored Nexus key, any `apikey=...` values, and any explicitly supplied secrets from text."""
+    """Strip the stored Nexus key, any `apikey=...`, `key=...` and `user_id=...` values, and explicitly supplied secrets."""
     text = _APIKEY_PAT.sub(r"\1***", text)
+    text = _QUERY_SECRET_PAT.sub(r"\1***", text)
     for s in (_known_key(), *extra_secrets):
         if s and len(s) >= 6:
             text = text.replace(s, "***")
@@ -258,10 +261,16 @@ def redact(text: str, *extra_secrets: str) -> str:
 
 
 class RedactFilter(logging.Filter):
-    """Redacts the stored Nexus key and any apikey=... looking values."""
+    """Redacts the stored Nexus key and any apikey=/key=/user_id= looking values, in the message and in any traceback."""
 
     def filter(self, record: logging.LogRecord) -> bool:
         record.msg, record.args = redact(record.getMessage()), None
+        if record.exc_info and not record.exc_text:
+            record.exc_text = logging.Formatter().formatException(record.exc_info)
+        if record.exc_text:
+            record.exc_text = redact(record.exc_text)
+        if record.stack_info:
+            record.stack_info = redact(record.stack_info)
         return True
 
 

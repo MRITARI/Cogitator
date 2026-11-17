@@ -253,7 +253,8 @@ class WorkflowMixin:
         """Pick up links queued by the nxm handler. One at a time, and never while a dialog is open."""
         if self._nxm_busy or not (self.game_dir and self.registry) or len(self.screen_stack) > 1:
             return
-        items = nxm.pending()
+        items = nxm.pending(on_expired=lambda lk: self._ui(
+            self.log_line, f"Nexus link for mod {lk.mod_id} file {lk.file_id}: link expired. Click the button on the website again.", "yellow"))
         if items:
             self._nxm_busy = True
             path, link = items[0]

@@ -24,10 +24,10 @@ from .frameworks import _DML_ZIP, _DMF_ZIP, _find_prefix, _names
 from .gamefinder import validate_game_dir
 from .installer import Transaction
 from .linking import _latest_record
-from .loader import Asset, LoaderError, download_asset, long_path, make_client, safe_extract
+from .loader import Asset, LoaderError, download_asset, long_path, safe_extract
 from .loadorder import LoadOrder
 from .mods import INTERNAL_FOLDERS, load_order_path, mods_dir
-from .nexus import GAME, NexusClient, NexusFile, latest_main_file, parse_nexus_ref
+from .nexus import GAME, NexusClient, NexusFile, latest_main_file, make_download_client, parse_nexus_ref
 from .procs import darktide_running
 from .registry import Registry
 
@@ -272,7 +272,7 @@ def fetch_premium_download(nexus: NexusClient, mod_id: int, file_id: int, file_n
     if not links:
         raise ModImportError("Nexus returned no download link.")
     own = client is None
-    client = client or make_client(timeout=60.0)
+    client = client or make_download_client(timeout=60.0)
     try:
         asset = Asset(file_name or f"{mod_id}-{file_id}.zip", links[0]["URI"], int(size_bytes or 0))
         return download_asset(client, asset, Path(dest_dir))  # verifies size (when known) and that it is a zip
