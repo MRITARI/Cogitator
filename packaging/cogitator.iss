@@ -54,7 +54,7 @@ Name: "{autodesktop}\Cogitator"; Filename: "{app}\app\cogitator.exe"; WorkingDir
 [Tasks]
 Name: "desktopicon"; Description: "Create a &desktop shortcut"; Flags: checkedonce
 Name: "addtopath"; Description: "Add Cogitator to the &PATH (so the cogitator command works in any new terminal)"
-Name: "nxm"; Description: "Open Nexus Mods \"Mod Manager Download\" links in Cogitator (replaces Vortex/MO2 as the nxm:// handler; undone on uninstall)"; Flags: unchecked
+Name: "nxm"; Description: "Open Nexus Mods ""Mod Manager Download"" links in Cogitator (replaces Vortex/MO2 as the nxm:// handler; undone on uninstall)"; Flags: unchecked
 
 [Run]
 ; The PATH edit lives in cogitator.userpath (tested); a failure here never blocks the install.
