@@ -73,9 +73,24 @@ def runtime_closure(roots: list[str]) -> tuple[dict[str, md.Distribution], list[
     return found, absent
 
 
+def packages_distributions() -> dict[str, list[str]]:
+    """md.packages_distributions(), plus owners found from RECORD for wheels without top_level.txt (Python 3.10 skips those)."""
+    out = {k: list(v) for k, v in md.packages_distributions().items()}
+    for d in md.distributions():
+        if d.read_text("top_level.txt"):
+            continue
+        name = d.metadata["Name"]
+        for f in d.files or []:
+            parts = PurePath(f).parts
+            top = parts[0] if len(parts) > 1 else PurePath(f).stem if PurePath(f).suffix == ".py" else ""
+            if top and not top.endswith((".dist-info", ".egg-info", ".data")) and top != "__pycache__" and name not in out.setdefault(top, []):
+                out[top].append(name)
+    return out
+
+
 def bundled_from_pyz(tocs: list[Path]) -> set[str]:
     """Distributions behind the top-level modules PyInstaller put into its PYZ archives."""
-    pd = md.packages_distributions()
+    pd = packages_distributions()
     out: set[str] = set()
     for t in tocs:
         data = ast.literal_eval(Path(t).read_text(encoding="utf-8"))
