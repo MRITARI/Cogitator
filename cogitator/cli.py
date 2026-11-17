@@ -118,8 +118,6 @@ def build_parser() -> argparse.ArgumentParser:
     se = sub.add_parser("search", help="search Nexus Mods for Darktide mods by name")
     se.add_argument("text", nargs="+")
     sub.add_parser("diag", help="write a redacted diagnostics zip to attach to a bug report (nothing is uploaded)")
-    cf = sub.add_parser("conflicts", help="the signed known-conflicts list used by doctor")
-    cf.add_argument("action", choices=["update", "show"])
     uf = sub.add_parser("uninstall-framework", help="remove DML/DMF and switch mods off (your mods and load order are kept)")
     uf.add_argument("--only", choices=["dml", "dmf"], help="remove just one of them")
     uf.add_argument("--yes", "-y", action="store_true", help="skip the confirmation")
@@ -822,21 +820,6 @@ def cmd_diag(args) -> int:
     return 0
 
 
-def cmd_conflicts(args) -> int:
-    from . import conflicts
-
-    if args.action == "update":
-        msg = conflicts.refresh()
-        print(msg)
-        return 0 if msg.startswith(("Conflicts list updated", "No conflicts list")) else 1
-    rows = conflicts.load_cached()
-    for e in rows:
-        print(f"{e['mods'][0]} + {e['mods'][1]} [{e['kind']}]: {e['note']}")
-    if not rows:
-        print("No verified conflicts list cached. Run: conflicts update")
-    return 0
-
-
 def cmd_doctor(args) -> int:
     if args.history is not None:
         from .doctor import read_history
@@ -1326,8 +1309,6 @@ def _dispatch(args) -> int:
         return cmd_search(args)
     if args.cmd == "diag":
         return cmd_diag(args)
-    if args.cmd == "conflicts":
-        return cmd_conflicts(args)
     if args.cmd == "snapshot":
         return cmd_snapshot(args)
     if args.cmd == "mod":

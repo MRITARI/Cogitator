@@ -23,7 +23,7 @@ def run() -> int:
     def core():
         for m in ("config", "gamefinder", "loadorder", "mods", "loader", "frameworks", "fwupdate", "patcher", "nexus",
                   "updates", "modinstall", "doctor", "registry", "archives", "linking", "procs", "selfupdate", "updater",
-                  "snapshots", "profiles", "modfile", "modchecks", "integrity", "conflicts", "diag", "launch", "repair", "bisect",
+                  "snapshots", "profiles", "modfile", "modchecks", "integrity", "diag", "launch", "repair", "bisect",
                   "crashlog", "nxm", "i18n"):
             importlib.import_module(f"cogitator.{m}")
         from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PublicKey  # signature checks need it

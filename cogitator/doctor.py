@@ -341,10 +341,9 @@ def _paths() -> Check:
 
 
 def _mod_checks(game: Path, reg: Registry) -> list[Check]:
-    from . import conflicts, modchecks
+    from . import modchecks
 
-    known = conflicts.load_cached()  # cached and signature-checked; never a network call from the doctor
-    return modchecks.run(game, (reg.data.get("patch") or {}).get("build_key"), known or None)
+    return modchecks.run(game, (reg.data.get("patch") or {}).get("build_key"))
 
 
 # ------------------------------------------------------------------ health history

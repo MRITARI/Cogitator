@@ -178,20 +178,6 @@ def test_bisect_finds_each_culprit_in_log_steps(game, culprit):
     assert bisect.load() is None
 
 
-def test_bisect_enables_declared_dependencies_with_the_test_set(game):
-    make_mods(game, ["a", "b", "c", "d"], requires={"a": "d"})
-    s = bisect.start(game)
-    assert s["tested_half"] == ["a", "b"] and "d" in s["test"]  # a needs d, so d is on too
-    assert enabled(game) == {"a", "b", "d"}
-
-
-def test_bisect_ties_from_dependencies_end_inconclusive(game):
-    make_mods(game, ["a", "b"], requires={"a": "b", "b": "a"})
-    s = bisect.start(game)
-    s = bisect.answer(game, still_broken=True)
-    assert s["inconclusive"] and "combination" in bisect.describe(s)
-
-
 def test_bisect_rules(game):
     with pytest.raises(ModError):
         bisect.answer(game, True)  # no session

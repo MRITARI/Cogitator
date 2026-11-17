@@ -1,6 +1,6 @@
 """Find the mod that causes a crash by halving: enable half of the suspects, you test, and the answer narrows the list.
 State lives in <config>/bisect.json so a session survives closing Cogitator. A snapshot is taken first and 'reset' puts the
-load order back exactly as it was. Declared dependencies of the tested mods are enabled with them."""
+load order back exactly as it was."""
 from __future__ import annotations
 
 import json
@@ -10,8 +10,7 @@ from . import snapshots
 from .config import config_dir
 from .fsutil import atomic_write_text
 from .loadorder import LoadOrder
-from .mods import INTERNAL_FOLDERS, ModError, load_order_path, mods_dir, scan_mods
-from .modfile import analyze_mod
+from .mods import INTERNAL_FOLDERS, ModError, load_order_path, scan_mods
 
 
 def state_path() -> Path:
@@ -30,22 +29,8 @@ def _save(s: dict) -> None:
     atomic_write_text(state_path(), json.dumps(s, indent=1))
 
 
-def _closure(game_dir: Path, subset: list[str], universe: list[str]) -> list[str]:
-    """`subset` plus everything it declares as required (among the installed mods)."""
-    by_case = {u.casefold(): u for u in universe}
-    out, todo = list(subset), list(subset)
-    while todo:
-        f = todo.pop()
-        for r in analyze_mod(mods_dir(game_dir) / f).requires:
-            t = by_case.get(r.casefold())
-            if t and t not in out:
-                out.append(t)
-                todo.append(t)
-    return out
-
-
 def _apply(game_dir: Path, s: dict) -> None:
-    """Enable the test set (and what it requires); disable the other suspects; leave every other mod alone."""
+    """Enable the test set; disable the other suspects; leave every other mod alone."""
     test = set(s["test"])
     path = load_order_path(game_dir)
     lo = LoadOrder.load(path)
@@ -57,7 +42,7 @@ def _apply(game_dir: Path, s: dict) -> None:
 def _next_test(game_dir: Path, s: dict) -> None:
     c = s["candidates"]
     half = c[: max(1, len(c) // 2)]
-    s["test"] = _closure(game_dir, half, s["all"])
+    s["test"] = list(half)
     s["tested_half"] = half
     s["step"] += 1
 
@@ -98,7 +83,7 @@ def answer(game_dir: Path, still_broken: bool) -> dict:
     s["candidates"] = c
     if len(c) == 1:
         s["culprit"], s["test"] = c[0], []
-    elif not c or len(c) == len(before):  # nothing left, or dependencies tie the suspects together so no progress is possible
+    elif not c or len(c) == len(before):  # nothing left, or no progress is possible
         s["inconclusive"], s["test"] = True, []
     else:
         _next_test(game_dir, s)

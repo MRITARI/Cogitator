@@ -1,4 +1,4 @@
-"""Static, heuristic reading of a mod folder: what it names, which other mods it looks up, which game functions it replaces,
+"""Static, heuristic reading of a mod folder: what it names, which game functions it replaces,
 and anything that could run code outside the game. Nothing here executes Lua, and every finding is a hint, not a verdict."""
 from __future__ import annotations
 
@@ -14,9 +14,6 @@ MAX_FILE_BYTES = 2 * 1024 * 1024
 _BLOCK_COMMENT = re.compile(r"--\[(=*)\[.*?\]\1\]", re.S)
 _LINE_COMMENT = re.compile(r"--[^\n]*")
 _NEW_MOD = re.compile(r"""\bnew_mod\(\s*["']([^"']{1,80})["']""")
-_GET_MOD = re.compile(r"""\bget_mod\(\s*["']([\w.\- ]{1,80})["']\s*\)""")
-_REQUIRE = re.compile(r"""\brequire\s*=\s*\{([^}]*)\}""")
-_QUOTED = re.compile(r"""["']([\w.\- ]{1,80})["']""")
 _HOOK_ORIGIN = re.compile(r"""\bhook_origin\(\s*(?:["']([\w.]+)["']|([\w.]+))\s*,\s*["']([\w.:]+)["']""")
 RISKY_PATTERNS = {
     "os.execute": re.compile(r"\bos\.execute\b"),
@@ -31,8 +28,6 @@ EXECUTABLE_EXTS = {".dll", ".exe", ".bat", ".cmd", ".ps1", ".vbs", ".scr", ".msi
 class ModInfo:
     folder: str
     names: set[str] = field(default_factory=set)  # what new_mod(...) registers
-    references: set[str] = field(default_factory=set)  # get_mod("x"): other mods this one looks up
-    requires: set[str] = field(default_factory=set)  # require = {"x"} when a mod declares it
     hook_origins: set[str] = field(default_factory=set)  # "Class:method" targets it replaces outright
     risky: dict[str, list[str]] = field(default_factory=dict)  # pattern -> files
     executables: list[str] = field(default_factory=list)
@@ -70,14 +65,10 @@ def analyze_mod(path: Path) -> ModInfo:
         except OSError:
             continue
         info.names.update(m.group(1) for m in _NEW_MOD.finditer(text))
-        info.references.update(m.group(1) for m in _GET_MOD.finditer(text))
-        for m in _REQUIRE.finditer(text):
-            info.requires.update(q.group(1) for q in _QUOTED.finditer(m.group(1)))
         for m in _HOOK_ORIGIN.finditer(text):
             info.hook_origins.add(f"{m.group(1) or m.group(2)}:{m.group(3)}")
         for label, rx in RISKY_PATTERNS.items():
             if rx.search(text):
                 info.risky.setdefault(label, []).append(rel)
-    info.references.discard(path.name)
-    info.names.discard(path.name)  # its own name is not a dependency
+    info.names.discard(path.name)
     return info
