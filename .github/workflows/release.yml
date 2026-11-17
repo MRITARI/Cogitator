@@ -1,0 +1,70 @@
+name: Release
+
+# Runs only when a version tag is pushed (git tag v0.2.3 && git push origin v0.2.3), never on ordinary pushes.
+on:
+  push:
+    tags: ["v[0-9]+.[0-9]+.[0-9]+*"]
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  release:
+    runs-on: windows-latest
+    # Optional: create a GitHub Environment named "release" with required reviewers to approve each release by hand.
+    environment: release
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install
+        run: |
+          python -m pip install -e ".[dev]" "pyinstaller==6.22.3"
+
+      - name: Test
+        run: python -m pytest -q
+
+      - name: Build programs
+        run: powershell -NoProfile -ExecutionPolicy Bypass -File packaging\build_exe.ps1
+
+      - name: Make sure Inno Setup is present
+        shell: pwsh
+        run: |
+          $found = (Get-Command ISCC -ErrorAction SilentlyContinue) -or (Test-Path "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe")
+          if (-not $found) { choco install innosetup --no-progress -y }
+
+      - name: Build and sign release assets
+        shell: pwsh
+        env:
+          SIGNING_KEY: ${{ secrets.COGITATOR_SIGNING_KEY }}
+        run: |
+          if (-not $env:SIGNING_KEY) { throw "Secret COGITATOR_SIGNING_KEY is not set" }
+          $keyFile = Join-Path $env:RUNNER_TEMP "cogitator-signing.key"
+          Set-Content -Path $keyFile -Value $env:SIGNING_KEY -NoNewline -Encoding ascii
+          try {
+            $version = "${{ github.ref_name }}".TrimStart("v")
+            python packaging\release.py --version $version --key $keyFile --no-build
+          } finally {
+            Remove-Item $keyFile -Force -ErrorAction SilentlyContinue
+          }
+
+      - name: Verify the signature with the public key in the README
+        shell: pwsh
+        run: |
+          python -c "import base64; from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PublicKey as K; K.from_public_bytes(bytes.fromhex('e2d621da43aa9b6cae3d0dde71e65b69bc77cccbf12fb93ba8cbdabf7bb664ce')).verify(base64.b64decode(open('release/SHA256SUMS.sig','rb').read()), open('release/SHA256SUMS','rb').read()); print('signature OK')"
+
+      - name: Publish GitHub release
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $prerelease = if ("${{ github.ref_name }}" -match "-") { "--prerelease" } else { "" }
+          gh release create "${{ github.ref_name }}" release/* --title "Cogitator ${{ github.ref_name }}" --generate-notes $prerelease
