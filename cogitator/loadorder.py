@@ -1,11 +1,12 @@
 """Parse and edit mod_load_order.txt without disturbing anything but the touched line.
 
-Line grammar (a heuristic, not DML's own parser):
+Line grammar. The Mod Loader itself takes each trimmed line that does not start with '--' as ONE mod name, spaces
+included (read_content_to_table in its mod_loader file), so a name may contain spaces:
   blank / whitespace-only        -> blank
   '--' + (end | whitespace | '-') -> comment        e.g. '-- notes', '--- header'
-  '--' + token                    -> DISABLED mod   e.g. '--my_mod'
-  '#...'                          -> comment
-  token [anything]                -> ENABLED mod; text after the first token is preserved"""
+  '--' + name                     -> DISABLED mod   e.g. '--my_mod', '--My Mod'
+  '#...'                          -> comment (Cogitator's own convention; the loader would read it as a name)
+  name [ -- note]                 -> ENABLED mod; a trailing ' -- note' is kept but is not part of the name"""
 from __future__ import annotations
 
 import re
@@ -18,6 +19,7 @@ LOAD_ORDER_NAME = "mod_load_order.txt"
 BACKUP_SUFFIX = ".cogitator.bak"
 
 _EOL = re.compile(r"(\r\n|\n|\r)")
+_NOTE = re.compile(r"\s+--")  # start of a trailing note; everything before it is the mod name
 _backed_up: set[str] = set()  # paths backed up during this process ("first write of each run")
 
 
@@ -36,10 +38,10 @@ class Line:
             rest = s[2:]
             if not rest or rest[0].isspace() or rest[0] == "-":
                 return "comment", None, None
-            return "mod", rest.split()[0], False
+            return "mod", _NOTE.split(rest, 1)[0].strip(), False
         if s.startswith("#"):
             return "comment", None, None
-        return "mod", s.split()[0], True
+        return "mod", _NOTE.split(s, 1)[0].strip(), True
 
     @property
     def name(self) -> str | None:

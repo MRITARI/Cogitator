@@ -184,3 +184,59 @@ class DoctorScreen(_Base):
 
     def action_close(self) -> None:
         self.dismiss(None)
+
+
+class MenuScreen(ModalScreen):
+    """A small pop-up menu anchored at a screen position (right-click menu, top-left Menu button).
+
+    `items` is a list of (label, action_id, enabled); an item of None draws a separator. Dismisses with the chosen
+    action_id, or None (Esc, or a click anywhere outside the menu)."""
+
+    BINDINGS = [Binding("escape", "cancel", "Close")]
+    DEFAULT_CSS = """
+    MenuScreen { background: transparent; align: left top; }
+    MenuScreen > OptionList { height: auto; background: $panel; border: round $primary; padding: 0; }
+    MenuScreen > OptionList > .option-list--option-disabled { color: $text-muted; text-style: italic; }
+    """
+
+    def __init__(self, items: list, x: int = 0, y: int = 0, title: str = ""):
+        super().__init__()
+        self._items, self._x, self._y, self._title = items, x, y, title
+
+    def compose(self) -> ComposeResult:
+        opts = []
+        for it in self._items:
+            if it is None:
+                opts.append(None)
+            else:
+                label, aid, enabled = it
+                opts.append(Option(label, id=aid, disabled=not enabled))
+        ol = OptionList(*opts, id="menu")
+        if self._title:
+            ol.border_title = self._title
+        yield ol
+
+    def on_mount(self) -> None:
+        ol = self.query_one(OptionList)
+        labels = [it[0] for it in self._items if it]
+        width = min(max([len(s) for s in labels] + [len(self._title) + 2, 16]) + 6, max(20, self.app.size.width - 2))
+        height = len(self._items) + 2
+        ol.styles.width = width
+        ol.styles.offset = (max(0, min(self._x, self.app.size.width - width)),
+                            max(0, min(self._y, self.app.size.height - height)))
+        first = next((i for i, it in enumerate(self._items) if it and it[2]), None)
+        if first is not None:
+            ol.highlighted = first
+        ol.focus()
+
+    def on_option_list_option_selected(self, event: OptionList.OptionSelected) -> None:
+        event.stop()
+        self.dismiss(event.option.id)
+
+    def on_mouse_down(self, event) -> None:
+        if self.get_widget_at(event.screen_x, event.screen_y)[0] is self:  # a click outside the menu closes it
+            event.stop()
+            self.dismiss(None)
+
+    def action_cancel(self) -> None:
+        self.dismiss(None)

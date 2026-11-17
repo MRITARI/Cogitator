@@ -17,7 +17,7 @@ class Glyphs:
     ascii: bool
 
 
-UNICODE = Glyphs("✔", "✖", "·", "→", "…", tuple("⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏"), False)
+UNICODE = Glyphs("✓", "✗", "·", "→", "…", tuple("⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏"), False)
 ASCII = Glyphs("[x]", "[ ]", ".", "->", "...", ("|", "/", "-", "\\"), True)
 
 

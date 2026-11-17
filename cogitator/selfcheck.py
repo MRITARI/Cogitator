@@ -40,7 +40,7 @@ def run() -> int:
     def rich_unicode():
         from rich.cells import cell_len
 
-        return f"cell_len(U+2714)={cell_len(chr(0x2714))}"  # ASCII only: consoles may be cp1252
+        return f"cell_len(U+2713)={cell_len(chr(0x2713))}"  # ASCII only: consoles may be cp1252
 
     def tls():
         import httpx
