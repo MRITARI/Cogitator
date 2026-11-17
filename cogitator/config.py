@@ -96,6 +96,7 @@ class Settings:
     notice_accepted: bool = False
     theme: str = "tokyo-night"  # colours; changed from the Menu (Theme...)
     snapshot_keep: int = 20  # how many snapshots of the mod setup are kept
+    auto_repair: str = "ask"  # off | ask | auto: what to do when a game update switched the mods off
 
     @classmethod
     def path(cls) -> Path:
@@ -133,6 +134,8 @@ class Settings:
             s.update_mode = "notify"  # older versions wrote "download" by default; downloading needs an explicit yes
         if s.update_channel not in UPDATE_CHANNELS:
             s.update_channel = "stable"
+        if s.auto_repair not in ("off", "ask", "auto"):
+            s.auto_repair = "ask"
         if s.update_check_hours < 1:
             s.update_check_hours = 24
         return s

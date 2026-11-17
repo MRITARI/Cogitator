@@ -36,7 +36,8 @@ class TableMixin:
         t = self.query_one("#mods", DataTable)
         t.clear()
         for m in self.mods:
-            self._add_row(t, m)
+            if self._visible(m) or m.folder == keep:
+                self._add_row(t, m)
         if keep:
             try:
                 t.move_cursor(row=t.get_row_index(keep))
@@ -50,7 +51,7 @@ class TableMixin:
 
     def _add_row(self, t: DataTable, m: Mod) -> None:
         r = self.urows.get(m.folder)
-        t.add_row(enabled_cell(m, self.glyphs), mod_cell(m), self._installed_cell(m.folder, r),
+        t.add_row(enabled_cell(m, self.glyphs), self._mod_cell(m), self._installed_cell(m.folder, r),
                   Text((r.latest if r else None) or "-"), status_text(r, self.glyphs, m), key=m.folder)
 
     def _fit_columns(self) -> None:
@@ -92,7 +93,7 @@ class TableMixin:
 
     def _update_hint(self) -> None:
         f = self.selected()
-        self.query_one("#hint", Static).update(hint_for(self._mod(f), self.urows.get(f)) if f else EMPTY_STATE)
+        self.query_one("#hint", Static).update(hint_for(self._mod(f), self.urows.get(f)) + self._meta_hint(f) if f else EMPTY_STATE)
 
     def on_data_table_row_highlighted(self, event: DataTable.RowHighlighted) -> None:
         self._update_hint()
@@ -123,7 +124,7 @@ class TableMixin:
             return
         try:
             t.update_cell(folder, "en", enabled_cell(m, self.glyphs))
-            t.update_cell(folder, "mod", mod_cell(m))
+            t.update_cell(folder, "mod", self._mod_cell(m))
         except Exception:
             self.refresh_all(keep=folder)
         self._update_hint()
@@ -169,6 +170,10 @@ class TableMixin:
                  ("Nexus API key...   K", "set_key", True),
                  ("Doctor (diagnose problems)   D", "doctor", True),
                  ("Profiles...   P", "profiles", have_game),
+                 ("Launch Darktide   G", "launch", have_game),
+                 ("Crash-log leads   C", "crashlog", have_game),
+                 ("Find a crashing mod (bisect)...", "bisect", have_game),
+                 ("Filter the list   /", "filter", have_game),
                  ("Sort the list   O", "cycle_sort", have_game),
                  ("Theme (colours)...", "choose_theme", True)]
         if upd:
@@ -212,6 +217,13 @@ class TableMixin:
                  ("Open Nexus page" if linked else "Link to Nexus...", "open_page" if linked else "link", m.present),
                  ("Open folder in Explorer" if sys.platform == "win32" else "Open folder", "open_folder", m.present), None,
                  ("Remove...", "remove", True)]
+        meta = self._meta(f)
+        extra = [("Unmark" if f in self.marked else "Mark for bulk actions", "toggle_mark", True),
+                 ("Remove favourite" if meta.get("fav") else "Favourite", "toggle_fav", True),
+                 ("Tags and note...", "edit_note", True)]
+        if linked:
+            extra += [("Show changelog", "changelog", True), ("Unpin version" if meta.get("pinned_version") else "Pin version", "pin", True)]
+        items[len(items) - 2:len(items) - 2] = extra + [None]
         if (self.registry.mod(f) or {}).get("previous"):
             items.insert(len(items) - 2, ("Roll back last update", "rollback", m.present))
         self._open_menu(items, msg.x, msg.y, f, lambda aid, f=f: self._mod_menu_action(f, aid))
@@ -226,6 +238,12 @@ class TableMixin:
             row = self.urows.get(folder)
             if row is not None and row.nexus_id:
                 self.log_line(f"Opened {open_files_page(row.nexus_id)}", "cyan")
+        elif aid == "changelog":
+            self._show_changelog(folder)
+        elif aid == "pin":
+            self._toggle_pin(folder)
+        elif aid in ("toggle_mark", "toggle_fav", "edit_note"):
+            getattr(self, f"action_{aid}")()
         elif aid == "rollback":
             self._bg(self._job_rollback, folder, name="roll back", group="install", exclusive=True)
         elif aid == "remove":

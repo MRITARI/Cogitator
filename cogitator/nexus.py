@@ -217,6 +217,16 @@ class NexusClient:
     def files(self, mod_id: int) -> list[NexusFile]:
         return parse_files(self.get(f"/games/{GAME}/mods/{mod_id}/files.json"))
 
+    def changelogs(self, mod_id: int) -> dict[str, list[str]]:
+        """{version: [change lines]} from the mod's changelog; {} when it has none or the reply is odd."""
+        d = self.get(f"/games/{GAME}/mods/{mod_id}/changelogs.json")
+        out: dict[str, list[str]] = {}
+        if isinstance(d, dict):
+            for v, lines in list(d.items())[:300]:
+                if isinstance(v, str) and isinstance(lines, list):
+                    out[v[:40]] = [str(x)[:500] for x in lines[:60] if isinstance(x, (str, int, float))]
+        return out
+
     def search_mods(self, name: str, count: int = 10) -> list[dict]:
         """Name search through the v2 GraphQL endpoint (v1 has none). Returns [{"mod_id", "name"}]; [] on any odd reply."""
         if self.exhausted:

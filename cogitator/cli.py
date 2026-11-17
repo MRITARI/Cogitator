@@ -99,6 +99,17 @@ def build_parser() -> argparse.ArgumentParser:
     dr.add_argument("--json", action="store_true")
     dr.add_argument("--offline", action="store_true", help="skip the Nexus and GitHub network checks")
     dr.add_argument("--history", nargs="?", type=int, const=20, metavar="N", help="show the last N doctor results instead of running it")
+    la = sub.add_parser("launch", help="check, then start Darktide through Steam")
+    la.add_argument("--profile", help="switch to this profile first")
+    la.add_argument("--vanilla", action="store_true", help="turn mods off for this launch (press T / run toggle to restore)")
+    la.add_argument("--force", action="store_true", help="launch even if the doctor reports failures")
+    bs = sub.add_parser("bisect", help="find the mod causing a crash by halving the enabled mods")
+    bs.add_argument("action", choices=["start", "good", "bad", "status", "reset"])
+    cr = sub.add_parser("crashlog", help="read the newest game console log and rank the mods most likely at fault")
+    cr.add_argument("--json", action="store_true")
+    ch = sub.add_parser("changelog", help="show what changed in a linked mod on Nexus")
+    ch.add_argument("folder")
+    ch.add_argument("--all", action="store_true", help="every version, not just newer than yours")
     sub.add_parser("diag", help="write a redacted diagnostics zip to attach to a bug report (nothing is uploaded)")
     cf = sub.add_parser("conflicts", help="the signed known-conflicts list used by doctor")
     cf.add_argument("action", choices=["update", "show"])
@@ -115,8 +126,10 @@ def build_parser() -> argparse.ArgumentParser:
     pa.add_argument("action", choices=["add", "remove", "status"])
     pa.add_argument("--dir", help="folder to use instead of the one containing the running cogitator.exe")
     mod = sub.add_parser("mod", help="list, enable, disable, reorder or remove a mod")
-    mod.add_argument("action", choices=["list", "enable", "disable", "up", "down", "remove", "rollback", "rebaseline"])
-    mod.add_argument("folder", nargs="?")
+    mod.add_argument("action", choices=["list", "enable", "disable", "up", "down", "remove", "rollback", "rebaseline", "pin", "unpin", "note", "tag", "untag", "fav", "unfav", "link-dev"])
+    mod.add_argument("folder", nargs="?", help="mod folder (link-dev: the folder you develop in)")
+    mod.add_argument("rest", nargs="*", help="pin: version; note: the text; tag/untag: tags")
+    mod.add_argument("--name", help="link-dev: the mod folder name to create (default: the source folder's name)")
     mod.add_argument("--json", action="store_true", help="machine-readable output (list)")
     mod.add_argument("--all", action="store_true", help="rebaseline: every installed mod")
     mod.add_argument("--dry-run", action="store_true", help="remove: show the files that would go; change nothing")
@@ -124,7 +137,7 @@ def build_parser() -> argparse.ArgumentParser:
     return p
 
 
-_MUTATING = {"restore-database", "toggle", "mod", "snapshot", "profile", "link", "unlink", "import", "update", "install-framework", "uninstall-framework"}
+_MUTATING = {"restore-database", "toggle", "mod", "snapshot", "profile", "launch", "bisect", "link", "unlink", "import", "update", "install-framework", "uninstall-framework"}
 _LOCKS: list = []  # held until the process exits
 
 
@@ -134,7 +147,7 @@ def _resolve(args) -> Resolution:
     if res.game_dir and res.source in ("steam", "override") and str(res.game_dir) != s.game_dir:
         s.game_dir = str(res.game_dir)
         s.save()
-    if res.game_dir and getattr(args, "cmd", None) in _MUTATING and getattr(args, "action", None) not in ("list", "diff", "show", "export"):
+    if res.game_dir and getattr(args, "cmd", None) in _MUTATING and getattr(args, "action", None) not in ("list", "diff", "show", "export", "status"):
         try:  # the interface holds the same lock: two writers on registry.json / the load order would lose changes
             _LOCKS.append(InstanceLock(res.game_dir).acquire())
         except LockError as e:
@@ -266,12 +279,17 @@ def _mod_list(game_dir: Path, as_json: bool) -> int:
     reg = Registry.load()
     rows = [{"folder": m.folder, "state": m.state, "present": m.present, "order": m.order,
              "nexus_id": (reg.mod(m.folder) or {}).get("nexus_id"),
-             "version": (reg.mod(m.folder) or {}).get("installed_version")} for m in scan_mods(game_dir)]
+             "version": (reg.mod(m.folder) or {}).get("installed_version"),
+             "pinned": (reg.mod(m.folder) or {}).get("pinned_version"), "fav": bool((reg.mod(m.folder) or {}).get("fav")),
+             "tags": (reg.mod(m.folder) or {}).get("tags") or [], "notes": (reg.mod(m.folder) or {}).get("notes") or "",
+             "dev": bool((reg.mod(m.folder) or {}).get("dev"))} for m in scan_mods(game_dir)]
     if as_json:
         print(json.dumps(rows, indent=2))
     else:
         for r in rows:
-            print(f"{r['state']:<9} {r['folder']}{'' if r['present'] else '  (folder missing)'}")
+            extra = "".join([" *" if r["fav"] else "", f" [pinned {r['pinned']}]" if r["pinned"] else "", " [dev link]" if r["dev"] else "",
+                             f" #{' #'.join(r['tags'])}" if r["tags"] else ""])
+            print(f"{r['state']:<9} {r['folder']}{'' if r['present'] else '  (folder missing)'}{extra}")
     return 0
 
 
@@ -285,8 +303,14 @@ def _mod_remove(game_dir: Path, args) -> int:
     from .mods import remove_mod
     from .procs import darktide_running
 
-    files = _mod_files(game_dir, args.folder)
-    print(f"Remove '{args.folder}' ({len(files)} file(s)):")
+    from .fsutil import is_link
+
+    dev = is_link(mods_dir(game_dir) / args.folder)
+    files = [] if dev else _mod_files(game_dir, args.folder)
+    if dev:
+        print(f"'{args.folder}' is a dev link: only the link is removed; your source folder is not touched.")
+    else:
+        print(f"Remove '{args.folder}' ({len(files)} file(s)):")
     for f in files[:50]:
         print(f"  {f}")
     if len(files) > 50:
@@ -307,7 +331,44 @@ def _mod_remove(game_dir: Path, args) -> int:
 
     integrity.forget(args.folder)
     reg.forget_mod(args.folder)
-    print(f"Removed. Moved to {dest}")
+    print("Link removed." if dev else f"Removed. Moved to {dest}")
+    return 0
+
+
+def _mod_meta(game_dir: Path, args) -> int:
+    """pin / unpin / note / tag / untag / fav / unfav: small per-mod records kept in the registry."""
+    if not args.folder:
+        print(f"'mod {args.action}' needs a folder name.", file=sys.stderr)
+        return 2
+    if not (mods_dir(game_dir) / args.folder).is_dir():
+        print(f"No folder '{args.folder}' in {mods_dir(game_dir)}.", file=sys.stderr)
+        return 2
+    reg = Registry.load()
+    rec = reg.mod(args.folder) or {}
+    a, rest = args.action, [r for r in (args.rest or []) if r.strip()]
+    if a == "pin":
+        v = rest[0] if rest else (rec.get("installed_version") or "the installed version")
+        reg.set_mod(args.folder, pinned_version=str(v)[:40])
+        print(f"{args.folder}: pinned to {v}. Updates are skipped until you run 'mod unpin {args.folder}'.")
+    elif a == "unpin":
+        reg.set_mod(args.folder, pinned_version=None)
+        print(f"{args.folder}: unpinned.")
+    elif a == "note":
+        reg.set_mod(args.folder, notes=" ".join(rest)[:500])
+        print(f"{args.folder}: note " + ("saved." if rest else "cleared."))
+    elif a in ("tag", "untag"):
+        tags = [t for t in rec.get("tags") or [] if isinstance(t, str)]
+        for t in rest:
+            t = t.strip().lower()[:30]
+            if a == "tag" and t not in tags:
+                tags.append(t)
+            if a == "untag" and t in tags:
+                tags.remove(t)
+        reg.set_mod(args.folder, tags=tags)
+        print(f"{args.folder}: tags = {', '.join(tags) or '(none)'}")
+    else:
+        reg.set_mod(args.folder, fav=(a == "fav"))
+        print(f"{args.folder}: {'marked as a favourite' if a == 'fav' else 'no longer a favourite'}.")
     return 0
 
 
@@ -491,6 +552,22 @@ def cmd_mod(args) -> int:
         return 2
     if args.action == "list":
         return _mod_list(res.game_dir, args.json)
+    if args.action == "link-dev":
+        from .mods import link_dev_mod
+
+        if not args.folder:
+            print("Give the folder you develop in.", file=sys.stderr)
+            return 2
+        try:
+            name = link_dev_mod(res.game_dir, Path(args.folder), args.name)
+        except ModError as e:
+            print(str(e), file=sys.stderr)
+            return 2
+        Registry.load().set_mod(name, dev=True, dev_source=str(Path(args.folder).resolve()))
+        print(f"{name}: linked to {Path(args.folder).resolve()} and enabled. Removing it later only removes the link.")
+        return 0
+    if args.action in ("pin", "unpin", "note", "tag", "untag", "fav", "unfav"):
+        return _mod_meta(res.game_dir, args)
     if args.action == "rebaseline":
         from . import integrity
 
@@ -576,6 +653,122 @@ def cmd_check_updates(args) -> int:
         print("No Nexus API key set. Run `cogitator set-key` (or set COGITATOR_NEXUS_KEY).", file=sys.stderr)
         return 2
     return 1 if (bad or upd or r.rate_limited) else 0
+
+
+def _version_key(v: str) -> tuple:
+    import re
+
+    return tuple(int(x) if x.isdigit() else x for x in re.split(r"[.\-_ ]+", v.strip().lstrip("vV")) if x)
+
+
+def _newer(versions: list[str], installed: str | None) -> list[str]:
+    ordered = sorted(versions, key=_version_key, reverse=True)
+    if not installed:
+        return ordered[:3]
+    try:
+        return [v for v in ordered if _version_key(v) > _version_key(installed)] or ordered[:1]
+    except TypeError:  # mixed number/text parts that cannot be compared
+        return ordered[:3]
+
+
+def _print_changelog(nx: NexusClient, mod_id: int, installed: str | None, everything: bool = False) -> bool:
+    log = nx.changelogs(mod_id)
+    if not log:
+        print("(No changelog published on Nexus for this mod.)")
+        return False
+    for v in (sorted(log, key=_version_key, reverse=True) if everything else _newer(list(log), installed)):
+        print(f"  v{v}")
+        for line in log[v]:
+            print(f"    - {line}")
+    return True
+
+
+def cmd_changelog(args) -> int:
+    res = _resolve(args)
+    if not res.game_dir:
+        print(res.message or "Game not found.", file=sys.stderr)
+        return 2
+    rec = Registry.load().mod(args.folder) or {}
+    if not rec.get("nexus_id"):
+        print(f"'{args.folder}' is not linked to Nexus (see 'link').", file=sys.stderr)
+        return 2
+    key = get_api_key()
+    if not key:
+        print("A Nexus API key is needed (run 'set-key').", file=sys.stderr)
+        return 2
+    try:
+        with NexusClient(key) as nx:
+            print(f"Changelog for {rec.get('name') or args.folder} (installed: {rec.get('installed_version') or 'unknown'})")
+            _print_changelog(nx, int(rec["nexus_id"]), rec.get("installed_version"), args.all)
+    except NexusError as e:
+        print(str(e), file=sys.stderr)
+        return 2
+    return 0
+
+
+def cmd_launch(args) -> int:
+    from .launch import LaunchError, launch
+
+    res = _resolve(args)
+    if not res.game_dir:
+        print(res.message or "Game not found.", file=sys.stderr)
+        return 2
+    try:
+        r = launch(res.game_dir, Registry.load(), profile=args.profile, vanilla=args.vanilla, force=args.force)
+    except (LaunchError, ModError) as e:
+        print(str(e), file=sys.stderr)
+        return 2
+    for n in r.notes:
+        print(n)
+    print("Asked Steam to start Darktide.")
+    return 0
+
+
+def cmd_bisect(args) -> int:
+    from . import bisect
+
+    res = _resolve(args)
+    if not res.game_dir:
+        print(res.message or "Game not found.", file=sys.stderr)
+        return 2
+    try:
+        if args.action == "start":
+            print("Make sure the problem happens with all your enabled mods on. A snapshot is taken; 'bisect reset' restores it.")
+            s = bisect.start(res.game_dir, Registry.load())
+        elif args.action in ("good", "bad"):
+            s = bisect.answer(res.game_dir, still_broken=args.action == "bad")
+        elif args.action == "status":
+            s = bisect.load()
+            if not s:
+                print("No bisect session is running.")
+                return 0
+        else:
+            print("\n".join(bisect.reset(res.game_dir, Registry.load())))
+            return 0
+    except ModError as e:
+        print(str(e), file=sys.stderr)
+        return 2
+    print(bisect.describe(s))
+    return 0
+
+
+def cmd_crashlog(args) -> int:
+    from . import crashlog, gamefinder
+    from .doctor import console_log_dirs
+    from .loadorder import LoadOrder
+    from .mods import load_order_path
+
+    res = _resolve(args)
+    log = crashlog.newest_log(console_log_dirs(gamefinder.steam_roots()))
+    installed = {m.folder for m in scan_mods(res.game_dir)} if res.game_dir else None
+    rep = crashlog.analyze(log, installed) if log else crashlog.CrashReport()
+    if args.json:
+        print(json.dumps({"log": str(rep.log) if rep.log else None, "suspects": rep.suspects, "error_lines": rep.error_lines,
+                          "last_loaded": rep.last_loaded}, indent=2))
+        return 0
+    lo = LoadOrder.load(load_order_path(res.game_dir)).entries() if res.game_dir else []
+    print("\n".join(crashlog.format_report(rep, lo)))
+    return 0
 
 
 def cmd_diag(args) -> int:
@@ -1069,6 +1262,14 @@ def _dispatch(args) -> int:
         return cmd_install_framework(args)
     if args.cmd == "profile":
         return cmd_profile(args)
+    if args.cmd == "launch":
+        return cmd_launch(args)
+    if args.cmd == "bisect":
+        return cmd_bisect(args)
+    if args.cmd == "crashlog":
+        return cmd_crashlog(args)
+    if args.cmd == "changelog":
+        return cmd_changelog(args)
     if args.cmd == "diag":
         return cmd_diag(args)
     if args.cmd == "conflicts":

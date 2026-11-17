@@ -4,6 +4,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from pathlib import Path
 
+from .fsutil import is_link, make_dir_link, unlink_link
 from .loadorder import LOAD_ORDER_NAME, LoadOrder
 
 # Folders owned by the Mod Loader (mods/base) and the Mod Framework (mods/dmf); never treated as user mods.
@@ -122,6 +123,32 @@ def move_mod(game_dir: Path, folder: str, delta: int, internal: frozenset[str] |
     return f"{folder}: moved {'down, after' if delta > 0 else 'up, before'} {neighbour}."
 
 
+def link_dev_mod(game_dir: Path, source: Path, name: str | None = None) -> str:
+    """Make <game>/mods/<name> a link to a folder you develop in, and enable it. Returns the mod folder name."""
+    source = Path(source).resolve()
+    if not source.is_dir():
+        raise ModError(f"Not a folder: {source}")
+    name = name or source.name
+    why = bad_folder_name(name)
+    if why:
+        raise ModError(why)
+    if name in INTERNAL_FOLDERS:
+        raise ModError(f"'{name}' is reserved for the mod loader/framework.")
+    if not mods_dir(game_dir).is_dir():
+        raise ModError("mods/ not found - install the Mod Loader first.")
+    if not (source / f"{name}.mod").is_file():
+        raise ModError(f"{source} has no {name}.mod, so the game would not load it. Name the link with --name if the .mod file is called differently.")
+    dest = mods_dir(game_dir) / name
+    if dest.exists() or is_link(dest):
+        raise ModError(f"'{name}' already exists in {mods_dir(game_dir)}. Remove it first.")
+    try:
+        make_dir_link(dest, source)
+    except OSError as e:
+        raise ModError(f"Could not create the link: {e}") from None
+    set_mod_enabled(game_dir, name, True)
+    return name
+
+
 def remove_mod(game_dir: Path, folder: str, trash_dir: Path, internal: frozenset[str] | set[str] | None = None) -> Path:
     """Take a mod out of the game: its folder is MOVED (not deleted) into `trash_dir` and its load-order lines are
     removed. Returns where the folder went. Raises ModError."""
@@ -138,6 +165,11 @@ def remove_mod(game_dir: Path, folder: str, trash_dir: Path, internal: frozenset
     path = load_order_path(game_dir)
     lo = LoadOrder.load(path)
     dest = None
+    if is_link(src):  # a dev link: drop the link, never move or copy what it points at
+        unlink_link(src)
+        if lo.remove(folder):
+            lo.save(path)
+        return trash_dir
     if src.is_dir():
         trash_dir.mkdir(parents=True, exist_ok=True)
         dest = trash_dir / f"{folder}-{time.strftime('%Y%m%d-%H%M%S')}"

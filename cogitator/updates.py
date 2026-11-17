@@ -21,6 +21,7 @@ log = logging.getLogger(__name__)
 FRAMEWORK_MODS = {"dml": 19, "dmf": 8}
 UP_TO_DATE, UPDATE, UNKNOWN, FAILED, NOT_LINKED = "up to date", "update available", "unknown", "check failed", "not linked"
 PROBABLY_UP_TO_DATE, PROBABLY_OUTDATED = "probably up to date", "probably outdated"  # baseline only guessed
+PINNED = "pinned"  # the user chose to stay on this version
 FULL_CHECK_AFTER_S = 30 * 86400
 
 
@@ -47,7 +48,15 @@ def decide(installed_version: str | None, installed_file_id: int | None, latest:
 
 
 def decide_mod(rec: dict | None) -> tuple[str, str]:
-    """Status for one mod from its registry record + cached latest. Pure; no network."""
+    """Status for one mod from its registry record + cached latest. Pure; no network. A pinned mod never shows an update."""
+    status, reason = _decide_mod(rec)
+    pin = (rec or {}).get("pinned_version")
+    if pin and status in (UPDATE, PROBABLY_OUTDATED):
+        return PINNED, f"pinned to {pin}; skipped {reason}"
+    return status, reason
+
+
+def _decide_mod(rec: dict | None) -> tuple[str, str]:
     if not rec or not rec.get("nexus_id"):
         return NOT_LINKED, "press L to link this mod to its Nexus page"
     latest = rec.get("latest")

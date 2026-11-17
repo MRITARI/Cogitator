@@ -32,6 +32,29 @@ def atomic_write_text(path: Path, text: str, mode: int | None = None, newline: s
     atomic_write_bytes(path, data, mode)
 
 
+def unlink_link(p) -> None:
+    """Remove a symlink or junction itself. Never follows it and never deletes what it points at."""
+    import os
+
+    if os.path.islink(p):
+        os.unlink(p)
+    else:
+        os.rmdir(p)  # a junction: rmdir removes the link only (it fails if given a real, non-empty folder)
+
+
+def make_dir_link(link, target) -> None:
+    """Directory junction on Windows (no admin rights needed), symlink elsewhere."""
+    import os
+    import subprocess
+
+    if os.name == "nt":
+        r = subprocess.run(["cmd", "/c", "mklink", "/J", str(link), str(target)], capture_output=True, text=True)
+        if r.returncode != 0:
+            raise OSError((r.stderr or r.stdout).strip() or "mklink failed")
+    else:
+        os.symlink(target, link, target_is_directory=True)
+
+
 def is_link(p) -> bool:
     """True for a symlink or a Windows junction/reparse point (never followed when copying, hashing or deleting)."""
     import os

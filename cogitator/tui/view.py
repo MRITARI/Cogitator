@@ -39,6 +39,9 @@ HELP_BODY = (
     "T  mods on/off (the game patch)\n"
     "Space  enable/disable the selected mod\n"
     "P  profiles: switch, save, share a setup code\n"
+    "X  mark a mod, B  act on the marked mods (enable, disable, update, tag, remove)\n"
+    "N  tags and note, *  favourite, /  filter the list\n"
+    "G  launch Darktide, C  crash-log leads (menu: find a crashing mod)\n"
     "Shift+Up/Down or [ ]  move in the load order\n"
     "O  sort    U  update selected    Ctrl+U  update all\n"
     "F  update Mod Loader/Framework    R  re-check\n"
@@ -55,7 +58,8 @@ HELP_BODY = (
     "Not affiliated with Fatshark, Games Workshop or Nexus Mods.")
 
 _MAIN_ACTIONS = {"help", "app_menu", "choose_theme", "link_all", "toggle_mods", "toggle_mod", "move_up", "move_down", "update_selected", "update_all", "recheck", "link", "import_archive",
-                 "set_key", "cycle_sort", "quit_app", "framework_update", "doctor", "apply_update", "profiles"}
+                 "set_key", "cycle_sort", "quit_app", "framework_update", "doctor", "apply_update", "profiles", "toggle_mark", "bulk",
+                 "launch", "edit_note", "toggle_fav", "filter", "crashlog", "bisect"}
 SORT_COLUMNS = ("mod", "status", "installed", "latest", "en")
 DEFAULT_THEME = "tokyo-night"
 COGITATOR_THEMES = (
@@ -110,7 +114,7 @@ def mod_cell(mod: Mod) -> Text:
 
 
 _STATUS_STYLE = {UP_TO_DATE: "green", UPDATE: "bold yellow", UNKNOWN: "dim", FAILED: "bold red", NOT_LINKED: "dim",
-                 PROBABLY_UP_TO_DATE: "green", PROBABLY_OUTDATED: "bold yellow"}
+                 PROBABLY_UP_TO_DATE: "green", PROBABLY_OUTDATED: "bold yellow", "pinned": "cyan"}
 BASELINE_UNKNOWN_LABEL = "version unknown - press L to set it"
 
 

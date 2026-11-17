@@ -69,6 +69,7 @@ from .selfupdate_mixin import SelfUpdateMixin
 from .table_mixin import TableMixin
 from .framework_mixin import FrameworkMixin
 from .profile_mixin import ProfileMixin
+from .workflow_mixin import WorkflowMixin
 
 
 
@@ -101,7 +102,7 @@ def pick_files(initial: Path | None = None) -> list[Path] | None:
 
 # ------------------------------------------------------------------ app
 
-class CogitatorApp(SelfUpdateMixin, TableMixin, FrameworkMixin, ProfileMixin, App):
+class CogitatorApp(SelfUpdateMixin, TableMixin, FrameworkMixin, ProfileMixin, WorkflowMixin, App):
     TITLE = "Cogitator"
     ENABLE_COMMAND_PALETTE = False  # keeps the footer for our keys
     CSS = """
@@ -159,6 +160,13 @@ class CogitatorApp(SelfUpdateMixin, TableMixin, FrameworkMixin, ProfileMixin, Ap
         Binding("o", "cycle_sort", "Sort", key_display="O", show=False),
         Binding("p", "profiles", "Profiles", key_display="P", show=False),
         Binding("P", "profiles", show=False),
+        Binding("x,X", "toggle_mark", "Mark", key_display="X", show=False),
+        Binding("b,B", "bulk", "Bulk", key_display="B", show=False),
+        Binding("g,G", "launch", "Launch", key_display="G", show=False),
+        Binding("n,N", "edit_note", "Note", key_display="N", show=False),
+        Binding("asterisk", "toggle_fav", "Favourite", key_display="*", show=False),
+        Binding("slash", "filter", "Filter", key_display="/", show=False),
+        Binding("c,C", "crashlog", "Crash log", key_display="C", show=False),
         Binding("f10", "app_menu", "Menu", key_display="F10"),
     ]
 
@@ -172,6 +180,9 @@ class CogitatorApp(SelfUpdateMixin, TableMixin, FrameworkMixin, ProfileMixin, Ap
         self.game_dir: Path | None = None
         self.settings = Settings.load()
         self.registry: Registry | None = None
+        self.marked: set[str] = set()  # mods marked with X for a bulk action
+        self.filter_text = ""
+        self._last_patch_state: str | None = None
         self.glyphs: Glyphs = glyphs_for("utf-8", force_ascii=ascii_glyphs) if ascii_glyphs is not None else detect()
         self.mods: list[Mod] = []
         self.urows: dict[str, ModRow] = {}
@@ -224,6 +235,7 @@ class CogitatorApp(SelfUpdateMixin, TableMixin, FrameworkMixin, ProfileMixin, Ap
             self.register_theme(th)
         self.theme = self.settings.theme if self.settings.theme in self.available_themes else DEFAULT_THEME
         self.set_interval(0.15, self._tick)
+        self.set_interval(5.0, self._watch)
         self.log_line(f"Cogitator {__version__}   log file: {log_path()}   Press ? for help.", "dim")
         for bad in _config_recovered():
             self.log_line(f"Your settings file could not be read, so defaults are used. The old file was kept as {bad}.", "bold yellow")
@@ -474,6 +486,9 @@ class CogitatorApp(SelfUpdateMixin, TableMixin, FrameworkMixin, ProfileMixin, Ap
         else:
             src = "cache" if not b.live else f"{b.requests} request(s)"
             self.log_line(f"Update check done ({src}): {n} update(s) available.", "green" if not n else "bold yellow")
+        if n and b.live:
+            self.notify(f"{n} update(s) available. Press U to update the selected mod or Ctrl+U for all.", title="Updates",
+                        severity="information", timeout=10)
         self.refresh_header()
         self._update_hint()
 
