@@ -18,7 +18,7 @@ from .fwupdate import install_framework_plan
 from .uninstall import UninstallPlan, uninstall_framework
 from .gamefinder import Resolution, resolve_game_dir
 from .loader import NEXUS_PAGES, LoaderError, make_client
-from .mods import ModError, scan_mods, set_mod_enabled
+from .mods import ModError, move_mod, scan_mods, set_mod_enabled
 from .nexus import NexusClient, NexusError
 from .patcher import ON, PatcherError, banner, patch_state
 from .patcher import toggle as toggle_mods
@@ -92,9 +92,12 @@ def build_parser() -> argparse.ArgumentParser:
     pa = sub.add_parser("path", help="add/remove the folder of this cogitator.exe in your user PATH (no admin)")
     pa.add_argument("action", choices=["add", "remove", "status"])
     pa.add_argument("--dir", help="folder to use instead of the one containing the running cogitator.exe")
-    mod = sub.add_parser("mod", help="enable/disable a mod")
-    mod.add_argument("action", choices=["enable", "disable"])
-    mod.add_argument("folder")
+    mod = sub.add_parser("mod", help="list, enable, disable, reorder or remove a mod")
+    mod.add_argument("action", choices=["list", "enable", "disable", "up", "down", "remove"])
+    mod.add_argument("folder", nargs="?")
+    mod.add_argument("--json", action="store_true", help="machine-readable output (list)")
+    mod.add_argument("--dry-run", action="store_true", help="remove: show the files that would go; change nothing")
+    mod.add_argument("--yes", "-y", action="store_true", help="remove: confirm without prompting")
     return p
 
 
@@ -108,7 +111,7 @@ def _resolve(args) -> Resolution:
     if res.game_dir and res.source in ("steam", "override") and str(res.game_dir) != s.game_dir:
         s.game_dir = str(res.game_dir)
         s.save()
-    if res.game_dir and getattr(args, "cmd", None) in _MUTATING:
+    if res.game_dir and getattr(args, "cmd", None) in _MUTATING and getattr(args, "action", None) != "list":
         try:  # the interface holds the same lock: two writers on registry.json / the load order would lose changes
             _LOCKS.append(InstanceLock(res.game_dir).acquire())
         except LockError as e:
@@ -236,13 +239,68 @@ def cmd_verify_download(args) -> int:
     return 0
 
 
+def _mod_list(game_dir: Path, as_json: bool) -> int:
+    reg = Registry.load()
+    rows = [{"folder": m.folder, "state": m.state, "present": m.present, "order": m.order,
+             "nexus_id": (reg.mod(m.folder) or {}).get("nexus_id"),
+             "version": (reg.mod(m.folder) or {}).get("installed_version")} for m in scan_mods(game_dir)]
+    if as_json:
+        print(json.dumps(rows, indent=2))
+    else:
+        for r in rows:
+            print(f"{r['state']:<9} {r['folder']}{'' if r['present'] else '  (folder missing)'}")
+    return 0
+
+
+def _mod_files(game_dir: Path, folder: str) -> list[str]:
+    root = mods_dir(game_dir) / folder
+    return sorted(p.relative_to(root).as_posix() for p in root.rglob("*") if p.is_file()) if root.is_dir() else []
+
+
+def _mod_remove(game_dir: Path, args) -> int:
+    from .config import cache_dir
+    from .mods import remove_mod
+    from .procs import darktide_running
+
+    files = _mod_files(game_dir, args.folder)
+    print(f"Remove '{args.folder}' ({len(files)} file(s)):")
+    for f in files[:50]:
+        print(f"  {f}")
+    if len(files) > 50:
+        print(f"  ... and {len(files) - 50} more")
+    if args.dry_run:
+        print("Dry run: nothing changed.")
+        return 0
+    if darktide_running():
+        print("Darktide is running. Close the game first.", file=sys.stderr)
+        return 2
+    if not _confirm("The folder is moved to Cogitator's removed/ folder (not deleted). Continue?", args.yes):
+        print("Cancelled.")
+        return 2
+    dest = remove_mod(game_dir, args.folder, cache_dir() / "removed")
+    reg = Registry.load()
+    reg.forget_mod(args.folder)
+    print(f"Removed. Moved to {dest}")
+    return 0
+
+
 def cmd_mod(args) -> int:
     res = _resolve(args)
     if not res.game_dir:
         print(res.message or "Game not found.", file=sys.stderr)
         return 2
+    if args.action == "list":
+        return _mod_list(res.game_dir, args.json)
+    if not args.folder:
+        print(f"'mod {args.action}' needs a folder name.", file=sys.stderr)
+        return 2
     try:
-        print(set_mod_enabled(res.game_dir, args.folder, args.action == "enable"))
+        if args.action == "remove":
+            return _mod_remove(res.game_dir, args)
+        if args.action in ("up", "down"):
+            print(move_mod(res.game_dir, args.folder, -1 if args.action == "up" else 1))
+        else:
+            print(set_mod_enabled(res.game_dir, args.folder, args.action == "enable"))
     except ModError as e:
         print(str(e), file=sys.stderr)
         return 2

@@ -14,7 +14,6 @@ from typing import Callable
 
 from rich.text import Text
 from textual.app import App, ComposeResult
-from textual.theme import Theme
 from textual.binding import Binding
 from textual.containers import Horizontal, Vertical
 from textual.widgets import DataTable, RichLog, Static
@@ -22,204 +21,54 @@ from textual.worker import get_current_worker
 
 from .. import __version__
 from ..archives import parse_archive_name
-from ..config import InstanceLock, LockError, Settings, cache_dir, config_dir, get_api_key, log_path, redact, set_api_key
-from ..doctor import Check, exit_code as doctor_exit_code, run_doctor
-from ..frameworks import (describe_plan, detect_framework, plan_github, plan_local, classify_zip)
+from ..config import InstanceLock, LockError, Settings, config_dir, get_api_key, log_path, redact, set_api_key
+from ..frameworks import (describe_plan, plan_local, classify_zip)
 from ..fwupdate import install_framework_plan, needs_repatch
 from ..gamefinder import resolve_game_dir, validate_game_dir
 from ..glyphs import Glyphs, detect, glyphs_for
 from ..linking import apply_guess, choose_baseline, folder_mtime, link_mod, rank_candidates
-from ..loader import LoaderError, NEXUS_PAGES, make_client
-from ..modinstall import (AmbiguousArchive, ModImportError, NotPremium, apply_update_premium, fetch_premium_download,
-                          dropped_paths, import_archive, inspect_mod_zip, mod_page_url, newest_download, open_files_page,
+from ..loader import LoaderError
+from ..modinstall import (ModImportError, NotPremium, apply_update_premium, dropped_paths, import_archive, inspect_mod_zip, mod_page_url, newest_download, open_files_page,
                           wait_for_download)
-from ..mods import INTERNAL_FOLDERS, Mod, mods_dir, ENABLED, DISABLED, UNLISTED, scan_mods, toggle_mod, move_mod, remove_mod, ModError
+from ..mods import INTERNAL_FOLDERS, Mod, mods_dir, toggle_mod, move_mod, ModError
 from ..nexus import InvalidKey, NexusClient, NexusError, RateLimited, latest_main_file, parse_nexus_ref
-from ..patcher import ON, OFF, PatcherError, banner as patch_banner, default_runner, patch_state
+from ..patcher import ON, PatcherError, banner as patch_banner, default_runner, patch_state
 from ..patcher import toggle as toggle_mods
 from ..procs import darktide_running
 from ..registry import Registry
-from ..updates import (FRAMEWORK_MODS, CheckBundle, FrameworkUpdate, ModRow, UP_TO_DATE, UPDATE, UNKNOWN, FAILED, NOT_LINKED,
-                       PROBABLY_OUTDATED, PROBABLY_UP_TO_DATE,
-                       cached_frameworks, cached_rows, quota_text, run_checks)
-from .screens import ChoiceScreen, ConfirmScreen, DoctorScreen, InputScreen, MenuScreen, NoticeScreen
+from ..updates import (CheckBundle, FrameworkUpdate, ModRow, UPDATE, NOT_LINKED,
+                       PROBABLY_OUTDATED, cached_frameworks, quota_text, run_checks)
+from .screens import ChoiceScreen, ConfirmScreen, InputScreen, NoticeScreen
 from .widgets import ModTable, TitleButton
 
 log = logging.getLogger("cogitator.tui")
+from .view import (  # noqa: F401  (re-exported: tests and callers import these from here)
+    NOTICE_TITLE,
+    NOTICE_BODY,
+    EMPTY_STATE,
+    HELP_BODY,
+    _MAIN_ACTIONS,
+    SORT_COLUMNS,
+    DEFAULT_THEME,
+    COGITATOR_THEMES,
+    THEME_CHOICES,
+    ACTION_BUTTONS,
+    enabled_cell,
+    _where_text,
+    _config_recovered,
+    mod_cell,
+    _STATUS_STYLE,
+    BASELINE_UNKNOWN_LABEL,
+    installed_text,
+    status_text,
+    hint_for,
+    report_text,
+    fw_text,
+    nexus_text)
+from .selfupdate_mixin import SelfUpdateMixin
+from .table_mixin import TableMixin
+from .framework_mixin import FrameworkMixin
 
-NOTICE_TITLE = "Before you begin"
-NOTICE_BODY = (
-    "Darktide mods are NOT supported by Fatshark and are used at your own risk.\n\n"
-    "Mods run as Lua inside the game with the game's account permissions, and Nexus Mods does not scan Lua for "
-    "malware. Only install mods you trust.\n\n"
-    "Fatshark disallows mods that affect other players, progression, or servers. Cogitator does not include or "
-    "recommend any such mods.\n\n"
-    "Cogitator only writes inside the game folder and its own config/cache folders. It contacts GitHub to look for new "
-    "versions of itself and Nexus Mods (with your key, if you set one) to look for mod updates; nothing else leaves your "
-    "computer, there is no telemetry, and nothing is downloaded without you asking.")
-
-EMPTY_STATE = ("No mods installed yet. Download mods from nexusmods.com/warhammer40kdarktide, then press I to import the "
-               "zip (or drop it onto this window). Press ? for help.")
-
-HELP_BODY = (
-    "T  mods on/off (the game patch)\n"
-    "Space  enable/disable the selected mod\n"
-    "Shift+Up/Down or [ ]  move in the load order\n"
-    "O  sort    U  update selected    Ctrl+U  update all\n"
-    "F  update Mod Loader/Framework    R  re-check\n"
-    "L  link to Nexus    M  link all    I  import a zip\n"
-    "K  Nexus key    A  update Cogitator\n"
-    "D  doctor (diagnose problems)    Q  quit\n"
-    "\n"
-    "Mouse: click Menu (top left) for every action; right-click a mod for its actions;\n"
-    "drag a mod up or down to change its load order; ? opens this help and X quits.\n"
-    "\n"
-    "Log file: {log}\n"
-    "Settings folder: {cfg}\n"
-    "Problems: run the doctor (D), then report at github.com/MRITARI/Cogitator/issues and attach the log file.\n"
-    "Not affiliated with Fatshark, Games Workshop or Nexus Mods.")
-
-_MAIN_ACTIONS = {"help", "app_menu", "choose_theme", "link_all", "toggle_mods", "toggle_mod", "move_up", "move_down", "update_selected", "update_all", "recheck", "link", "import_archive",
-                 "set_key", "cycle_sort", "quit_app", "framework_update", "doctor", "apply_update"}
-SORT_COLUMNS = ("mod", "status", "installed", "latest", "en")
-DEFAULT_THEME = "tokyo-night"
-COGITATOR_THEMES = (
-    Theme(name="black", primary="#4a90d9", secondary="#7f8c8d", accent="#f1c40f", foreground="#e8e8e8",
-          background="#000000", surface="#000000", panel="#141414", boost="#1c1c1c", warning="#f1c40f", error="#e74c3c",
-          success="#2ecc71", dark=True),
-    Theme(name="cogitator-graphite", primary="#4a90d9", secondary="#95a5a6", accent="#f1c40f", foreground="#e8e8e8",
-          background="#1b1b1f", surface="#1b1b1f", panel="#26262c", boost="#2f2f36", warning="#f1c40f", error="#e74c3c",
-          success="#2ecc71", dark=True),
-)
-THEME_CHOICES = ("tokyo-night", "black", "cogitator-graphite", "textual-dark", "nord", "gruvbox", "dracula",
-                 "monokai", "catppuccin-mocha", "solarized-dark", "textual-light", "solarized-light")
-# bottom button bar: (label, action, tooltip). "Update Cogitator" only shows while an update is waiting or offered.
-ACTION_BUTTONS = (("On/off", "toggle_mod", "Space - enable or disable the selected mod"),
-                  ("Update", "update_selected", "U - update the selected mod"),
-                  ("Update all", "update_all", "Ctrl+U - update every mod that has an update"),
-                  ("Recheck", "recheck", "R - check Nexus for updates now"),
-                  ("Import", "import_archive", "I - choose mod zip file(s) to install"),
-                  ("Update Cogitator", "apply_update", "A - install the new Cogitator"))
-
-
-# ------------------------------------------------------------------ pure view helpers (unit-testable)
-
-def enabled_cell(mod: Mod, g: Glyphs) -> Text:
-    if mod.state == ENABLED:
-        return Text(g.on, "bold green")
-    if mod.state == DISABLED:
-        return Text(g.off, "bold red")
-    return Text(g.unlisted, "dim")
-
-
-def _where_text(where: str) -> str:
-    return ("in the Windows credential store" if where == "keyring"
-            else "in a plain-text file in your settings folder (the credential store was not available)")
-
-
-def _config_recovered() -> list:
-    from ..config import RECOVERED
-
-    return list(RECOVERED)
-
-
-def mod_cell(mod: Mod) -> Text:
-    t = Text(mod.folder, "dim" if mod.state == UNLISTED else "", no_wrap=True, overflow="ellipsis")
-    if not mod.present:
-        t.append("  (folder missing)", "red")
-    elif not mod.has_mod_file:
-        t.append("  (no .mod file!)", "yellow")
-    elif mod.state == UNLISTED:
-        t.append("  (not in load order)", "dim")
-    return t
-
-
-_STATUS_STYLE = {UP_TO_DATE: "green", UPDATE: "bold yellow", UNKNOWN: "dim", FAILED: "bold red", NOT_LINKED: "dim",
-                 PROBABLY_UP_TO_DATE: "green", PROBABLY_OUTDATED: "bold yellow"}
-BASELINE_UNKNOWN_LABEL = "version unknown - press L to set it"
-
-
-def installed_text(row: ModRow | None, mtime: float | None) -> Text:
-    """Version, "~version" for a guess, else the folder's last-modified date."""
-    if row is not None and row.installed:
-        return Text(row.installed)
-    return Text(time.strftime("%Y-%m-%d", time.localtime(mtime)) if mtime else "-", "dim")
-
-
-def status_text(row: ModRow | None, g: Glyphs, mod: Mod | None = None) -> Text:
-    if mod is not None and not mod.present:
-        return Text("folder missing", "red")
-    if row is None:
-        return Text("not linked", "dim")
-    label = row.status
-    if row.status == UNKNOWN and row.baseline_unknown:
-        label = BASELINE_UNKNOWN_LABEL
-    elif row.status in (UPDATE, PROBABLY_OUTDATED):
-        label = f"{row.status} ({row.installed or '?'} {g.arrow} {row.latest or '?'})"
-    return Text(label, _STATUS_STYLE.get(row.status, ""))
-
-
-def hint_for(mod: Mod | None, row: ModRow | None) -> str:
-    if mod is None:
-        return EMPTY_STATE
-    if not mod.present:
-        return f"'{mod.folder}' is listed in mod_load_order.txt but its folder is missing."
-    if not mod.has_mod_file:
-        return f"Warning: {mod.folder}/{mod.folder}.mod is missing - the archive may have been extracted badly."
-    if mod.state == UNLISTED:
-        return "Not in mod_load_order.txt. Press Space to add it to the load order (enabled)."
-    if row is None or row.status == NOT_LINKED:
-        return "Not linked to Nexus. Press L to link it so updates can be detected."
-    return f"{row.status}: {row.reason}"
-
-
-def report_text(checks: list[Check]) -> Text:
-    """Doctor report with ASCII level markers (they survive any console) and colour on top."""
-    style = {"ok": "green", "warn": "bold yellow", "fail": "bold red"}
-    t = Text()
-    for c in checks:
-        t.append({"ok": "[OK]   ", "warn": "[WARN] ", "fail": "[FAIL] "}[c.level], style[c.level])
-        t.append(f"{c.name}: ", "bold")
-        t.append(redact(c.detail) + "\n")
-        if c.fix and c.level != "ok":
-            t.append(f"       fix: {c.fix}\n", "cyan")
-    n = {k: sum(1 for c in checks if c.level == k) for k in ("ok", "warn", "fail")}
-    t.append(f"\n{n['ok']} ok, {n['warn']} warning(s), {n['fail']} failure(s).", "bold")
-    return t
-
-
-def fw_text(game_dir: Path | None, registry: Registry | None, fw: list[FrameworkUpdate], badge: str) -> Text:
-    t = Text()
-    if game_dir is None or registry is None:
-        return t
-    by = {u.kind: u for u in fw}
-    for kind in ("dml", "dmf"):
-        st = detect_framework(game_dir, kind)
-        rec = registry.framework(kind) or {}
-        ver = rec.get("version") or ("version unknown" if st.status == "installed" else "")
-        style = "green" if st.status == "installed" else "bold red"
-        t.append(f"{kind.upper()} ", "bold")
-        t.append(f"{st.status}" + (f" {ver}" if ver else ""), style)
-        u = by.get(kind)
-        if u is not None and u.status == UPDATE:
-            t.append(f" (update available -> {u.latest})", "bold yellow")
-        t.append("   ")
-    colour = {ON: "bold black on green", OFF: "bold white on red"}.get(badge, "bold black on yellow")
-    t.append(f" MODS: {badge} ", colour)
-    return t
-
-
-def nexus_text(key_set: bool, premium: bool | None, quota: str | None, checking: str = "") -> Text:
-    t = Text("Nexus: ")
-    if not key_set:
-        t.append("no API key - press K", "bold yellow")
-        return t
-    acct = "account unknown" if premium is None else ("premium" if premium else "free")
-    t.append(f"key {'ok' if premium is not None else 'set'} ({acct})", "green")
-    t.append("   quota: " + (quota or "unknown"), "")
-    if checking:
-        t.append("   " + checking, "cyan")
-    return t
 
 
 def pick_files_available() -> bool:
@@ -251,7 +100,7 @@ def pick_files(initial: Path | None = None) -> list[Path] | None:
 
 # ------------------------------------------------------------------ app
 
-class CogitatorApp(App):
+class CogitatorApp(SelfUpdateMixin, TableMixin, FrameworkMixin, App):
     TITLE = "Cogitator"
     ENABLE_COMMAND_PALETTE = False  # keeps the footer for our keys
     CSS = """
@@ -478,416 +327,12 @@ class CogitatorApp(App):
         bn.update(Text(b or ""))
         bn.set_class(bool(b), "on")
 
-    # -------------------------------------------------------------- Cogitator's own updates
-    def _selfupdater(self):
-        if self.selfupdater is None and self.registry is not None:
-            from ..selfupdate import SelfUpdater
-
-            self.selfupdater = SelfUpdater(self.registry, self.settings)
-        return self.selfupdater
-
-    def update_ready(self):
-        u = self.selfupdater
-        return u.ready() if u and u.layout.in_place else None
-
-    def _update_banner(self) -> str:
-        u = self.selfupdater
-        if u is None or u.settings.update_mode == "off":
-            return ""
-        a = u.announcement()
-        if not a:
-            return ""
-        if self.update_ready():
-            return f"Update available v{a.version} - downloaded and verified. Press A to install."
-        if u.layout.in_place:
-            return f"Update available v{a.version}. Press A to download and install it."
-        return f"Update available v{a.version}. {u.layout.guidance()}"
-
-    def start_selfupdate_check(self) -> None:
-        if not (self.selfupdate_on_start and self._check_on_start) or self.settings.update_mode == "off" or self._selfupdater() is None:
-            return
-        self._bg(self._job_selfupdate, name="cogitator update check", group="selfupdate", exclusive=True)
-
-    def _job_selfupdate(self) -> None:
-        u = self.selfupdater
-        with self._lock:
-            last = u.absorb_result()
-            res = u.run_automatic()
-        if last:
-            self._ui(self._report_update_result, last)
-        self._ui(self.refresh_header)
-        self._ui(self.refresh_bindings)
-        if res.status == "available" and res.latest:
-            self._ui(self.log_line, f"Cogitator v{res.latest.version} is available.", "bold")
-        if u.should_apply_automatically():
-            self._ui(self._apply_update_now)
-
-    def _report_update_result(self, r: dict) -> None:
-        """What the update helper did last time, in plain words (it ran after Cogitator had closed)."""
-        status, ver, detail = r.get("status"), r.get("version") or "", r.get("detail") or ""
-        if status == "ok":
-            self.log_line(f"Updated to v{ver}.", "green")
-        elif status == "rolled-back":
-            self.log_line("Went back to the previous version.", "green")
-        else:
-            why = {"aborted": "The update did not start; your current version is unchanged.",
-                   "reverted": "The new version failed its check, so your previous version was restored.",
-                   "broken": "The update failed and the old version could not be restored."}.get(status, "The update did not finish.")
-            self.log_line(f"Update to v{ver} failed. {why}", "bold red")
-            if detail:
-                self.log_line(f"Reason: {detail}", "red")
-            self.log_line(f"Details: {config_dir() / 'update.log'}. If it keeps failing, run the latest installer from the releases page; "
-                          "your mods and settings are kept.", "yellow")
-
-    def _update_offer(self):
-        u = self.selfupdater
-        return u.announcement() if u and u.layout.in_place and u.settings.update_mode != "off" else None
-
-    def action_apply_update(self) -> None:
-        u, a = self.selfupdater, None
-        rd = self.update_ready()
-        if not rd:
-            offer = self._update_offer()
-            if offer:  # nothing is downloaded without asking
-                mb = f" (about {offer.zip_size // (1024 * 1024)} MB)" if offer.zip_size else ""
-                self.push_screen(ChoiceScreen(f"Cogitator v{offer.version} is available{mb}.\n\n{offer.notes or '(no release notes)'}",
-                                              ["Download it from GitHub now", "Cancel"]),
-                                 lambda i, o=offer: self._bg(self._job_download_update, o, name="download update", group="selfupdate")
-                                 if i == 0 else None)
-            return
-        a = u.latest() or u.announcement()
-        notes = (a.notes if a else rd.notes) or "(no release notes)"
-        self.push_screen(ChoiceScreen(f"Cogitator v{rd.version}\n\n{notes}", ["Install now and restart", "Remind me later", "Skip this version", "Cancel"]),
-                         self._update_choice)
-
-    def _job_download_update(self, info) -> None:
-        from ..selfupdate import UpdateError
-
-        self._ui(self.log_line, f"Downloading Cogitator v{info.version} ...")
-        try:
-            with self._lock:
-                self.selfupdater.stage(info)
-        except UpdateError as e:
-            self._ui(self.log_line, str(e), "bold red")
-            return
-        self._ui(self.refresh_header)
-        self._ui(self.refresh_bindings)
-        self._ui(self.action_apply_update)
-
-    def _update_choice(self, i) -> None:
-        rd = self.update_ready()
-        if i is None or not rd:
-            return
-        # Runs on the UI thread, which must never wait on self._lock (a worker holding it may be waiting on us): hand off.
-        self._bg(self._job_update_choice, i, rd.version, name="update choice", group="selfupdate")
-
-    def _job_update_choice(self, i: int, version: str) -> None:
-        u = self.selfupdater
-        with self._lock:
-            if i == 0:
-                self._ui(self._apply_update_now)  # runs on the UI thread; it takes no lock
-            elif i == 1:
-                u.remind_later()
-            elif i == 2:
-                u.skip_version(version)
-        self._ui(self.refresh_header)
-        self._ui(self.refresh_bindings)
-
-    def _apply_update_now(self) -> None:
-        from ..selfupdate import UpdateError
-
-        try:
-            rd = self.selfupdater.apply()
-        except UpdateError as e:
-            self.log_line(str(e), "bold red")
-            return
-        self.log_line(f"Installing v{rd.version}; Cogitator will restart.", "bold")
-        self.action_quit_app()
 
     def _tick(self) -> None:
         if self.checking:
             self._spin += 1
             self.refresh_header()
 
-    def refresh_all(self, keep: str | None = None) -> None:
-        """Rescan mods and rebuild the table from cache (no network)."""
-        if not self.game_dir or not self.registry:
-            return
-        keep = keep or self.selected()
-        self.mods = scan_mods(self.game_dir)
-        folders = [m.folder for m in self.mods if m.present]
-        self.urows = {r.folder: r for r in cached_rows(folders, self.registry)}
-        t = self.query_one("#mods", DataTable)
-        t.clear()
-        for m in self.mods:
-            self._add_row(t, m)
-        if keep:
-            try:
-                t.move_cursor(row=t.get_row_index(keep))
-            except Exception:
-                pass
-        if self._sort_i >= 0:
-            self._apply_sort()
-        self._update_hint()
-        self.refresh_header()
-        self.call_after_refresh(self._fit_columns)
-
-    def _add_row(self, t: DataTable, m: Mod) -> None:
-        r = self.urows.get(m.folder)
-        t.add_row(enabled_cell(m, self.glyphs), mod_cell(m), self._installed_cell(m.folder, r),
-                  Text((r.latest if r else None) or "-"), status_text(r, self.glyphs, m), key=m.folder)
-
-    def _fit_columns(self) -> None:
-        """One very long mod name must not push Installed / Latest / Status off a narrow console."""
-        try:
-            t = self.query_one("#mods", DataTable)
-            col = t.columns.get("mod")
-            if col is None or not t.size.width:
-                return
-            others = sum(c.get_render_width(t) for k, c in t.columns.items() if k != "mod")
-            want = max(len(m.folder) + 24 for m in self.mods) if self.mods else 16  # name plus its "(not in load order)" tag
-            avail = max(16, t.size.width - others - 2 * t.cell_padding - 2)
-            width = min(want, avail)
-            if col.auto_width or col.width != width:
-                col.auto_width, col.width = False, width
-                t._require_update_dimensions = True
-                t.refresh(layout=True)
-        except Exception:
-            logging.getLogger("cogitator.tui").debug("column fit failed", exc_info=True)
-
-    def on_resize(self, event) -> None:
-        self.call_after_refresh(self._fit_columns)
-
-    def _installed_cell(self, folder: str, r: ModRow | None) -> Text:
-        m = None if r is not None and r.installed else folder_mtime(mods_dir(self.game_dir) / folder)
-        return installed_text(r, m)
-
-    def _mod(self, folder: str | None) -> Mod | None:
-        return next((m for m in self.mods if m.folder == folder), None)
-
-    def selected(self) -> str | None:
-        try:
-            t = self.query_one("#mods", DataTable)
-            if t.row_count == 0:
-                return None
-            return t.coordinate_to_cell_key(t.cursor_coordinate).row_key.value
-        except Exception:
-            return None
-
-    def _update_hint(self) -> None:
-        f = self.selected()
-        self.query_one("#hint", Static).update(hint_for(self._mod(f), self.urows.get(f)) if f else EMPTY_STATE)
-
-    def on_data_table_row_highlighted(self, event: DataTable.RowHighlighted) -> None:
-        self._update_hint()
-
-    def _apply_row(self, r: ModRow) -> None:
-        """In-place update of one row as its result arrives."""
-        self.urows[r.folder] = r
-        t = self.query_one("#mods", DataTable)
-        m = self._mod(r.folder)
-        try:
-            t.update_cell(r.folder, "installed", self._installed_cell(r.folder, r))  # Text: versions are never markup
-            t.update_cell(r.folder, "latest", Text(r.latest or "-"))
-            t.update_cell(r.folder, "status", status_text(r, self.glyphs, m))
-        except Exception:
-            return  # row not in the table (e.g. folder removed meanwhile)
-        if self.selected() == r.folder:
-            self._update_hint()
-
-    def _apply_fw(self, u: FrameworkUpdate) -> None:
-        self.fw_updates = [x for x in self.fw_updates if x.kind != u.kind] + [u]
-        self.refresh_header()
-
-    def _refresh_mod_row(self, folder: str) -> None:
-        self.mods = scan_mods(self.game_dir)
-        m = self._mod(folder)
-        t = self.query_one("#mods", DataTable)
-        if m is None:
-            return
-        try:
-            t.update_cell(folder, "en", enabled_cell(m, self.glyphs))
-            t.update_cell(folder, "mod", mod_cell(m))
-        except Exception:
-            self.refresh_all(keep=folder)
-        self._update_hint()
-
-    # -------------------------------------------------------------- mouse: title bar, menus, right-click, drag
-    def on_title_button_pressed(self, msg: TitleButton.Pressed) -> None:
-        if len(self.screen_stack) > 1:
-            return
-        bid = msg.button.id
-        if bid.startswith("ab_"):
-            act = bid[3:]
-            if act == "quit":
-                act = "quit_app"
-            if self.check_action(act, ()):
-                self.call_later(getattr(self, f"action_{act}"))
-            return
-        if bid == "tb_menu":
-            self.action_app_menu()
-        elif bid == "tb_help":
-            self.action_help()
-        elif bid == "tb_close":
-            self.action_quit_app()
-
-    def _open_menu(self, items: list, x: int, y: int, title: str, then: Callable[[str], None]) -> None:
-        def chosen(aid):
-            if aid:
-                self.call_later(then, aid)
-
-        self.push_screen(MenuScreen(items, x, y, title), chosen)
-
-    def action_app_menu(self) -> None:
-        if len(self.screen_stack) > 1:
-            return
-        have_game = bool(self.game_dir and self.registry)
-        upd = bool(self.update_ready() or self._update_offer())
-        items = [("Import a mod or framework zip...   I", "import_archive", have_game),
-                 ("Check for updates   R", "recheck", have_game),
-                 ("Update all mods   Ctrl+U", "update_all", have_game),
-                 ("Update Mod Loader / Framework   F", "framework_update", have_game),
-                 ("Link all mods to Nexus   M", "link_all", have_game),
-                 None,
-                 ("Mods on / off (game patch)   T", "toggle_mods", have_game),
-                 ("Nexus API key...   K", "set_key", True),
-                 ("Doctor (diagnose problems)   D", "doctor", True),
-                 ("Sort the list   O", "cycle_sort", have_game),
-                 ("Theme (colours)...", "choose_theme", True)]
-        if upd:
-            items += [None, ("Update Cogitator   A", "apply_update", True)]
-        items += [None, ("Help   ?", "help", True), ("Quit   Q", "quit_app", True)]
-        self._open_menu(items, 0, 1, "Cogitator", lambda aid: getattr(self, f"action_{aid}")())
-
-    def action_choose_theme(self) -> None:
-        if len(self.screen_stack) > 1:
-            return
-        names = [n for n in THEME_CHOICES if n in self.available_themes]
-        cur = names.index(self.theme) if self.theme in names else 0
-
-        def chosen(i):
-            if i is None:
-                return
-            self.theme = names[i]
-            self.settings.theme = names[i]
-            try:
-                self.settings.save()
-            except OSError as e:
-                self.log_line(f"Could not save the theme: {e}", "bold yellow")
-            self.log_line(f"Theme: {names[i]}", "dim")
-
-        self.push_screen(ChoiceScreen("Choose a theme", names, selected=cur), chosen)
-
-    def on_mod_table_context_requested(self, msg: ModTable.ContextRequested) -> None:
-        if len(self.screen_stack) > 1 or not self._need_game():
-            return
-        f = msg.folder
-        m, row = self._mod(f), self.urows.get(f)
-        if m is None:
-            return
-        listed = m.state != UNLISTED
-        can_update = row is not None and row.status in (UPDATE, PROBABLY_OUTDATED)
-        linked = bool(row is not None and row.nexus_id)
-        items = [("Disable" if m.state == ENABLED else ("Enable" if m.state == DISABLED else "Add to load order and enable"),
-                  "toggle_mod", m.present),
-                 ("Move up", "move_up", listed and m.present), ("Move down", "move_down", listed and m.present), None,
-                 ("Update" + (f" to {row.latest}" if can_update and row.latest else ""), "update_selected", can_update),
-                 ("Open Nexus page" if linked else "Link to Nexus...", "open_page" if linked else "link", m.present),
-                 ("Open folder in Explorer" if sys.platform == "win32" else "Open folder", "open_folder", m.present), None,
-                 ("Remove...", "remove", True)]
-        self._open_menu(items, msg.x, msg.y, f, lambda aid, f=f: self._mod_menu_action(f, aid))
-
-    def _mod_menu_action(self, folder: str, aid: str) -> None:
-        if self._mod(folder) is None:
-            return
-        self._keep_cursor(folder)
-        if aid == "open_folder":
-            self._open_folder(mods_dir(self.game_dir) / folder)
-        elif aid == "open_page":
-            row = self.urows.get(folder)
-            if row is not None and row.nexus_id:
-                self.log_line(f"Opened {open_files_page(row.nexus_id)}", "cyan")
-        elif aid == "remove":
-            self.push_screen(ConfirmScreen(f"Remove {folder}?",
-                                           "The mod is taken out of the load order and its folder is moved (not deleted) to "
-                                           f"{cache_dir() / 'removed'} so you can restore it.", default_yes=False),
-                             lambda ok, f=folder: ok and self._bg(self._job_remove, f, name="remove mod", group="install", exclusive=True))
-        else:
-            getattr(self, f"action_{aid}")()
-
-    def _open_folder(self, path: Path) -> None:
-        import os
-        import subprocess
-
-        try:
-            if sys.platform == "win32":
-                os.startfile(str(path))  # noqa: S606 - opens the folder in Explorer
-            else:
-                subprocess.Popen(["open" if sys.platform == "darwin" else "xdg-open", str(path)])
-        except OSError as e:
-            self.log_line(f"Could not open {path}: {e}", "bold red")
-
-    def _job_remove(self, folder: str) -> None:
-        if self.game_running():
-            self._ui(self.log_line, "Close Darktide before removing a mod.", "bold yellow")
-            return
-        try:
-            with self._lock:
-                dest = remove_mod(self.game_dir, folder, cache_dir() / "removed")
-                self.registry.forget_mod(folder)
-            self._ui(self.log_line, f"Removed {folder}. Its files are in {dest}", "green")
-        except (ModError, OSError) as e:
-            self._ui(self.log_line, f"Could not remove {folder}: {e}", "bold red")
-        self._ui(self._after_registry_change, None)
-
-    def on_mod_table_dragging(self, msg: ModTable.Dragging) -> None:
-        if msg.over != msg.folder:
-            self.query_one("#hint", Static).update(f"Drop to move '{msg.folder}' to where '{msg.over}' is in the load order.")
-
-    def on_mod_table_dropped(self, msg: ModTable.Dropped) -> None:
-        if not self._need_game():
-            return
-        src, dst = msg.folder, msg.target
-        listed = [m.folder for m in self.mods if m.state != UNLISTED]
-        if src not in listed:
-            self.log_line(f"{src} is not in the load order yet. Press Space to add it first.", "bold yellow")
-            self._update_hint()
-            return
-        steps = (listed.index(dst) if dst in listed else len(listed) - 1) - listed.index(src)
-        last = f"{src}: stays where it is."
-        try:
-            for _ in range(abs(steps)):
-                last = move_mod(self.game_dir, src, 1 if steps > 0 else -1)
-            self.log_line(last, "green")
-        except ModError as e:
-            self.log_line(str(e), "bold red")
-        except OSError as e:
-            self.log_line(f"Could not write mod_load_order.txt: {e}", "bold red")
-        self._sort_i = -1  # show the load order again so the move is visible
-        self.refresh_all(keep=src)
-        self.call_after_refresh(lambda: self._keep_cursor(src))
-
-    def _keep_cursor(self, folder: str) -> None:
-        try:
-            t = self.query_one("#mods", DataTable)
-            t.move_cursor(row=t.get_row_index(folder))
-        except Exception:
-            pass
-
-    # -------------------------------------------------------------- sorting
-    def action_cycle_sort(self) -> None:
-        self._sort_i = (self._sort_i + 1) % len(SORT_COLUMNS)
-        self._apply_sort()
-        self.log_line(f"Sorted by {SORT_COLUMNS[self._sort_i]}", "dim")
-
-    def _apply_sort(self) -> None:
-        col = SORT_COLUMNS[self._sort_i]
-        self.query_one("#mods", DataTable).sort(col, key=lambda c: (c.plain if isinstance(c, Text) else str(c)).casefold())
-
-    def on_data_table_header_selected(self, event: DataTable.HeaderSelected) -> None:
-        if event.column_key.value in SORT_COLUMNS:
-            self._sort_i = SORT_COLUMNS.index(event.column_key.value)
-            self._apply_sort()
 
     # -------------------------------------------------------------- guards / workers
     def check_action(self, action: str, parameters) -> bool | None:
@@ -1395,110 +840,6 @@ class CogitatorApp(App):
         found = self._watch_download(rec["nexus_id"], latest, folder)
         if found and self.ask(ConfirmScreen(f"Import {found.name}?", f"Update {folder} from the file you just downloaded.")):
             self._job_import(str(found), rec["nexus_id"])
-
-    # -------------------------------------------------------------- F: framework update (through the import flow)
-    def _pending_framework_updates(self) -> list[FrameworkUpdate]:
-        ups = self.fw_updates or (cached_frameworks(self.registry) if self.registry else [])
-        return [u for u in ups if u.status == UPDATE and u.latest_file_id is not None]
-
-    def action_framework_update(self) -> None:
-        if not self._need_game():
-            return
-        ups = self._pending_framework_updates()
-        if not ups:
-            seen = self.fw_updates or cached_frameworks(self.registry)
-            st = ", ".join(f"{u.kind.upper()} {u.status}" for u in seen) or "not installed"
-            self.log_line(f"No framework update to apply ({st}). Press R to recheck.", "yellow")
-            return
-        how = ("Cogitator downloads it through your Premium account, then shows the install source for a final confirmation."
-               if self._premium() else
-               "Cogitator opens the Nexus files page; download the MAIN file and it is imported from your Downloads folder "
-               "after a final confirmation.")
-        lines = "\n".join(f"{u.kind.upper()}: {u.installed or 'unknown'} -> {u.latest}" for u in ups)
-        self.push_screen(ConfirmScreen(f"Update {' and '.join(u.kind.upper() for u in ups)}?", f"{lines}\n\n{how}"),
-                         lambda ok: ok and self._bg(self._job_framework, ups, name="framework update", group="download",
-                                                    exclusive=True))
-
-    def _job_framework(self, ups: list[FrameworkUpdate]) -> None:
-        import shutil
-        import tempfile
-
-        key = get_api_key()
-        for u in sorted(ups, key=lambda x: x.kind != "dml"):  # loader before framework
-            mod_id = FRAMEWORK_MODS[u.kind]
-            latest = {"file_name": u.latest_file_name, "version": u.latest, "file_id": u.latest_file_id}
-            tmp: Path | None = None
-            try:
-                if self._premium():
-                    tmp = Path(tempfile.mkdtemp(prefix="fw-", dir=self._work_dir()))
-                    with NexusClient(key) as nx:
-                        found = fetch_premium_download(nx, mod_id, u.latest_file_id, u.latest_file_name, u.latest_size, tmp,
-                                                       premium=True)
-                else:
-                    found = self._watch_download(mod_id, latest, u.kind.upper())
-                if found:
-                    self._job_import(str(found), None)  # the existing import flow: shows source, asks, installs, re-patches
-            except (ModImportError, LoaderError, NexusError, NotPremium) as e:
-                self._ui(self.log_line, f"{u.kind.upper()} update: {e}", "bold red")
-            finally:
-                if tmp:
-                    shutil.rmtree(tmp, ignore_errors=True)
-
-    def _work_dir(self) -> Path:
-        from ..config import cache_dir
-
-        d = cache_dir() / "work"
-        d.mkdir(parents=True, exist_ok=True)
-        return d
-
-    # -------------------------------------------------------------- D: doctor
-    def action_doctor(self) -> None:
-        self.log_line("Running doctor ...", "dim")
-        self._bg(self._job_doctor, name="doctor", group="doctor", exclusive=True)
-
-    def _job_doctor(self) -> None:
-        checks = run_doctor(str(self.game_dir) if self.game_dir else None, running=self.game_running, offline=self.doctor_offline,
-                            registry=Registry.load() if self.game_dir else None)
-        self._ui(lambda: self.push_screen(DoctorScreen(report_text(checks), doctor_exit_code(checks))))
-
-    # -------------------------------------------------------------- bootstrap: install DML + DMF
-    def _offer_bootstrap(self) -> None:
-        if not self.game_dir:
-            return
-        missing = [k for k in ("dml", "dmf") if detect_framework(self.game_dir, k).status != "installed"]
-        if not missing:
-            return
-        self.push_screen(ChoiceScreen(
-            "Install Darktide Mod Loader and Mod Framework?",
-            ["Import the Nexus zip(s) I downloaded (recommended)",
-             "Fetch from GitHub (opt-in: unreleased source archives; you confirm each source)", "Not now"]),
-            lambda i: self._bootstrap_choice(i, missing))
-
-    def _bootstrap_choice(self, i: int | None, missing: list[str]) -> None:
-        pages = ", ".join(f"{k.upper()}: {NEXUS_PAGES[k]}" for k in missing)
-        if i == 0:
-            self.log_line(f"Download from Nexus: {pages}", "cyan")
-            self.push_screen(InputScreen("Path to the DML or DMF zip", r"C:\Users\you\Downloads\Darktide Mod Loader ... .zip"),
-                             lambda p: p and self._bg(self._job_import, p, None, name="install framework", group="install", exclusive=True))
-        elif i == 1:
-            self._bg(self._job_github, missing, name="github install", group="install", exclusive=True)
-        else:
-            self.log_line(f"Mod Loader/Framework not installed. {pages}", "yellow")
-
-    def _job_github(self, missing: list[str]) -> None:
-        import tempfile
-
-        with tempfile.TemporaryDirectory(prefix="cogitator-gh-") as wd, make_client(github_only=True) as client:
-            for kind in sorted(missing, key=lambda k: k != "dml"):
-                plan = plan_github(kind, client, Path(wd))
-                if not self.ask(ConfirmScreen(f"Install {kind.upper()} from GitHub?", describe_plan(plan))):
-                    self._ui(self.log_line, f"{kind.upper()} install declined.", "yellow")
-                    continue
-                with self._lock:
-                    fi = install_framework_plan(plan, self.game_dir, self.registry, runner=self.patch_runner,
-                                                is_running=self.game_running)
-                self._ui(self.log_line, f"{kind.upper()} installed ({fi.result.written} files).", "green")
-        self._ui(self._after_registry_change, None)
 
     # -------------------------------------------------------------- quit
     def _release(self) -> None:

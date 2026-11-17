@@ -22,4 +22,8 @@ jobs:
           python-version: ${{ matrix.python }}
           cache: pip
       - run: python -m pip install -e ".[dev]"
-      - run: python -m pytest -q
+      - run: python -m ruff check cogitator cogitator_setup
+        continue-on-error: true
+      - run: python -m mypy cogitator
+        continue-on-error: true
+      - run: python -m pytest -q --cov=cogitator --cov-report=term

@@ -22,12 +22,39 @@ else:  # pragma: no cover
 APP = "cogitator"
 
 
+PORTABLE_MARKER = "portable.txt"
+
+
+def portable_root() -> Path | None:
+    """<exe dir>/data when running portable (COGITATOR_PORTABLE=1, or portable.txt beside a frozen exe)."""
+    import sys
+
+    exe_dir = Path(sys.executable).resolve().parent if getattr(sys, "frozen", False) else None
+    if os.environ.get("COGITATOR_PORTABLE") == "1":
+        return (exe_dir or Path.cwd()) / "data"
+    if exe_dir is not None and (exe_dir / PORTABLE_MARKER).is_file():
+        return exe_dir / "data"
+    return None
+
+
+def is_portable() -> bool:
+    return portable_root() is not None
+
+
 def config_dir() -> Path:
-    return Path(os.environ.get("COGITATOR_CONFIG_DIR") or platformdirs.user_config_dir(APP, appauthor=False))
+    if env := os.environ.get("COGITATOR_CONFIG_DIR"):
+        return Path(env)
+    if root := portable_root():
+        return root / "config"
+    return Path(platformdirs.user_config_dir(APP, appauthor=False))
 
 
 def cache_dir() -> Path:
-    return Path(os.environ.get("COGITATOR_CACHE_DIR") or platformdirs.user_cache_dir(APP, appauthor=False))
+    if env := os.environ.get("COGITATOR_CACHE_DIR"):
+        return Path(env)
+    if root := portable_root():
+        return root / "cache"
+    return Path(platformdirs.user_cache_dir(APP, appauthor=False))
 
 
 def log_path() -> Path:
@@ -132,14 +159,15 @@ def _key_file() -> Path:
 def get_api_key() -> str | None:
     if os.environ.get("COGITATOR_NEXUS_KEY"):
         return os.environ["COGITATOR_NEXUS_KEY"].strip()
-    try:
-        import keyring  # optional
+    if not is_portable():
+        try:
+            import keyring  # optional
 
-        v = keyring.get_password(APP, "nexus_api_key")
-        if v:
-            return v
-    except Exception as e:
-        logging.getLogger(__name__).debug("credential store unavailable: %s", type(e).__name__)
+            v = keyring.get_password(APP, "nexus_api_key")
+            if v:
+                return v
+        except Exception as e:
+            logging.getLogger(__name__).debug("credential store unavailable: %s", type(e).__name__)
     try:
         v = _key_file().read_text(encoding="utf-8").strip()
         return v or None
@@ -151,24 +179,28 @@ def set_api_key(key: str) -> str:
     """Store key. Returns where it went: 'keyring' or 'file' (0600)."""
     key = key.strip()
     _KEY_CACHE.clear()
-    try:
-        import keyring
-
-        keyring.set_password(APP, "nexus_api_key", key)
+    if not is_portable():
         try:
-            _key_file().unlink()
-        except OSError:
+            import keyring
+
+            keyring.set_password(APP, "nexus_api_key", key)
+            try:
+                _key_file().unlink()
+            except OSError:
+                pass
+            return "keyring"
+        except Exception:
             pass
-        return "keyring"
-    except Exception:
-        atomic_write_text(_key_file(), key + "\n", mode=0o600)
-        return "file"
+    atomic_write_text(_key_file(), key + "\n", mode=0o600)
+    return "file"
 
 
 def clear_api_key() -> None:
     """Remove the stored key from the keyring and the fallback file (used by rollback and uninstall)."""
     _KEY_CACHE.clear()
     try:
+        if is_portable():  # portable never wrote to the shared credential store, so never touch it
+            raise LookupError("portable")
         import keyring
 
         keyring.delete_password(APP, "nexus_api_key")
