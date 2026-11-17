@@ -30,7 +30,7 @@ function Check($exe) {
     packaging\entry.py
 if ($LASTEXITCODE -ne 0) { throw "PyInstaller failed" }
 # The update helper is a separate small program; it is copied to a temp folder before it replaces the app folder.
-& $py -m PyInstaller --noconfirm --clean --onefile --name cogitator-updater `
+& $py -m PyInstaller --noconfirm --clean --onefile --name cogitator-updater --icon "$PWD\packaging\cogitator.ico" `
     --distpath build\updater --workpath build\pyi-updater --specpath build\pyi-updater `
     packaging\updater_entry.py
 if ($LASTEXITCODE -ne 0) { throw "PyInstaller (updater) failed" }
@@ -46,6 +46,7 @@ Copy-Item build\nxm\cogitator-nxm.exe dist\cogitator\cogitator-nxm.exe -Force
 & $py -m PyInstaller --noconfirm --clean --onedir --windowed --name "Cogitator Setup" --icon "$PWD\packaging\cogitator.ico" `
     --distpath dist --workpath build\pyi-setup --specpath build\pyi-setup `
     --collect-submodules cogitator --collect-submodules cogitator_setup `
+    --add-data "$PWD\packaging\cogitator.ico;." --add-data "$PWD\packaging\cogitator.png;." `
     packaging\setup_entry.py
 if ($LASTEXITCODE -ne 0) { throw "PyInstaller (setup) failed" }
 Copy-Item LICENSE dist\cogitator\LICENSE -Force

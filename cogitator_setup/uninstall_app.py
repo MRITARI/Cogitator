@@ -13,7 +13,7 @@ from cogitator.config import redact
 from cogitator.setup_run import ProgressEvent
 from cogitator.uninstall_run import STEP_NAMES, UninstallDeps, planned_steps, run_uninstall
 
-from .app import MARK, POLL_MS, Dialogs
+from .app import MARK, POLL_MS, Dialogs, set_window_icon
 from .controller import Controller
 from .uninstall_vm import Detected, MaintenanceModel, UPage, UServices, UninstallModel
 
@@ -27,6 +27,7 @@ class UninstallApp:
         from .dryrun import simulated_uninstall
 
         self.root = root or tk.Tk()
+        set_window_icon(self.root)
         self.model = model or UninstallModel(services)
         self.model.dry_run = dry_run
         self.ctl = controller or Controller(self.model, deps or UninstallDeps(), run_fn=run_fn or (simulated_uninstall if dry_run else run_uninstall))

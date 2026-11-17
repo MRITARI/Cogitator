@@ -30,6 +30,22 @@ STEP_LABELS = {
 MARK = {"pending": "[ ]", "running": "[..]", "done": "[x]", "skipped": "[-]", "failed": "[!]", "rolled_back": "[<]"}
 
 
+def set_window_icon(root: tk.Tk) -> None:
+    """The gear-and-skull icon for every window of this program (default=True also covers dialogs). Never raises: no icon is fine.
+    Uses the multi-size .ico (crisp at 16/32/48 px); the .png is the fallback for Tk builds that refuse the .ico."""
+    base = Path(getattr(sys, "_MEIPASS", Path(__file__).resolve().parents[1] / "packaging"))
+    try:
+        root.iconbitmap(default=str(base / "cogitator.ico"))
+        return
+    except (tk.TclError, OSError):
+        pass
+    try:
+        root._cogitator_icon = tk.PhotoImage(master=root, file=str(base / "cogitator.png"))  # type: ignore[attr-defined]  # keep a reference
+        root.iconphoto(True, root._cogitator_icon)  # type: ignore[attr-defined]
+    except (tk.TclError, OSError):
+        pass
+
+
 def scroll_dialog(title: str, body: str) -> None:
     """A resizable, scrollable text window (for long reports such as the check-up results). Returns when it is closed."""
     parent = tk._default_root
@@ -83,6 +99,7 @@ class SetupApp:
         from .dryrun import simulated_setup
 
         self.root = root or tk.Tk()
+        set_window_icon(self.root)
         self.model = model or SetupModel(services)
         self.model.repair = repair
         self.model.first_run = first_run
