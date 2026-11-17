@@ -1,5 +1,5 @@
 [build-system]
-requires = ["setuptools>=68"]
+requires = ["setuptools>=77"]  # 77 added the SPDX `license` string (PEP 639)
 build-backend = "setuptools.build_meta"
 
 [project]
@@ -7,6 +7,8 @@ name = "cogitator"
 version = "0.2.2"
 description = "Terminal mod manager for Warhammer 40,000: Darktide"
 readme = "README.md"
+license = "MIT"
+license-files = ["LICENSE"]
 requires-python = ">=3.10"
 keywords = ["darktide", "warhammer", "mods", "mod manager", "tui", "nexus"]
 classifiers = [

@@ -48,6 +48,7 @@ Copy-Item build\nxm\cogitator-nxm.exe dist\cogitator\cogitator-nxm.exe -Force
     --collect-submodules cogitator --collect-submodules cogitator_setup `
     packaging\setup_entry.py
 if ($LASTEXITCODE -ne 0) { throw "PyInstaller (setup) failed" }
+Copy-Item LICENSE dist\cogitator\LICENSE -Force
 Check "dist\cogitator\cogitator.exe"
 Check "dist\cogitator\cogitator-updater.exe"
 Check "dist\cogitator\cogitator-nxm.exe"
