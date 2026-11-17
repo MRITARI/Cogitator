@@ -61,7 +61,7 @@ async def test_remind_later_and_skip_hide_the_banner(game, root):
             await pilot.press("a")
             await pilot.pause()
             app.screen.dismiss(choice)
-            await pilot.pause()
+            await settle(app, pilot)  # the choice is applied by a background worker
             assert "Update available" not in hdr(app)
         Registry.load()  # still loads
 
