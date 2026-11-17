@@ -72,6 +72,22 @@ def build(version: str, app_dir: Path, out: Path, key_path: Path, installer: boo
     return [*assets, sig, sums, sums_sig]
 
 
+def sign_conflicts(out: Path, key_path: Path, src: Path | None = None) -> list[Path]:
+    """Publish packaging/known_conflicts.json as known-conflicts.json (+ .sig) so `cogitator doctor` can use it."""
+    from cryptography.hazmat.primitives import serialization
+
+    src = src or Path(__file__).with_name("known_conflicts.json")
+    if not src.is_file():
+        return []
+    key = serialization.load_pem_private_key(key_path.read_bytes(), None)
+    out.mkdir(parents=True, exist_ok=True)
+    dest = out / "known-conflicts.json"
+    dest.write_bytes(src.read_bytes())
+    sig = out / "known-conflicts.json.sig"
+    sig.write_bytes(base64.b64encode(key.sign(dest.read_bytes())) + b"\n")
+    return [dest, sig]
+
+
 def check_versions(version: str) -> None:
     """The version baked into the app must equal the release version, or the updater would offer the release forever."""
     root = Path(__file__).resolve().parents[1]
@@ -99,6 +115,8 @@ def main(argv: list[str] | None = None) -> int:
     if not a.no_build:
         subprocess.run(["powershell", "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", str(Path(__file__).with_name("build_exe.ps1"))], check=True)
     for f in build(a.version, Path(a.app_dir), Path(a.out), Path(a.key), installer=not a.no_installer):
+        print(f)
+    for f in sign_conflicts(Path(a.out), Path(a.key)):
         print(f)
     return 0
 

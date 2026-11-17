@@ -137,6 +137,9 @@ def install_mod_archive(zip_path: Path, game_dir: Path, info: ArchiveInfo, *, ma
             raise
     finally:
         shutil.rmtree(long_path(tmp), ignore_errors=True)
+    from . import integrity
+
+    integrity.record(game_dir, info.folders)
     return tx.backup_root, added
 
 
@@ -168,6 +171,9 @@ def rollback_mod(folder: str, game_dir: Path, registry: Registry, *, is_running:
 
     snapshots.auto(game_dir, "rollback", folders=[folder], registry=registry)
     Transaction.from_journal(backup).rollback()
+    from . import integrity
+
+    integrity.record(game_dir, [folder], registry)  # the rolled-back copy is the new trusted state
     registry.set_mod(folder, installed_version=prev.get("version"), installed_file_id=prev.get("file_id"),
                      installed_archive=prev.get("archive"), previous=None)
     return f"{folder}: rolled back to v{prev.get('version') or 'unknown'}."

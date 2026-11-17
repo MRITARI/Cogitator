@@ -98,6 +98,10 @@ def build_parser() -> argparse.ArgumentParser:
     dr = sub.add_parser("doctor", help="diagnose the install and print fixes (exit 0 ok, 1 warnings, 2 failures)")
     dr.add_argument("--json", action="store_true")
     dr.add_argument("--offline", action="store_true", help="skip the Nexus and GitHub network checks")
+    dr.add_argument("--history", nargs="?", type=int, const=20, metavar="N", help="show the last N doctor results instead of running it")
+    sub.add_parser("diag", help="write a redacted diagnostics zip to attach to a bug report (nothing is uploaded)")
+    cf = sub.add_parser("conflicts", help="the signed known-conflicts list used by doctor")
+    cf.add_argument("action", choices=["update", "show"])
     uf = sub.add_parser("uninstall-framework", help="remove DML/DMF and switch mods off (your mods and load order are kept)")
     uf.add_argument("--only", choices=["dml", "dmf"], help="remove just one of them")
     uf.add_argument("--yes", "-y", action="store_true", help="skip the confirmation")
@@ -111,9 +115,10 @@ def build_parser() -> argparse.ArgumentParser:
     pa.add_argument("action", choices=["add", "remove", "status"])
     pa.add_argument("--dir", help="folder to use instead of the one containing the running cogitator.exe")
     mod = sub.add_parser("mod", help="list, enable, disable, reorder or remove a mod")
-    mod.add_argument("action", choices=["list", "enable", "disable", "up", "down", "remove", "rollback"])
+    mod.add_argument("action", choices=["list", "enable", "disable", "up", "down", "remove", "rollback", "rebaseline"])
     mod.add_argument("folder", nargs="?")
     mod.add_argument("--json", action="store_true", help="machine-readable output (list)")
+    mod.add_argument("--all", action="store_true", help="rebaseline: every installed mod")
     mod.add_argument("--dry-run", action="store_true", help="remove: show the files that would go; change nothing")
     mod.add_argument("--yes", "-y", action="store_true", help="remove: confirm without prompting")
     return p
@@ -298,6 +303,9 @@ def _mod_remove(game_dir: Path, args) -> int:
     reg = Registry.load()
     snapshots.auto(game_dir, "remove", folders=[args.folder], registry=reg)
     dest = remove_mod(game_dir, args.folder, cache_dir() / "removed")
+    from . import integrity
+
+    integrity.forget(args.folder)
     reg.forget_mod(args.folder)
     print(f"Removed. Moved to {dest}")
     return 0
@@ -483,6 +491,16 @@ def cmd_mod(args) -> int:
         return 2
     if args.action == "list":
         return _mod_list(res.game_dir, args.json)
+    if args.action == "rebaseline":
+        from . import integrity
+
+        folders = [m.folder for m in scan_mods(res.game_dir) if m.present] if args.all else ([args.folder] if args.folder else [])
+        if not folders:
+            print("Give a mod folder or --all.", file=sys.stderr)
+            return 2
+        integrity.record(res.game_dir, folders, Registry.load())
+        print(f"Baseline updated for {len(folders)} mod(s): their current files are now the trusted state.")
+        return 0
     if not args.folder:
         print(f"'mod {args.action}' needs a folder name.", file=sys.stderr)
         return 2
@@ -560,8 +578,46 @@ def cmd_check_updates(args) -> int:
     return 1 if (bad or upd or r.rate_limited) else 0
 
 
+def cmd_diag(args) -> int:
+    from . import diag
+
+    res = _resolve(args)
+    path, sizes = diag.build(res.game_dir, Registry.load())
+    print("Diagnostics bundle (home folder and user name replaced, secrets removed; nothing was uploaded):")
+    for name, size in sizes.items():
+        print(f"  {name}  ({size:,} bytes)")
+    print(f"\nWritten to: {path}\nAttach it to your bug report if you are comfortable with its contents.")
+    return 0
+
+
+def cmd_conflicts(args) -> int:
+    from . import conflicts
+
+    if args.action == "update":
+        msg = conflicts.refresh()
+        print(msg)
+        return 0 if msg.startswith(("Conflicts list updated", "No conflicts list")) else 1
+    rows = conflicts.load_cached()
+    for e in rows:
+        print(f"{e['mods'][0]} + {e['mods'][1]} [{e['kind']}]: {e['note']}")
+    if not rows:
+        print("No verified conflicts list cached. Run: conflicts update")
+    return 0
+
+
 def cmd_doctor(args) -> int:
+    if args.history is not None:
+        from .doctor import read_history
+
+        for r in read_history(args.history):
+            when = time.strftime("%Y-%m-%d %H:%M", time.localtime(r.get("t", 0)))
+            probs = ", ".join(f"{k}={v}" for k, v in (r.get("problems") or {}).items()) or "all ok"
+            print(f"{when}  exit {r.get('exit')}  {probs}")
+        return 0
     checks = run_doctor(args.game_dir, offline=args.offline)
+    from .doctor import record_history
+
+    record_history(checks)
     if args.json:
         print(json.dumps({"exit_code": doctor_exit_code(checks), "checks": doctor_json(checks)}, indent=2))
     else:
@@ -1013,6 +1069,10 @@ def _dispatch(args) -> int:
         return cmd_install_framework(args)
     if args.cmd == "profile":
         return cmd_profile(args)
+    if args.cmd == "diag":
+        return cmd_diag(args)
+    if args.cmd == "conflicts":
+        return cmd_conflicts(args)
     if args.cmd == "snapshot":
         return cmd_snapshot(args)
     if args.cmd == "mod":

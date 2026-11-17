@@ -340,6 +340,56 @@ def _paths() -> Check:
     return Check("paths", "Cogitator data", OK, detail)
 
 
+def _mod_checks(game: Path, reg: Registry) -> list[Check]:
+    from . import conflicts, modchecks
+
+    known = conflicts.load_cached()  # cached and signature-checked; never a network call from the doctor
+    return modchecks.run(game, (reg.data.get("patch") or {}).get("build_key"), known or None)
+
+
+# ------------------------------------------------------------------ health history
+
+HISTORY_KEEP = 300
+
+
+def history_path() -> Path:
+    return config_dir() / "health.jsonl"
+
+
+def record_history(checks: list[Check]) -> None:
+    """Append one line per doctor run (when, exit code, which checks warned or failed). Never raises."""
+    import json
+
+    try:
+        rec = {"t": time.time(), "exit": exit_code(checks), "problems": {c.id: c.level for c in checks if c.level != OK}}
+        p = history_path()
+        p.parent.mkdir(parents=True, exist_ok=True)
+        with open(p, "a", encoding="utf-8") as f:
+            f.write(json.dumps(rec) + "\n")
+        lines = p.read_text(encoding="utf-8").splitlines()
+        if len(lines) > HISTORY_KEEP + 100:
+            from .fsutil import atomic_write_text
+
+            atomic_write_text(p, "\n".join(lines[-HISTORY_KEEP:]) + "\n")
+    except Exception:
+        pass
+
+
+def read_history(n: int = 20) -> list[dict]:
+    import json
+
+    out = []
+    try:
+        for line in history_path().read_text(encoding="utf-8").splitlines()[-n:]:
+            try:
+                out.append(json.loads(line))
+            except ValueError:
+                continue
+    except OSError:
+        pass
+    return out
+
+
 # ------------------------------------------------------------------ driver
 
 def run_doctor(game_override: str | None = None, *, offline: bool = False, key: str | None = None,
@@ -362,7 +412,8 @@ def run_doctor(game_override: str | None = None, *, offline: bool = False, key: 
                             "" if ok else "Point --game-dir at the folder that contains bundle/ and binaries/."))
         if ok:
             checks += [_fw(game, "dml", reg), _fw(game, "dmf", reg)]
-            for fn in (lambda: _patch(game, reg), lambda: _load_order(game), lambda: _registry(game, reg)):
+            for fn in (lambda: _patch(game, reg), lambda: _load_order(game), lambda: _registry(game, reg),
+                       lambda: _mod_checks(game, reg)):
                 try:
                     checks += fn()
                 except Exception as e:  # one broken check must not hide the others

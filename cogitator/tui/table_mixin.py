@@ -270,6 +270,9 @@ class TableMixin:
                 snapshots.auto(self.game_dir, "remove", folders=[folder], registry=self.registry)
                 dest = remove_mod(self.game_dir, folder, cache_dir() / "removed")
                 self.registry.forget_mod(folder)
+                from .. import integrity
+
+                integrity.forget(folder)
             self._ui(self.log_line, f"Removed {folder}. Its files are in {dest}", "green")
         except (ModError, OSError) as e:
             self._ui(self.log_line, f"Could not remove {folder}: {e}", "bold red")

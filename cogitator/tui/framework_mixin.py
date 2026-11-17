@@ -87,6 +87,9 @@ class FrameworkMixin:
     def _job_doctor(self) -> None:
         checks = run_doctor(str(self.game_dir) if self.game_dir else None, running=self.game_running, offline=self.doctor_offline,
                             registry=Registry.load() if self.game_dir else None)
+        from ..doctor import record_history
+
+        record_history(checks)
         self._ui(lambda: self.push_screen(DoctorScreen(report_text(checks), doctor_exit_code(checks))))
 
     # -------------------------------------------------------------- bootstrap: install DML + DMF
