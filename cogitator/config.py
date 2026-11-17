@@ -96,6 +96,7 @@ class Settings:
     notice_accepted: bool = False
     theme: str = "tokyo-night"  # colours; changed from the Menu (Theme...)
     snapshot_keep: int = 20  # how many snapshots of the mod setup are kept
+    language: str = "auto"  # auto (from the system) or a language code such as "de"; COGITATOR_LANG overrides it
     auto_repair: str = "ask"  # off | ask | auto: what to do when a game update switched the mods off
 
     @classmethod

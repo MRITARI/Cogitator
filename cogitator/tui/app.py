@@ -69,6 +69,7 @@ from .selfupdate_mixin import SelfUpdateMixin
 from .table_mixin import TableMixin
 from .framework_mixin import FrameworkMixin
 from .profile_mixin import ProfileMixin
+from ..i18n import detect as _detect_language, set_language, tr
 from .workflow_mixin import WorkflowMixin
 
 
@@ -179,10 +180,12 @@ class CogitatorApp(SelfUpdateMixin, TableMixin, FrameworkMixin, ProfileMixin, Wo
         self._ascii = ascii_glyphs
         self.game_dir: Path | None = None
         self.settings = Settings.load()
+        set_language(_detect_language(self.settings.language))
         self.registry: Registry | None = None
         self.marked: set[str] = set()  # mods marked with X for a bulk action
         self.filter_text = ""
         self._last_patch_state: str | None = None
+        self._nxm_busy = False
         self.glyphs: Glyphs = glyphs_for("utf-8", force_ascii=ascii_glyphs) if ascii_glyphs is not None else detect()
         self.mods: list[Mod] = []
         self.urows: dict[str, ModRow] = {}
@@ -236,6 +239,7 @@ class CogitatorApp(SelfUpdateMixin, TableMixin, FrameworkMixin, ProfileMixin, Wo
         self.theme = self.settings.theme if self.settings.theme in self.available_themes else DEFAULT_THEME
         self.set_interval(0.15, self._tick)
         self.set_interval(5.0, self._watch)
+        self.set_interval(2.0, self._nxm_tick)
         self.log_line(f"Cogitator {__version__}   log file: {log_path()}   Press ? for help.", "dim")
         for bad in _config_recovered():
             self.log_line(f"Your settings file could not be read, so defaults are used. The old file was kept as {bad}.", "bold yellow")
@@ -293,7 +297,7 @@ class CogitatorApp(SelfUpdateMixin, TableMixin, FrameworkMixin, ProfileMixin, Wo
                 self.settings.save()
                 self._after_notice()
 
-            self.push_screen(NoticeScreen(NOTICE_TITLE, NOTICE_BODY), accepted)
+            self.push_screen(NoticeScreen(tr("notice.title", NOTICE_TITLE), tr("notice.body", NOTICE_BODY)), accepted)
         else:
             self._after_notice()
 
@@ -869,7 +873,7 @@ class CogitatorApp(SelfUpdateMixin, TableMixin, FrameworkMixin, ProfileMixin, Wo
             self._instance_lock.release()
 
     def action_help(self) -> None:
-        self.push_screen(NoticeScreen("Cogitator " + __version__, HELP_BODY.format(log=log_path(), cfg=config_dir())), lambda _: None)
+        self.push_screen(NoticeScreen("Cogitator " + __version__, tr("help.body", HELP_BODY, log=log_path(), cfg=config_dir())), lambda _: None)
 
     def action_quit_app(self) -> None:
         self._release()

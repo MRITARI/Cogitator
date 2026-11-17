@@ -4,8 +4,8 @@ from __future__ import annotations
 
 from rich.text import Text
 
-from .. import bisect, crashlog, gamefinder, repair
-from ..config import get_api_key
+from .. import bisect, crashlog, gamefinder, nxm, repair
+from ..config import cache_dir, get_api_key
 from ..doctor import console_log_dirs
 from ..loadorder import LoadOrder
 from ..mods import ModError, load_order_path, set_mod_enabled
@@ -247,6 +247,53 @@ class WorkflowMixin:
         except PatcherError as e:
             self._ui(self.log_line, f"Could not re-enable mods after the game update: {e}", "bold red")
         self._ui(self.refresh_header)
+
+    # ------------------------------------------------------------ nxm:// links from the Nexus website
+    def _nxm_tick(self) -> None:
+        """Pick up links queued by the nxm handler. One at a time, and never while a dialog is open."""
+        if self._nxm_busy or not (self.game_dir and self.registry) or len(self.screen_stack) > 1:
+            return
+        items = nxm.pending()
+        if items:
+            self._nxm_busy = True
+            path, link = items[0]
+            self._bg(self._job_nxm, path, link, name="nxm link", group="install", exclusive=True)
+
+    def _job_nxm(self, path, link) -> None:
+        import shutil
+
+        from ..modinstall import ModImportError
+
+        work = cache_dir() / "nxm"
+        try:
+            key = get_api_key()
+            if not key:
+                self._ui(self.log_line, "A Nexus link arrived, but no API key is set. Press K to set it, then click the button again.", "bold yellow")
+                return
+            with NexusClient(key) as nx:
+                try:
+                    name = nx.mod(link.mod_id).get("name") or f"mod {link.mod_id}"
+                    f = next((x for x in nx.files(link.mod_id) if x.file_id == link.file_id), None)
+                except NexusError as e:
+                    self._ui(self.log_line, f"Nexus link: {e}", "bold red")
+                    return
+                what = f"{name}\n{f.file_name or f.name} (v{f.version})" if f else f"{name} (file {link.file_id})"
+                ok = self.ask(ConfirmScreen("Install from Nexus?", what + "\n\nThis came from the website's Mod Manager Download button. "
+                                            "Only install mods you trust.", default_yes=False))
+                if not ok:
+                    self._ui(self.log_line, "Nexus link cancelled.", "yellow")
+                    return
+                self._ui(self.log_line, f"Downloading {name}...", "dim")
+                try:
+                    zp, _ = nxm.download(link, nx, work)
+                except (nxm.NxmError, NexusError, ModImportError, OSError) as e:
+                    self._ui(self.log_line, f"Download failed: {e}", "bold red")
+                    return
+            self._job_import(str(zp), link.mod_id)
+        finally:
+            nxm.done(path)
+            shutil.rmtree(work, ignore_errors=True)
+            self._nxm_busy = False
 
     # ------------------------------------------------------------ crash log leads
     def action_crashlog(self) -> None:

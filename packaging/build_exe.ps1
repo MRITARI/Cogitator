@@ -25,7 +25,7 @@ function Check($exe) {
     --distpath dist --workpath build\pyi --specpath build\pyi `
     --collect-submodules textual --collect-data textual `
     --collect-submodules rich._unicode_data `
-    --collect-submodules keyring --collect-submodules cogitator `
+    --collect-submodules keyring --collect-submodules cogitator --collect-data cogitator `
     --hidden-import tkinter --hidden-import tkinter.filedialog `
     packaging\entry.py
 if ($LASTEXITCODE -ne 0) { throw "PyInstaller failed" }
@@ -35,6 +35,13 @@ if ($LASTEXITCODE -ne 0) { throw "PyInstaller failed" }
     packaging\updater_entry.py
 if ($LASTEXITCODE -ne 0) { throw "PyInstaller (updater) failed" }
 Copy-Item build\updater\cogitator-updater.exe dist\cogitator\cogitator-updater.exe -Force
+# The nxm:// link handler is a windowless program, so a click on the Nexus website never flashes a console.
+& $py -m PyInstaller --noconfirm --clean --onefile --windowed --name cogitator-nxm --icon "$PWD\packaging\cogitator.ico" `
+    --distpath build\nxm --workpath build\pyi-nxm --specpath build\pyi-nxm `
+    --collect-submodules cogitator `
+    packaging\nxm_entry.py
+if ($LASTEXITCODE -ne 0) { throw "PyInstaller (nxm) failed" }
+Copy-Item build\nxm\cogitator-nxm.exe dist\cogitator\cogitator-nxm.exe -Force
 # The setup wizard is a windowed tkinter program.
 & $py -m PyInstaller --noconfirm --clean --onedir --windowed --name "Cogitator Setup" --icon "$PWD\packaging\cogitator.ico" `
     --distpath dist --workpath build\pyi-setup --specpath build\pyi-setup `
@@ -43,5 +50,6 @@ Copy-Item build\updater\cogitator-updater.exe dist\cogitator\cogitator-updater.e
 if ($LASTEXITCODE -ne 0) { throw "PyInstaller (setup) failed" }
 Check "dist\cogitator\cogitator.exe"
 Check "dist\cogitator\cogitator-updater.exe"
+Check "dist\cogitator\cogitator-nxm.exe"
 Check "dist\Cogitator Setup\Cogitator Setup.exe"
 Get-FileHash dist\cogitator\cogitator.exe -Algorithm SHA256 | Format-List

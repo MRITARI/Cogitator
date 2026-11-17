@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import sys
 
 import tempfile
@@ -110,6 +111,9 @@ def build_parser() -> argparse.ArgumentParser:
     ch = sub.add_parser("changelog", help="show what changed in a linked mod on Nexus")
     ch.add_argument("folder")
     ch.add_argument("--all", action="store_true", help="every version, not just newer than yours")
+    nx_ = sub.add_parser("nxm", help="Nexus 'Mod Manager Download' links: register this program as the nxm:// handler")
+    nx_.add_argument("action", choices=["register", "unregister", "status", "handle"])
+    nx_.add_argument("url", nargs="?", help="handle: the nxm:// link (what the browser passes)")
     sub.add_parser("diag", help="write a redacted diagnostics zip to attach to a bug report (nothing is uploaded)")
     cf = sub.add_parser("conflicts", help="the signed known-conflicts list used by doctor")
     cf.add_argument("action", choices=["update", "show"])
@@ -771,6 +775,18 @@ def cmd_crashlog(args) -> int:
     return 0
 
 
+def cmd_nxm(args) -> int:
+    from . import nxm
+
+    if args.action == "handle":
+        return nxm.handle_click(args.url or "")
+    if os.name != "nt":
+        print("nxm:// registration is only available on Windows.", file=sys.stderr)
+        return 2
+    print({"register": nxm.register, "unregister": nxm.unregister, "status": nxm.status}[args.action]())
+    return 0
+
+
 def cmd_diag(args) -> int:
     from . import diag
 
@@ -1270,6 +1286,8 @@ def _dispatch(args) -> int:
         return cmd_crashlog(args)
     if args.cmd == "changelog":
         return cmd_changelog(args)
+    if args.cmd == "nxm":
+        return cmd_nxm(args)
     if args.cmd == "diag":
         return cmd_diag(args)
     if args.cmd == "conflicts":

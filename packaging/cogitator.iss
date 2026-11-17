@@ -52,16 +52,20 @@ Name: "{autodesktop}\Cogitator"; Filename: "{app}\app\cogitator.exe"; WorkingDir
 [Tasks]
 Name: "desktopicon"; Description: "Create a &desktop shortcut"; Flags: checkedonce
 Name: "addtopath"; Description: "Add Cogitator to the &PATH (so the cogitator command works in any new terminal)"
+Name: "nxm"; Description: "Open Nexus Mods \"Mod Manager Download\" links in Cogitator (replaces Vortex/MO2 as the nxm:// handler; undone on uninstall)"; Flags: unchecked
 
 [Run]
 ; The PATH edit lives in cogitator.userpath (tested); a failure here never blocks the install.
 Filename: "{app}\app\cogitator.exe"; Parameters: "path add"; Flags: runhidden skipifdoesntexist; Tasks: addtopath
+; Registers HKCU\Software\Classes\nxm (cogitator.nxm, tested); the previous handler is remembered and restored on uninstall.
+Filename: "{app}\app\cogitator.exe"; Parameters: "nxm register"; Flags: runhidden skipifdoesntexist; Tasks: nxm
 ; One flow: after the files are in place the wizard opens by itself (not an optional checkbox). Silent installs skip it
 ; and never touch the game. The Nexus key is typed in the wizard only; nothing is passed on a command line.
 Filename: "{app}\setup\Cogitator Setup.exe"; Parameters: "--wizard"; Flags: nowait skipifsilent
 
 [UninstallRun]
 Filename: "{app}\app\cogitator.exe"; Parameters: "path remove"; Flags: runhidden skipifdoesntexist; RunOnceId: "RemoveFromPath"
+Filename: "{app}\app\cogitator.exe"; Parameters: "nxm unregister"; Flags: runhidden skipifdoesntexist; RunOnceId: "RemoveNxm"
 
 [UninstallDelete]
 ; Created by the self-updater after installation; Inno does not know about them.

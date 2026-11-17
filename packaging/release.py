@@ -31,6 +31,16 @@ def find_iscc() -> str | None:
     return None
 
 
+def sign_files(paths: list[Path], run=subprocess.run) -> bool:
+    """Authenticode-sign `paths` when CODESIGN_PFX_BASE64 is set (see sign.ps1); otherwise do nothing. Returns whether it ran."""
+    paths = [p for p in paths if p.is_file()]
+    if not paths or not os.environ.get("CODESIGN_PFX_BASE64"):
+        return False
+    run(["powershell", "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", str(Path(__file__).with_name("sign.ps1")),
+         "-Files", ",".join(str(p) for p in paths)], check=True)
+    return True
+
+
 def build_installer(version: str, out: Path) -> Path:
     iscc = find_iscc()
     if not iscc:
@@ -54,6 +64,9 @@ def build(version: str, app_dir: Path, out: Path, key_path: Path, installer: boo
     if not isinstance(key, Ed25519PrivateKey):
         raise SystemExit("the signing key is not an Ed25519 key")
     out.mkdir(parents=True, exist_ok=True)
+    # Sign the programs BEFORE they are zipped or packed into the installer, so the hashes and the Ed25519 signatures cover signed files.
+    sign_files([app_dir / n for n in ("cogitator.exe", "cogitator-updater.exe", "cogitator-nxm.exe")]
+               + [app_dir.parent / "Cogitator Setup" / "Cogitator Setup.exe"])
     name = f"Cogitator-{version}-win-x64.zip"
     zpath = out / name
     with zipfile.ZipFile(zpath, "w", zipfile.ZIP_DEFLATED) as z:
@@ -64,7 +77,9 @@ def build(version: str, app_dir: Path, out: Path, key_path: Path, installer: boo
     sig.write_bytes(base64.b64encode(key.sign(data)) + b"\n")
     assets = [zpath]
     if installer:
-        assets.append(build_installer(version, out))
+        inst = build_installer(version, out)
+        sign_files([inst])  # before SHA256SUMS is computed
+        assets.append(inst)
     sums = out / "SHA256SUMS"
     sums.write_text("".join(f"{hashlib.sha256(a.read_bytes()).hexdigest()}  {a.name}\n" for a in assets), encoding="utf-8", newline="\n")
     sums_sig = out / "SHA256SUMS.sig"  # lets anyone check the installer too: cogitator verify-download SHA256SUMS <file>

@@ -44,6 +44,9 @@ cogitator-setup = "cogitator_setup.app:main"
 [tool.setuptools.packages.find]
 include = ["cogitator*", "cogitator_setup*"]
 
+[tool.setuptools.package-data]
+cogitator = ["locales/*.json"]
+
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 asyncio_mode = "auto"

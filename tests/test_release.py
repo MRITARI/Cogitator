@@ -116,7 +116,7 @@ def test_cli_self_update_paths(capsys, built, monkeypatch):
 
 def test_installer_script_is_one_flow_and_asks_before_touching_the_game():
     iss = (Path(__file__).resolve().parents[1] / "packaging" / "cogitator.iss").read_text(encoding="utf-8")
-    run = [ln for ln in iss.split("[Run]")[1].split("[UninstallRun]")[0].splitlines() if ln.startswith("Filename") and "path add" not in ln]
+    run = [ln for ln in iss.split("[Run]")[1].split("[UninstallRun]")[0].splitlines() if ln.startswith("Filename") and "path add" not in ln and "nxm register" not in ln]
     assert len(run) == 1 and 'setup\\Cogitator Setup.exe' in run[0] and 'Parameters: "--wizard"' in run[0]
     assert "skipifsilent" in run[0] and "postinstall" not in run[0] and "unchecked" not in run[0]  # automatic, never on /SILENT
     assert 'Name: "{autoprograms}\\Cogitator Setup";' in iss

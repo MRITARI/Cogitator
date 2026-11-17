@@ -19,6 +19,7 @@ from .screens import ChoiceScreen, ConfirmScreen, MenuScreen
 from .widgets import ModTable, TitleButton
 
 log = logging.getLogger("cogitator.tui")
+from ..i18n import tr
 from .view import (EMPTY_STATE, SORT_COLUMNS, THEME_CHOICES, enabled_cell, mod_cell, installed_text, status_text, hint_for)
 
 
@@ -93,7 +94,7 @@ class TableMixin:
 
     def _update_hint(self) -> None:
         f = self.selected()
-        self.query_one("#hint", Static).update(hint_for(self._mod(f), self.urows.get(f)) + self._meta_hint(f) if f else EMPTY_STATE)
+        self.query_one("#hint", Static).update(hint_for(self._mod(f), self.urows.get(f)) + self._meta_hint(f) if f else tr("empty.state", EMPTY_STATE))
 
     def on_data_table_row_highlighted(self, event: DataTable.RowHighlighted) -> None:
         self._update_hint()
@@ -160,25 +161,25 @@ class TableMixin:
             return
         have_game = bool(self.game_dir and self.registry)
         upd = bool(self.update_ready() or self._update_offer())
-        items = [("Import a mod or framework zip...   I", "import_archive", have_game),
-                 ("Check for updates   R", "recheck", have_game),
-                 ("Update all mods   Ctrl+U", "update_all", have_game),
-                 ("Update Mod Loader / Framework   F", "framework_update", have_game),
-                 ("Link all mods to Nexus   M", "link_all", have_game),
+        items = [(tr("menu.import_a_mod_or_framework_zip", "Import a mod or framework zip...   I"), "import_archive", have_game),
+                 (tr("menu.check_for_updates", "Check for updates   R"), "recheck", have_game),
+                 (tr("menu.update_all_mods", "Update all mods   Ctrl+U"), "update_all", have_game),
+                 (tr("menu.update_mod_loader_framework", "Update Mod Loader / Framework   F"), "framework_update", have_game),
+                 (tr("menu.link_all_mods_to_nexus", "Link all mods to Nexus   M"), "link_all", have_game),
                  None,
-                 ("Mods on / off (game patch)   T", "toggle_mods", have_game),
-                 ("Nexus API key...   K", "set_key", True),
-                 ("Doctor (diagnose problems)   D", "doctor", True),
-                 ("Profiles...   P", "profiles", have_game),
-                 ("Launch Darktide   G", "launch", have_game),
-                 ("Crash-log leads   C", "crashlog", have_game),
-                 ("Find a crashing mod (bisect)...", "bisect", have_game),
-                 ("Filter the list   /", "filter", have_game),
-                 ("Sort the list   O", "cycle_sort", have_game),
-                 ("Theme (colours)...", "choose_theme", True)]
+                 (tr("menu.mods_on_off_game_patch", "Mods on / off (game patch)   T"), "toggle_mods", have_game),
+                 (tr("menu.nexus_api_key", "Nexus API key...   K"), "set_key", True),
+                 (tr("menu.doctor_diagnose_problems", "Doctor (diagnose problems)   D"), "doctor", True),
+                 (tr("menu.profiles", "Profiles...   P"), "profiles", have_game),
+                 (tr("menu.launch_darktide", "Launch Darktide   G"), "launch", have_game),
+                 (tr("menu.crash_log_leads", "Crash-log leads   C"), "crashlog", have_game),
+                 (tr("menu.find_a_crashing_mod_bisect", "Find a crashing mod (bisect)..."), "bisect", have_game),
+                 (tr("menu.filter_the_list", "Filter the list   /"), "filter", have_game),
+                 (tr("menu.sort_the_list", "Sort the list   O"), "cycle_sort", have_game),
+                 (tr("menu.theme_colours", "Theme (colours)..."), "choose_theme", True)]
         if upd:
-            items += [None, ("Update Cogitator   A", "apply_update", True)]
-        items += [None, ("Help   ?", "help", True), ("Quit   Q", "quit_app", True)]
+            items += [None, (tr("menu.update_cogitator", "Update Cogitator   A"), "apply_update", True)]
+        items += [None, (tr("menu.help", "Help   ?"), "help", True), (tr("menu.quit", "Quit   Q"), "quit_app", True)]
         self._open_menu(items, 0, 1, "Cogitator", lambda aid: getattr(self, f"action_{aid}")())
 
     def action_choose_theme(self) -> None:

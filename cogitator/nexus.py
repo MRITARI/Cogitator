@@ -253,9 +253,11 @@ class NexusClient:
         return [{"mod_id": n["modId"], "name": n["name"]} for n in nodes
                 if isinstance(n, dict) and isinstance(n.get("modId"), int) and isinstance(n.get("name"), str)]
 
-    def download_links(self, mod_id: int, file_id: int) -> list[dict]:
-        """Premium only. Returns [{"URI": ..., "name": ..., "short_name": ...}, ...]."""
-        d = self.get(f"/games/{GAME}/mods/{mod_id}/files/{file_id}/download_link.json")
+    def download_links(self, mod_id: int, file_id: int, key: str | None = None, expires: int | None = None) -> list[dict]:
+        """Premium accounts, or any account with the key/expires from an nxm:// link for this file.
+        Returns [{"URI": ..., "name": ..., "short_name": ...}, ...]."""
+        params = {"key": key, "expires": expires} if key and expires else None
+        d = self.get(f"/games/{GAME}/mods/{mod_id}/files/{file_id}/download_link.json", params)
         return [x for x in d if isinstance(x, dict) and x.get("URI")] if isinstance(d, list) else []
 
     def updated(self, period: str = "1m") -> list[dict]:
