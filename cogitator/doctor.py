@@ -16,7 +16,7 @@ import httpx
 
 from . import gamefinder
 from .config import Settings, cache_dir, config_dir, get_api_key, log_path, redact
-from .frameworks import DML_OPTIONAL, detect_framework
+from .frameworks import detect_framework
 from .gamefinder import APPID, validate_game_dir
 from .loadorder import LoadOrder
 from .loader import GITHUB_API, make_client
@@ -25,7 +25,7 @@ from .nexus import InvalidKey, NexusClient, NexusError, RateLimited
 from .patcher import (BAK_NAME, MTIME_SLACK_S, OFF, ON, UNKNOWN, bak_path, bundle_dir, db_path, file_has_tag, find_tool,
                       patch_state, PatcherUnavailable, interrupted_patch)
 from .procs import darktide_running
-from .registry import Registry, SCHEMA
+from .registry import Registry
 
 OK, WARN, FAIL = "ok", "warn", "fail"
 _MARK = {OK: "[OK]  ", WARN: "[WARN]", FAIL: "[FAIL]"}

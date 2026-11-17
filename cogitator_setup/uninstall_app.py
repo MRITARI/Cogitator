@@ -3,19 +3,17 @@ Review -> Progress -> Finish. This file only draws and moves messages; the page 
 deletion is done by the engine (`cogitator.uninstall_run`)."""
 from __future__ import annotations
 
-import sys
 import tkinter as tk
 import tkinter.font as tkfont
 from tkinter import ttk
 from typing import Callable
 
-from cogitator.config import redact
 from cogitator.setup_run import ProgressEvent
 from cogitator.uninstall_run import STEP_NAMES, UninstallDeps, planned_steps, run_uninstall
 
 from .app import MARK, POLL_MS, Dialogs, set_window_icon
 from .controller import Controller
-from .uninstall_vm import Detected, MaintenanceModel, UPage, UServices, UninstallModel
+from .uninstall_vm import MaintenanceModel, UPage, UServices, UninstallModel
 
 TITLE = "Cogitator Uninstall"
 
@@ -100,7 +98,7 @@ class UninstallApp:
     def _wrapped(self, parent, text: str = "", row: int = 0, **kw) -> ttk.Label:
         lab = ttk.Label(parent, text=text, justify="left", **kw)
         lab.grid(row=row, column=0, sticky="we", pady=2)
-        lab.bind("<Configure>", lambda e, l=lab: l.configure(wraplength=max(200, e.width - 4)))
+        lab.bind("<Configure>", lambda e, ln=lab: ln.configure(wraplength=max(200, e.width - 4)))
         return lab
 
     # ---------------------------------------------------------------- maintenance

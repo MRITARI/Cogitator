@@ -18,7 +18,6 @@ from typing import Callable, Protocol
 from . import __version__
 from .config import Settings, cache_dir, clear_api_key, get_api_key, redact, set_api_key
 from .doctor import Check, run_doctor
-from .frameworks import detect_framework
 from .fsutil import atomic_write_bytes
 from .fwupdate import install_framework_plan
 from .gamefinder import validate_game_dir

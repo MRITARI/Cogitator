@@ -17,12 +17,11 @@ from pathlib import Path
 from typing import Callable
 
 from .config import cache_dir, clear_api_key, config_dir
-from .frameworks import detect_framework
 from .gamefinder import validate_game_dir
 from .installer import Transaction
 from .loadorder import LoadOrder
 from .mods import INTERNAL_FOLDERS, load_order_path, mods_dir, scan_mods
-from .patcher import (ON, OFF, UNKNOWN, PatcherError, bak_path, db_path, default_runner, patch, patch_state, unpatch)
+from .patcher import (ON, OFF, UNKNOWN, PatcherError, default_runner, patch, patch_state, unpatch)
 from .procs import darktide_running
 from .registry import Registry
 from .setup_run import ProgressEvent, SetupCancelled, SetupError, explain

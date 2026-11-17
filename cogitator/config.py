@@ -235,7 +235,7 @@ def clear_api_key() -> None:
 
 _APIKEY_PAT = re.compile(r"(?i)(apikey['\"]?\s*[:=]\s*['\"]?)[^\s'\",}]+")
 # nxm:// links and download_link requests carry `key=` and `user_id=` in the query string
-_QUERY_SECRET_PAT = re.compile(r"(?i)(?<![\w-])((?:key|user_id)=)[^&\s'\"<>#]*")
+_QUERY_SECRET_PAT = re.compile(r"(?i)(?<![\w-])((?:key|user_id|md5)=)[^&\s'\"<>#]*")
 
 
 _KEY_CACHE: list = []  # [key]; looked up once per run, since every log line passes through redact()
@@ -251,7 +251,7 @@ def _known_key() -> str | None:
 
 
 def redact(text: str, *extra_secrets: str) -> str:
-    """Strip the stored Nexus key, any `apikey=...`, `key=...` and `user_id=...` values, and explicitly supplied secrets."""
+    """Strip the stored Nexus key, any `apikey=...`, `key=...`, `user_id=...` and `md5=...` values, and explicitly supplied secrets."""
     text = _APIKEY_PAT.sub(r"\1***", text)
     text = _QUERY_SECRET_PAT.sub(r"\1***", text)
     for s in (_known_key(), *extra_secrets):
@@ -261,7 +261,7 @@ def redact(text: str, *extra_secrets: str) -> str:
 
 
 class RedactFilter(logging.Filter):
-    """Redacts the stored Nexus key and any apikey=/key=/user_id= looking values, in the message and in any traceback."""
+    """Redacts the stored Nexus key and any apikey=/key=/user_id=/md5= looking values, in the message and in any traceback."""
 
     def filter(self, record: logging.LogRecord) -> bool:
         record.msg, record.args = redact(record.getMessage()), None

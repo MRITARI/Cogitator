@@ -4,7 +4,6 @@ removed, patched or stored. Used so a person can look at and click through every
 from __future__ import annotations
 
 import threading
-import time
 
 from cogitator.setup_run import ProgressEvent, SetupResult, StepResult
 from cogitator.setup_run import planned_steps as setup_steps

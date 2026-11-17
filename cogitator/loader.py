@@ -145,7 +145,6 @@ def download_asset(client: httpx.Client, asset: Asset, dest_dir: Path, max_bytes
     dest_dir.mkdir(parents=True, exist_ok=True)
     name = re.sub(r"[^\w.\-]", "_", asset.name) or "download.zip"
     dest = dest_dir / name
-    last: Exception | None = None
     for attempt in range(3):
         try:
             with client.stream("GET", asset.url, headers={"Accept": "*/*"}) as r:
@@ -162,7 +161,6 @@ def download_asset(client: httpx.Client, asset: Asset, dest_dir: Path, max_bytes
                         f.write(chunk)
             break
         except httpx.HTTPError as e:
-            last = e
             if attempt == 2:
                 raise LoaderError(f"Download failed: {redact(str(e))}") from e
             sleep(2 ** attempt)

@@ -2,6 +2,8 @@
 bulk actions, notes/tags/favourites, filter, pinning and changelogs."""
 from __future__ import annotations
 
+from typing import TYPE_CHECKING, Any
+
 from rich.text import Text
 
 from .. import bisect, crashlog, gamefinder, nxm, repair
@@ -18,6 +20,10 @@ from .view import mod_cell
 
 class WorkflowMixin:
     """Methods of CogitatorApp; they use its attributes, so it is only meant to be mixed into it."""
+
+    if TYPE_CHECKING:  # provided by CogitatorApp
+        _ui: Any
+        log_line: Any
 
     # ------------------------------------------------------------ row display, marks, filter
     def _meta(self, folder: str) -> dict:

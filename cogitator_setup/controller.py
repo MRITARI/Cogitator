@@ -12,7 +12,7 @@ import threading
 from typing import Callable
 
 from cogitator.config import redact
-from cogitator.setup_run import ProgressEvent, SetupDeps, SetupPlan, SetupResult, run_setup
+from cogitator.setup_run import SetupDeps, SetupPlan, SetupResult, run_setup
 
 from .viewmodel import SetupModel
 

@@ -86,7 +86,7 @@ def parse(url: str) -> NxmLink:
 
 
 def redact_url(url: str) -> str:
-    return re.sub(r"(?i)((?<![\w-])(?:key|user_id)=)[^&\s]+", r"\1***", url)
+    return re.sub(r"(?i)((?<![\w-])(?:key|user_id|md5)=)[^&\s]+", r"\1***", url)
 
 
 def check_expiry(link: NxmLink, now: Callable[[], float] = time.time) -> None:

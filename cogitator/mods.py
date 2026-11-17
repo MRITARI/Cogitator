@@ -108,11 +108,11 @@ def move_mod(game_dir: Path, folder: str, delta: int, internal: frozenset[str] |
     internal = INTERNAL_FOLDERS if internal is None else internal
     path = load_order_path(game_dir)
     lo = LoadOrder.load(path)
-    mine = next((i for i, l in enumerate(lo.lines) if l.name == folder and folder not in internal), None)
+    mine = next((i for i, ln in enumerate(lo.lines) if ln.name == folder and folder not in internal), None)
     if mine is None:
         raise ModError(f"{folder} is not in the load order yet. Press Space to add it first.")
     # other movable entries (a repeated line of the same mod is not a neighbour)
-    seq = [i for i, l in enumerate(lo.lines) if l.name and l.name not in internal and (l.name != folder or i == mine)]
+    seq = [i for i, ln in enumerate(lo.lines) if ln.name and ln.name not in internal and (ln.name != folder or i == mine)]
     pos = seq.index(mine) + (1 if delta > 0 else -1)
     if not 0 <= pos < len(seq):
         return f"{folder}: already {'last' if delta > 0 else 'first'} in the load order."

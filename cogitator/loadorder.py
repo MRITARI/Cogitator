@@ -89,7 +89,7 @@ class LoadOrder:
             return cls([], False, Path(path))
 
     def render(self) -> bytes:
-        text = "".join(l.text + l.eol for l in self.lines)
+        text = "".join(ln.text + ln.eol for ln in self.lines)
         return (b"\xef\xbb\xbf" if self.bom else b"") + text.encode("utf-8", errors="surrogateescape")
 
     def save(self, path: Path | None = None, backup: bool = True) -> None:
@@ -106,38 +106,38 @@ class LoadOrder:
     @property
     def eol(self) -> str:
         """Dominant line ending (first one seen), default LF."""
-        for l in self.lines:
-            if l.eol:
-                return l.eol
+        for ln in self.lines:
+            if ln.eol:
+                return ln.eol
         return "\n"
 
     def entries(self) -> list[tuple[str, bool]]:
         """Mod entries in order: (name, enabled)."""
-        return [(l.name, l.enabled) for l in self.lines if l.name]  # type: ignore[misc]
+        return [(ln.name, ln.enabled) for ln in self.lines if ln.name]  # type: ignore[misc]
 
     def state(self, name: str) -> bool | None:
         """True enabled, False disabled, None unlisted. Duplicates: first wins."""
-        for l in self.lines:
-            if l.is_named(name):
-                return l.enabled
+        for ln in self.lines:
+            if ln.is_named(name):
+                return ln.enabled
         return None
 
     # ---- edits (touch only matching lines)
     def set_enabled(self, name: str, enabled: bool) -> bool:
         """Returns True if any line changed. Unlisted -> False (use add)."""
         changed = False
-        for l in self.lines:
-            if not l.is_named(name) or l.enabled == enabled:
+        for ln in self.lines:
+            if not ln.is_named(name) or ln.enabled == enabled:
                 continue
-            indent = l.text[: len(l.text) - len(l.text.lstrip())]
-            body = l.text.lstrip()
-            l.text = indent + ("--" + body if not enabled else body[2:])
+            indent = ln.text[: len(ln.text) - len(ln.text.lstrip())]
+            body = ln.text.lstrip()
+            ln.text = indent + ("--" + body if not enabled else body[2:])
             changed = True
         return changed
 
     def remove(self, name: str) -> int:
         """Delete every line for `name` (enabled or disabled). Returns how many lines were removed."""
-        keep = [l for l in self.lines if not l.is_named(name)]
+        keep = [ln for ln in self.lines if not ln.is_named(name)]
         n = len(self.lines) - len(keep)
         self.lines = keep
         return n
@@ -152,11 +152,11 @@ class LoadOrder:
         order. Entries move between the slots the mod lines occupy now, so comments, blank lines, the `skip` entries and
         every line ending stay where they are. A mod listed twice keeps only its first line."""
         skipset = {s.casefold() for s in skip}
-        slots = [i for i, l in enumerate(self.lines) if l.name and l.name.casefold() not in skipset]
+        slots = [i for i, ln in enumerate(self.lines) if ln.name and ln.name.casefold() not in skipset]
         first: dict[str, tuple[str, str]] = {}
         for i in slots:
-            l = self.lines[i]
-            first.setdefault(l.name.casefold(), (l.name, l.text))  # type: ignore[union-attr]
+            ln = self.lines[i]
+            first.setdefault(ln.name.casefold(), (ln.name, ln.text))  # type: ignore[union-attr]
         want: list[str] = []
         seen: set[str] = set()
         for n in list(order) + [v[0] for v in first.values()]:

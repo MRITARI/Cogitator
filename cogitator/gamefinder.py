@@ -87,11 +87,11 @@ def library_folders(steam_root: Path) -> list[Path]:
             if isinstance(path, str) and path:
                 libs.append(Path(path))
     seen, out = set(), []
-    for l in libs:
-        k = os.path.normcase(str(l))
+    for ln in libs:
+        k = os.path.normcase(str(ln))
         if k not in seen:
             seen.add(k)
-            out.append(l)
+            out.append(ln)
     return out
 
 

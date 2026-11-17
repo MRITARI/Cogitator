@@ -18,7 +18,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Callable
 
-from .archives import ParsedArchive, match_archive_to_files, parse_archive_name, _clean
+from .archives import match_archive_to_files, parse_archive_name, _clean
 from .config import cache_dir
 from .frameworks import _DML_ZIP, _DMF_ZIP, _find_prefix, _names
 from .gamefinder import validate_game_dir
@@ -27,7 +27,7 @@ from .linking import _latest_record
 from .loader import Asset, LoaderError, download_asset, long_path, safe_extract
 from .loadorder import LoadOrder
 from .mods import INTERNAL_FOLDERS, load_order_path, mods_dir
-from .nexus import GAME, NexusClient, NexusFile, latest_main_file, make_download_client, parse_nexus_ref
+from .nexus import GAME, NexusClient, NexusFile, make_download_client
 from .procs import darktide_running
 from .registry import Registry
 

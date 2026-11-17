@@ -185,6 +185,38 @@ def test_redact_covers_key_and_user_id_query_values():
         "424242" not in nxm.redact_url(f"nxm://{G}/mods/1/files/2?key={SECRET}&user_id=424242")
 
 
+MD5 = "9f2c0d41aa77b3e5"
+URI = f"https://cf-files.nexusmods.com/f/m.zip?md5={MD5}&expires=1&user_id=424242"
+
+
+def test_md5_download_token_is_redacted_everywhere(tmp_path):
+    out = config.redact(f"fetching {URI}")
+    assert MD5 not in out and "424242" not in out and "expires=1" in out
+    assert config.redact("xmd5=keepme") == "xmd5=keepme"
+    assert MD5 not in nxm.redact_url(URI)
+
+    def go(lg):
+        lg.warning("GET %s", URI)
+        try:
+            raise RuntimeError(f"boom {URI}")
+        except RuntimeError:
+            lg.exception("download broke")
+
+    assert MD5 not in log_through_filter(go)  # message and traceback
+    p = config.log_path()
+    p.parent.mkdir(parents=True, exist_ok=True)
+    p.write_text(f"GET {URI}" + chr(10), encoding="utf-8")
+    with zipfile.ZipFile(diag.build(None, None, tmp_path)[0]) as z:  # the diag zip
+        assert MD5 not in "".join(z.read(n).decode("utf-8", "replace") for n in z.namelist())
+
+    def boom(req):
+        raise httpx.ConnectError(f"cannot reach {URI}")
+
+    with httpx.Client(transport=httpx.MockTransport(boom)) as c, pytest.raises(LoaderError) as e:  # error text
+        download_asset(c, Asset("f.zip", URI, 0), tmp_path, sleep=lambda s: None)
+    assert MD5 not in str(e.value)
+
+
 def log_through_filter(fn):
     stream = io.StringIO()
     h = logging.StreamHandler(stream)

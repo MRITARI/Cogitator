@@ -42,7 +42,7 @@ from .screens import ChoiceScreen, ConfirmScreen, InputScreen, NoticeScreen
 from .widgets import ModTable, TitleButton
 
 log = logging.getLogger("cogitator.tui")
-from .view import (  # noqa: F401  (re-exported: tests and callers import these from here)
+from .view import (  # noqa: F401, E402  (re-exported: tests and callers import these from here)
     NOTICE_TITLE,
     NOTICE_BODY,
     EMPTY_STATE,
@@ -65,12 +65,12 @@ from .view import (  # noqa: F401  (re-exported: tests and callers import these 
     report_text,
     fw_text,
     nexus_text)
-from .selfupdate_mixin import SelfUpdateMixin
-from .table_mixin import TableMixin
-from .framework_mixin import FrameworkMixin
-from .profile_mixin import ProfileMixin
-from ..i18n import detect as _detect_language, set_language, tr
-from .workflow_mixin import WorkflowMixin
+from .selfupdate_mixin import SelfUpdateMixin  # noqa: E402
+from .table_mixin import TableMixin  # noqa: E402
+from .framework_mixin import FrameworkMixin  # noqa: E402
+from .profile_mixin import ProfileMixin  # noqa: E402
+from ..i18n import detect as _detect_language, set_language, tr  # noqa: E402
+from .workflow_mixin import WorkflowMixin  # noqa: E402
 
 
 

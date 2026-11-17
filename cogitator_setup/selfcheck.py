@@ -34,7 +34,8 @@ def run() -> int:
     def engine():
         from cogitator import selfcheck
 
-        import io, contextlib
+        import io
+        import contextlib
 
         buf = io.StringIO()
         with contextlib.redirect_stdout(buf):

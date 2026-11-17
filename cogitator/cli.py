@@ -26,7 +26,6 @@ from .patcher import toggle as toggle_mods
 from .registry import Registry, check_data_versions
 from .archives import parse_archive_name
 from .linking import link_mod
-from .loader import LoaderError
 from .modinstall import (ModImportError, apply_update_premium, import_archive, inspect_mod_zip, mod_page_url,
                          open_files_page, wait_for_download)
 from .mods import INTERNAL_FOLDERS, mods_dir
@@ -1077,7 +1076,7 @@ def cmd_update(args) -> int:
     except KeyboardInterrupt:
         found = None
     if not found:
-        print(f"No matching download seen. When it finishes: cogitator import \"<path to zip>\"")
+        print("No matching download seen. When it finishes: cogitator import \"<path to zip>\"")
         return 1
     print(f"Found: {found}")
     ns = argparse.Namespace(**{**vars(args), "archive": str(found), "mod_id": rec["nexus_id"]})

@@ -8,7 +8,6 @@ from pathlib import Path
 from typing import Callable
 
 from .frameworks import InstallResult, Plan, install_plan
-from .loader import LoaderError
 from .patcher import ON, PatcherError, Runner, default_runner, patch, patch_state, unpatch
 from .procs import darktide_running
 from .registry import Registry

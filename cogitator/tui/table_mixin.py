@@ -19,8 +19,8 @@ from .screens import ChoiceScreen, ConfirmScreen, MenuScreen
 from .widgets import ModTable, TitleButton
 
 log = logging.getLogger("cogitator.tui")
-from ..i18n import tr
-from .view import (EMPTY_STATE, SORT_COLUMNS, THEME_CHOICES, enabled_cell, mod_cell, installed_text, status_text, hint_for)
+from ..i18n import tr  # noqa: E402
+from .view import (EMPTY_STATE, SORT_COLUMNS, THEME_CHOICES, enabled_cell, installed_text, status_text, hint_for)  # noqa: E402
 
 
 class TableMixin:

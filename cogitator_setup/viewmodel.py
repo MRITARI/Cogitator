@@ -2,7 +2,7 @@
 The Nexus key is kept in one private attribute and never appears in repr, summaries or diagnostics."""
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from enum import Enum
 from pathlib import Path
 from typing import Callable
@@ -12,7 +12,7 @@ from cogitator.frameworks import detect_framework
 from cogitator.gamefinder import Resolution, resolve_game_dir, validate_game_dir
 from cogitator.procs import darktide_running
 from cogitator.registry import Registry
-from cogitator.setup_run import (ComponentChoice, KeyCheck, SetupPlan, SetupResult, planned_steps, validate_key)
+from cogitator.setup_run import (ComponentChoice, KeyCheck, SetupPlan, SetupResult, validate_key)
 from cogitator.sources import SNAPSHOT_EXPLANATION, SourceOption, choose_sources
 
 NOTICE = (

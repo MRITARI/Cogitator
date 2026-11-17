@@ -15,8 +15,7 @@ from typing import Callable, Protocol
 from . import __version__
 from .config import cache_dir, clear_api_key, config_dir, redact
 from .gamefinder import validate_game_dir
-from .loadorder import LoadOrder
-from .mods import load_order_path, mods_dir
+from .mods import load_order_path
 from .patcher import ON, default_runner, patch_state
 from .procs import darktide_running
 from .registry import Registry

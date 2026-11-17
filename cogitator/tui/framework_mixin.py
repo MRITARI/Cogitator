@@ -18,7 +18,7 @@ from ..updates import (FRAMEWORK_MODS, FrameworkUpdate, UPDATE, cached_framework
 from .screens import ChoiceScreen, ConfirmScreen, DoctorScreen, InputScreen
 
 log = logging.getLogger("cogitator.tui")
-from .view import (report_text)
+from .view import (report_text)  # noqa: E402
 
 
 class FrameworkMixin:
