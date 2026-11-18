@@ -24,6 +24,12 @@ Follow the window that opens: it asks for your Nexus key (optional) and installs
 Framework. It installs per user and needs no administrator rights. A ticked option adds `cogitator` to your user PATH, so the
 commands below work in any new terminal window (open a new one after installing).
 
+## Uninstall
+
+Use **Settings > Apps > Installed apps > Cogitator > Uninstall**. It asks whether to remove the Mod Loader and Framework from
+Darktide too (your own mods are never deleted). It also removes the PATH entry. Cogitator's settings, logs and saved Nexus key are kept unless you also remove
+them: delete `%LOCALAPPDATA%\cogitator` and the Windows Credential Manager entry named `cogitator`.
+
 ---
 ---
 ---
@@ -128,11 +134,7 @@ and `update_consent = true` in `config.toml`; `update_mode = "off"` turns the ch
 what you expected and what happened, and the log file `%LOCALAPPDATA%\cogitator\Cache\cogitator.log` (secrets are removed
 from it, but check it before posting).
 
-## Uninstall
 
-Use **Settings > Apps > Installed apps > Cogitator > Uninstall**. It asks whether to remove the Mod Loader and Framework from
-Darktide too (your own mods are never deleted). It also removes the PATH entry. Cogitator's settings, logs and saved Nexus key are kept unless you also remove
-them: delete `%LOCALAPPDATA%\cogitator` and the Windows Credential Manager entry named `cogitator`.
 
 ## Third-party software
 
