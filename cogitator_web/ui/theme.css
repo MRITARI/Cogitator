@@ -1,0 +1,107 @@
+/* Design tokens. Dark is the default; the light set applies when Windows prefers light (and no theme is forced in Settings)
+   or when Settings forces it. The two light blocks below must stay identical (tests/test_web_static.py checks it).
+   Dark values marked "measured" were sampled from the reference; the rest are estimates tuned for 4.5:1 text contrast. */
+:root {
+  --bg: #0a0a0a;          /* page (measured) */
+  --sidebar: #0a0a0a;     /* same as the page */
+  --card: #171717;        /* cards, modals, menus (measured) */
+  --tile: #1e1e1e;        /* inner tiles, row hover (measured) */
+  --input: #282828;       /* filled inputs, switch track off (measured) */
+  --secondary: #262626;   /* secondary button, selected nav, selected row (measured) */
+  --border: #2f2f2f;      /* outline buttons, hairlines (measured) */
+  --divider: rgba(255, 255, 255, 0.06);
+  --fg: #fafafa;
+  --muted: #a3a3a3;
+  --primary: #e5e5e5;     /* primary button, switch track on (measured) */
+  --primary-fg: #0a0a0a;
+  --knob: #d4d4d4;
+  --knob-on: #0a0a0a;
+  --destructive: #ef4444; /* fills and dots */
+  --ok: #4ade80;
+  --attention: #fbbf24;
+  --destructive-text: #f87171; /* the same hues as text, tuned for 4.5:1 on every surface */
+  --ok-text: #4ade80;
+  --attention-text: #fbbf24;
+  --neutral: #71717a;
+  --ring: #a3a3a3;
+  --scrim: rgba(0, 0, 0, 0.6);
+
+  --radius-pill: 999px;
+  --radius-card: 24px;
+  --radius-tile: 16px;
+  --radius-menu: 16px;
+  --sp-1: 4px;
+  --sp-2: 8px;
+  --sp-3: 12px;
+  --sp-4: 16px;
+  --sp-5: 20px;
+  --sp-6: 24px;
+  --page-pad: 24px;
+  --row-h: 44px;
+  --t-fast: 120ms;
+  --t-med: 150ms;
+  --font: "Geist", "Inter", "Segoe UI Variable", "Segoe UI", system-ui, sans-serif;
+  --mono: "Cascadia Mono", Consolas, monospace;
+  --icons: "Segoe Fluent Icons", "Segoe MDL2 Assets";
+  color-scheme: dark;
+}
+
+@media (prefers-color-scheme: light) {
+  :root:not([data-theme]) {
+    --bg: #ffffff;
+    --sidebar: #ffffff;
+    --card: #f5f5f5;
+    --tile: #ececec;
+    --input: #ededed;
+    --secondary: #e5e5e5;
+    --border: #e0e0e0;
+    --divider: rgba(0, 0, 0, 0.07);
+    --fg: #0a0a0a;
+    --muted: #626262;
+    --primary: #171717;
+    --primary-fg: #fafafa;
+    --knob: #8a8a8a;
+    --knob-on: #fafafa;
+    --destructive: #b91c1c;
+    --ok: #15803d;
+    --attention: #a14a07;
+    --destructive-text: #b91c1c;
+    --ok-text: #166534;
+    --attention-text: #8f4106;
+    --neutral: #a3a3a3;
+    --ring: #626262;
+    --scrim: rgba(0, 0, 0, 0.4);
+    color-scheme: light;
+  }
+}
+
+:root[data-theme="light"] {
+  --bg: #ffffff;
+  --sidebar: #ffffff;
+  --card: #f5f5f5;
+  --tile: #ececec;
+  --input: #ededed;
+  --secondary: #e5e5e5;
+  --border: #e0e0e0;
+  --divider: rgba(0, 0, 0, 0.07);
+  --fg: #0a0a0a;
+  --muted: #626262;
+  --primary: #171717;
+  --primary-fg: #fafafa;
+  --knob: #8a8a8a;
+  --knob-on: #fafafa;
+  --destructive: #b91c1c;
+  --ok: #15803d;
+  --attention: #a14a07;
+  --destructive-text: #b91c1c;
+  --ok-text: #166534;
+  --attention-text: #8f4106;
+  --neutral: #a3a3a3;
+  --ring: #626262;
+  --scrim: rgba(0, 0, 0, 0.4);
+  color-scheme: light;
+}
+
+:root[data-theme="dark"] {
+  color-scheme: dark;
+}
