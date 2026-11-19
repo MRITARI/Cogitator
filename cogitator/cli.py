@@ -142,7 +142,7 @@ def build_parser() -> argparse.ArgumentParser:
     return p
 
 
-_MUTATING = {"restore-database", "toggle", "mod", "snapshot", "profile", "launch", "bisect", "link", "unlink", "import", "update", "install-framework", "uninstall-framework"}
+_MUTATING = {"restore-database", "toggle", "mod", "snapshot", "profile", "launch", "bisect", "link", "unlink", "import", "update", "check-updates", "install-framework", "uninstall-framework"}
 _LOCKS: list = []  # held until the process exits
 
 

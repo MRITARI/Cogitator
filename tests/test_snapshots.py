@@ -192,3 +192,7 @@ def test_prune_rejects_keep_below_one(game):
 def test_game_dir_override_is_not_persisted(game):
     assert run(game, "status") == 0
     assert config.Settings.load().game_dir == ""
+
+
+def test_check_updates_takes_the_instance_lock_because_it_saves_the_registry():
+    assert "check-updates" in cli._MUTATING
