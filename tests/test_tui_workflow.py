@@ -183,7 +183,7 @@ async def test_watcher_auto_repair_patches(game, monkeypatch):
     class R:
         changed, message = True, "Mods enabled."
 
-    monkeypatch.setattr("cogitator.tui.workflow_mixin.patch", lambda *a, **k: calls.append(1) or R())
+    monkeypatch.setattr("cogitator.actions_setup.patch", lambda *a, **k: calls.append(1) or R())
     app = make_app(game)
     async with app.run_test(size=SIZE) as pilot:
         app.settings.auto_repair = "auto"

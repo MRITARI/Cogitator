@@ -6,7 +6,7 @@ from typing import TYPE_CHECKING, Any
 
 from rich.text import Text
 
-from .. import actions, actions_nexus, bisect, crashlog, gamefinder, nxm, repair
+from .. import actions, actions_nexus, actions_setup, bisect, crashlog, gamefinder, nxm, repair
 from ..config import cache_dir, get_api_key
 from ..doctor import console_log_dirs
 from ..loadorder import LoadOrder
@@ -111,17 +111,8 @@ class WorkflowMixin:
         if i is None or not marked:
             return
         if i in (0, 1):
-            from .. import snapshots
-
-            snapshots.auto(self.game_dir, "bulk", registry=self.registry, once=True)
-            done = 0
-            for f in marked:
-                try:
-                    set_mod_enabled(self.game_dir, f, i == 0)
-                    done += 1
-                except ModError as e:
-                    self.log_line(str(e), "bold red")
-            self.log_line(f"{'Enabled' if i == 0 else 'Disabled'} {done} mod(s).", "green")
+            for text, style in actions_setup.bulk_set_enabled(self._actx(), marked, i == 0):
+                self.log_line(text, style)
             self.refresh_all()
         elif i == 2:
             todo = [f for f in marked if self.urows.get(f) is not None and self.urows[f].status == UPDATE]
@@ -142,19 +133,13 @@ class WorkflowMixin:
             self.refresh_all()
 
     def _bulk_tag(self, text: str | None) -> None:
-        tags = [t.lstrip("#").lower()[:30] for t in (text or "").split() if t.lstrip("#")]
-        if not tags:
-            return
-        for f in sorted(self.marked):
-            cur = [t for t in self._meta(f).get("tags") or [] if isinstance(t, str)]
-            self.registry.set_mod(f, tags=cur + [t for t in tags if t not in cur])
-        self.log_line(f"Tagged {len(self.marked)} mod(s): {', '.join(tags)}", "green")
+        for t, style in actions_setup.bulk_tag(self._actx(), sorted(self.marked), text or ""):
+            self.log_line(t, style)
         self.refresh_all()
 
     def _job_remove_many(self, folders: list[str]) -> None:
-        for f in folders:
-            self._job_remove(f)
-            self.marked.discard(f)
+        actions_setup.remove_many(self._actx(), self._tui_ui(), folders)
+        self.marked.difference_update(folders)
         self._ui(self.refresh_all)
 
     # ------------------------------------------------------------ launch
@@ -187,28 +172,22 @@ class WorkflowMixin:
             st = patch_state(self.game_dir)
         except Exception:
             return
-        if st == self._last_patch_state:
+        step = repair.watch_step(self._last_patch_state, st, self.game_dir, self.registry, self.settings.auto_repair,
+                                 bool(self.game_running()))
+        if step is None:
             return
-        first = self._last_patch_state is None
-        self._last_patch_state = st
-        if not first:
+        self._last_patch_state, redraw, act = step
+        if redraw:
             self.refresh_header()
-        if st != OFF or not repair.needs_repair(self.game_dir, self.registry):
-            return
-        act = repair.decide(self.settings.auto_repair, bool(self.game_running()))
         if act == "patch":
             self._bg(self._job_repair, name="repair", group="patch", exclusive=True)
         elif act == "notify":
-            self.notify("The game was updated and your mods are switched off. Press T to turn them on again.",
+            self.notify(actions_setup.REPAIR_NOTICE + " Press T to turn them on again.",
                         title="Game updated", severity="warning", timeout=15)
 
     def _job_repair(self) -> None:
-        try:
-            with self._lock:
-                r = patch(self.game_dir, self.registry, runner=self.patch_runner, is_running=self.game_running)
-            self._ui(self.log_line, "Game was updated: " + r.message, "green" if r.changed else "yellow")
-        except PatcherError as e:
-            self._ui(self.log_line, f"Could not re-enable mods after the game update: {e}", "bold red")
+        for text, style in actions_setup.repair_patch(self._actx()):
+            self._ui(self.log_line, text, style)
         self._ui(self.refresh_header)
 
     # ------------------------------------------------------------ nxm:// links from the Nexus website
@@ -247,11 +226,8 @@ class WorkflowMixin:
             self._bg(self._job_crashlog, name="crash log", group="net")
 
     def _job_crashlog(self) -> None:
-        log = crashlog.newest_log(console_log_dirs(gamefinder.steam_roots()))
-        rep = crashlog.analyze(log, {m.folder for m in self.mods}) if log else crashlog.CrashReport()
-        lo = LoadOrder.load(load_order_path(self.game_dir)).entries()
-        for line in crashlog.format_report(rep, lo):
-            self._ui(self.log_line, line, "yellow" if line.startswith("  ") else "")
+        for text, style in actions_setup.crashlog_lines(self.game_dir, {m.folder for m in self.mods}):
+            self._ui(self.log_line, text, style)
 
     # ------------------------------------------------------------ bisect
     def action_bisect(self) -> None:
@@ -260,30 +236,17 @@ class WorkflowMixin:
         s = bisect.load()
         if s is None:
             self.push_screen(ConfirmScreen("Find a crashing mod?",
-                                           "Cogitator will switch half of your enabled mods off, you start the game and see whether the "
-                                           "problem is still there, and it narrows the list down. A snapshot is taken first and you can "
-                                           "restore your load order at any time. Make sure the problem happens with all mods on.",
+                                           actions_setup.BISECT_INTRO,
                                            default_yes=False),
                              lambda ok: ok and self._bisect_step("start"))
             return
         head = bisect.describe(s).splitlines()[0]
-        opts = ["The problem still happens", "The problem is gone", "Stop and restore my load order", "Close"]
-        self.push_screen(ChoiceScreen(head, opts), lambda i: self._bisect_step(("bad", "good", "reset")[i]) if i in (0, 1, 2) else None)
+        self.push_screen(ChoiceScreen(head, actions_setup.BISECT_OPTIONS),
+                         lambda i: self._bisect_step(actions_setup.BISECT_WHAT[i]) if i in (0, 1, 2) else None)
 
     def _bisect_step(self, what: str) -> None:
-        try:
-            if what == "start":
-                s = bisect.start(self.game_dir, self.registry)
-            elif what == "reset":
-                for line in bisect.reset(self.game_dir, self.registry):
-                    self.log_line(line, "green")
-                self.refresh_all()
-                return
-            else:
-                s = bisect.answer(self.game_dir, still_broken=what == "bad")
-        except ModError as e:
-            self.log_line(str(e), "bold red")
-            return
-        for line in bisect.describe(s).splitlines():
-            self.log_line(line, "bold" if s.get("culprit") else "")
-        self.refresh_all()
+        res = actions_setup.bisect_step(self._actx(), what)
+        for text, style in res.lines:
+            self.log_line(text, style)
+        if res.refresh:
+            self.refresh_all()
