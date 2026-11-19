@@ -40,9 +40,9 @@ export function mount(container, ctx) {
     if (code) report(await call("profile_import_code", code));
   } });
   container.append(h("div", { class: "toolbar", role: "toolbar", "aria-label": "Profiles" }, save, share, imp), msg, list);
-  on("log", () => { if (!alive) return; clearTimeout(timer); timer = setTimeout(load, 150); });
+  const off = on("log", () => { if (!alive) return; clearTimeout(timer); timer = setTimeout(load, 150); });
   load();
   ctx.setHint("");
   ctx.setSummary("");
-  return { unmount() { alive = false; clearTimeout(timer); }, focus() { save.focus(); } };
+  return { unmount() { alive = false; off(); clearTimeout(timer); }, focus() { save.focus(); } };
 }

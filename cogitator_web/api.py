@@ -225,6 +225,21 @@ class Api:
         self._s.doctor()
 
     @_call
+    def bisect(self):
+        self._s.bisect()
+
+    @_call
+    def crashlog(self):
+        self._s.crashlog()
+
+    @_call
+    def search_nexus(self, text):
+        text = self._text(text, 100, "Search text").strip()
+        if not text:
+            raise _Reject("Enter part of a mod's name.")
+        self._s.search_nexus(text)
+
+    @_call
     def toggle_global(self):
         self._s.toggle_global()
 

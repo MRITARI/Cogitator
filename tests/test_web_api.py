@@ -550,3 +550,104 @@ def test_bulk_touches_only_existing_marked_mods(web, monkeypatch):
     assert seen[0] == (["alpha", "gamma"], False)
     api.bulk("clear")
     assert not s.model.marked
+
+
+# ---------------------------------------------------------------- W4: ticks and tools
+def _link():
+    from types import SimpleNamespace
+    return SimpleNamespace(mod_id=1, file_id=2)
+
+
+def test_nxm_tick_guards_one_link_and_clears_busy(web, monkeypatch):
+    from cogitator import actions_nexus
+    from cogitator_web import session as sess
+    win, s, _, _ = web
+    calls = []
+    monkeypatch.setattr(sess.nxm, "pending", lambda on_expired=None: [("p1", _link()), ("p2", _link())])
+    monkeypatch.setattr(actions_nexus, "nxm_install", lambda ctx, ui, path, link, after: calls.append(path))
+    s.bridge._pending[99] = ("confirm", {}, {})  # a question is open
+    s.nxm_tick()
+    assert not calls and not s._nxm_busy
+    s.bridge._pending.clear()
+    s.job("slow", "install", lambda: time.sleep(0.3))
+    s.nxm_tick()
+    assert not calls
+    wait(lambda: not s.ctl.busy("install"))
+    s.nxm_tick()
+    wait(lambda: calls and not s._nxm_busy)
+    assert calls == ["p1"]
+
+
+def test_nxm_tick_clears_busy_when_install_raises(web, monkeypatch):
+    from cogitator import actions_nexus
+    from cogitator_web import session as sess
+    win, s, _, _ = web
+    monkeypatch.setattr(sess.nxm, "pending", lambda on_expired=None: [("p", _link())])
+
+    def boom(*a):
+        raise RuntimeError("x")
+
+    monkeypatch.setattr(actions_nexus, "nxm_install", boom)
+    s.nxm_tick()
+    wait(lambda: any("nxm link failed" in x["text"] for x in win.of("log")))
+    assert not s._nxm_busy
+
+
+def test_watch_tick_acts_per_step_and_never_overlaps(web, monkeypatch):
+    from cogitator import actions_setup
+    from cogitator_web import session as sess
+    win, s, _, _ = web
+    repaired = []
+    monkeypatch.setattr(actions_setup, "repair_patch", lambda ctx: repaired.append(1) or [])
+    monkeypatch.setattr(sess, "patch_state", lambda g: "off")
+    for act in ("notify", "patch"):
+        s._last_patch_state = "on"
+        monkeypatch.setattr(sess.repair, "watch_step", lambda *a, act=act: ("off", True, act))
+        s.watch_tick()
+        wait(lambda: s._last_patch_state == "off")
+        wait(lambda: not s.ctl.busy("watch") and not s.ctl.busy("patch"))
+        if act == "notify":
+            assert not repaired
+            wait(lambda: any(actions_setup.REPAIR_NOTICE in x["text"] and "Mods on/off" in x["text"] for x in win.of("log")))
+    wait(lambda: repaired == [1])
+    s.job("w", "watch", lambda: time.sleep(0.3))
+    n = len(repaired)
+    s.watch_tick()  # busy: must not start another
+    assert len(repaired) == n and s.ctl.busy("watch")
+
+
+def test_ticker_survives_errors_and_stops_on_release(game, monkeypatch):
+    win, bridge = FakeWindow(), Bridge()
+    s = Session(bridge, Settings.load(), game_dir=game, check_updates=False, show_notice=False)
+    bridge.attach(win)
+    hits = []
+    monkeypatch.setattr(s, "nxm_tick", lambda: (hits.append(1), 1 / 0))
+    s._start_ticker()
+    wait(lambda: len(hits) >= 2, timeout=8)
+    assert s._ticker.is_alive()
+    s.release()
+    wait(lambda: not s._ticker.is_alive())
+
+
+def test_tools_api_validation_and_results(web, monkeypatch):
+    win, s, api, _ = web
+    assert not api.search_nexus("")["ok"] and not api.search_nexus("  ")["ok"]
+    assert not api.search_nexus("x" * 101)["ok"] and not api.search_nexus(5)["ok"]
+    from cogitator import actions_nexus
+    got = []
+    monkeypatch.setattr(actions_nexus, "search_nexus", lambda ctx, ui, t: got.append(t))
+    r = api.search_nexus(" dmf ")
+    assert r == {"ok": True}
+    wait(lambda: got == ["dmf"])
+    json.dumps([api.bisect(), api.crashlog()])
+    wait(lambda: asks(win) or s.ctl.busy("net") is False)
+
+
+def test_crashlog_notice_is_plain_text_and_no_game_is_refused(web, game):
+    win, s, api, _ = web
+    api.crashlog()
+    a = wait(lambda: [x for x in asks(win) if x.get("title") == "Crash-log leads"])[0]
+    assert a["kind"] == "notice" and isinstance(a["body"], str) and "<" not in a["body"].replace("<unknown>", "")
+    s.game_dir = None
+    assert api.bisect() == {"ok": True}  # refused with a log line, not an error
+    wait(lambda: any("No game folder" in x["text"] for x in win.of("log")))

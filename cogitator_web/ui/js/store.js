@@ -10,6 +10,7 @@ export const state = {
 export function on(type, fn) {
   if (!handlers.has(type)) handlers.set(type, []);
   handlers.get(type).push(fn);
+  return () => { const a = handlers.get(type); const i = a.indexOf(fn); if (i >= 0) a.splice(i, 1); };
 }
 
 export function watch(fn) {

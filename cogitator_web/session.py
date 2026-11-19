@@ -17,6 +17,7 @@ from pathlib import Path
 from typing import Callable
 
 from cogitator import __version__, actions, actions_nexus, actions_setup, profiles, snapshots
+from cogitator import nxm, repair
 from cogitator.config import InstanceLock, LockError, Settings, cache_dir, config_dir, get_api_key, log_path, redact
 from cogitator.frameworks import detect_framework
 from cogitator.gamefinder import resolve_game_dir, validate_game_dir
@@ -61,6 +62,7 @@ HELP_BODY = (
     "N   tags and note       *   favourite                / or Ctrl+F   filter the list\n"
     "Ctrl+U   update all     M   link all mods to Nexus     F   update Mod Loader / Framework\n"
     "B   bulk actions on the marked mods\n"
+    "F3  search Nexus Mods (the Tools page also has doctor, find a crashing mod, crash-log leads)\n"
     "O   sort (cycle)        F1  this help\n"
     "\n"
     "Log file: {log}\n"
@@ -106,6 +108,9 @@ class Session:
         self.open_url: Callable[[str], object] = webbrowser.open
         self.open_path: Callable[[Path], object] = _startfile
         self.download_wait_s = 180.0
+        self._nxm_busy = False
+        self._last_patch_state: str | None = None
+        self._ticker: threading.Thread | None = None
 
     # ================================================================== helpers
     def say(self, text: str, style: str = "") -> None:
@@ -293,9 +298,122 @@ class Session:
                          dismissable=False)
             self.settings.notice_accepted = True
             self.settings.save()
+        self._start_ticker()
         self._offer_bootstrap()
         if self.check_on_start and self.settings.check_updates_on_start:
             self.ctl.ui(self.start_check)
+
+    # ================================================================== background ticks
+    def _start_ticker(self) -> None:
+        if self._ticker is not None and self._ticker.is_alive():
+            return
+        self._ticker = threading.Thread(target=self._tick_loop, name="web-ticks", daemon=True)
+        self._ticker.start()
+
+    def _tick_loop(self) -> None:
+        n = 0
+        while not self.ctl.closing.wait(1.0):
+            n += 1
+            for every, fn in ((2, self.nxm_tick), (5, self.watch_tick)):
+                if n % every:
+                    continue
+                try:
+                    fn()
+                except Exception:
+                    log.exception("background tick %s failed", fn.__name__)
+                    self.say(f"{fn.__name__} failed; see the log file.", "yellow")
+
+    def _question_pending(self) -> bool:
+        b = self.bridge
+        with b._plock:
+            return bool(b._pending)
+
+    def nxm_tick(self) -> None:
+        """Pick up one queued nxm link; never while a question is open or an install is running."""
+        if self._nxm_busy or self.ctl.closing.is_set() or self._question_pending() or not (self.game_dir and self.registry):
+            return
+        if self.ctl.busy("install"):
+            return
+        items = nxm.pending(on_expired=lambda lk: self.say(
+            f"Nexus link for mod {lk.mod_id} file {lk.file_id}: link expired. Click the button on the website again.", "yellow"))
+        if not items:
+            return
+        path, link = items[0]
+        self._nxm_busy = True
+        ctx, ui = self.ctx(), self.ui
+
+        def work() -> None:
+            try:
+                actions_nexus.nxm_install(ctx, ui, path, link, self._after_outcome_ui)
+            finally:
+                self._nxm_busy = False
+
+        try:
+            started = self.job("nxm link", "install", work)
+        except BaseException:
+            self._nxm_busy = False
+            raise
+        if not started:
+            self._nxm_busy = False
+
+    def watch_tick(self) -> None:
+        """Read the patch state in a worker, then act on a change (repair, or tell the user)."""
+        if self.ctl.closing.is_set() or not (self.game_dir and self.registry) or self.ctl.busy("watch"):
+            return
+        game_dir, registry, mode = self.game_dir, self.registry, self.settings.auto_repair
+        last = self._last_patch_state
+
+        def work() -> None:
+            try:
+                st = patch_state(game_dir)
+            except Exception:
+                return
+            step = repair.watch_step(last, st, game_dir, registry, mode, bool(self.game_running()))
+            if step is not None:
+                self.ctl.ui(self._watch_result, last, step)
+
+        self.job("game-update watcher", "watch", work)
+
+    def _watch_result(self, was: str | None, step: tuple[str, bool, str]) -> None:
+        if self._question_pending() or was != self._last_patch_state:
+            return  # look again on the next tick
+        self._last_patch_state, redraw, act = step
+        if redraw:
+            self.emit_header()
+        if act == "patch":
+            ctx = self.ctx()
+            self.job("repair", "patch", lambda: self._repaired(ctx))
+        elif act == "notify":
+            self.say(actions_setup.REPAIR_NOTICE + " Use the Mods on/off button to turn them on again.", "bold yellow")
+
+    def _repaired(self, ctx: actions.Ctx) -> None:
+        for text, style in actions_setup.repair_patch(ctx):
+            self.say(text, style)
+        self.ctl.ui(self.emit_header)
+
+    # ================================================================== tools
+    def bisect(self) -> None:
+        if self.ready():
+            ctx, ui = self.ctx(), self.ui
+            self.job("bisect", "bisect", lambda: self._after_outcome_ui(actions_setup.bisect_flow(ctx, ui)))
+
+    def crashlog(self) -> None:
+        if not self.ready():
+            return
+        game_dir = self.game_dir
+        with self._mlock:
+            folders = {m.folder for m in self.model.mods}
+
+        def work() -> None:
+            lines = actions_setup.crashlog_lines(game_dir, folders)
+            self.ctl.ask(NOTICE, title="Crash-log leads", body="\n".join(t for t, _ in lines), button="Close", dismissable=True)
+
+        self.job("crash log", "net", work)
+
+    def search_nexus(self, text: str) -> None:
+        if self.ready():
+            ctx, ui = self.ctx(), self.ui
+            self.job("search", "net", lambda: actions_nexus.search_nexus(ctx, ui, text))
 
     def _offer_bootstrap(self) -> None:
         missing = [k for k in ("dml", "dmf") if detect_framework(self.game_dir, k).status != "installed"]

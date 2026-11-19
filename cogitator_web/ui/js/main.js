@@ -1,18 +1,19 @@
 // Boot, page router and keyboard shortcuts. Python pushes into window.cogitatorPush (store.js); this file wires the shell.
 import { call } from "./api.js";
 import { menuOpen } from "./components/menu.js";
-import { ask, info, initModals, modalOpen } from "./components/modal.js";
+import { ask, info, initModals, modalOpen, promptText } from "./components/modal.js";
 import { buildDrawer, buildSidebar, buildStatusline, pageHead } from "./components/shell.js";
 import { h } from "./dom.js";
 import { detectIcons } from "./icons.js";
 import * as modsPage from "./pages/mods.js";
 import { modsApi } from "./pages/mods.js";
+import * as toolsPage from "./pages/tools.js";
 import * as profilesPage from "./pages/profiles.js";
 import * as snapshotsPage from "./pages/snapshots.js";
 import * as settingsPage from "./pages/settings.js";
 import { applyTheme, on, state } from "./store.js";
 
-const PAGES = { mods: modsPage, profiles: profilesPage, snapshots: snapshotsPage, settings: settingsPage };
+const PAGES = { mods: modsPage, profiles: profilesPage, snapshots: snapshotsPage, tools: toolsPage, settings: settingsPage };
 let sidebar, content, head, status, drawer, mounted = null;
 
 function go(id, focus = false) {
@@ -27,6 +28,11 @@ function go(id, focus = false) {
   mounted = page.mount(host, status);
   sidebar.select(id);
   if (focus && mounted.focus) mounted.focus();
+}
+
+async function searchNexus() {
+  const text = await promptText({ title: "Search Nexus Mods", hint: "part of a mod's name" });
+  if (text) await call("search_nexus", text);
 }
 
 async function showHelp() {
@@ -45,6 +51,7 @@ function onKey(e) {
   const run = (fn) => { e.preventDefault(); fn(); };
   if (k === "F1") return run(showHelp);
   if (k === "F5") return run(() => call("check_updates"));
+  if (k === "F3") return run(searchNexus);
   if (ctrl && !e.shiftKey && !e.altKey) {
     const map = { i: () => call("import_zips"), g: () => call("launch"), d: () => call("doctor"), t: () => call("toggle_global"), u: () => call("update_all"), q: () => call("quit"),
       k: () => { go("settings", true); }, f: () => { if (state.page !== "mods") go("mods"); if (modsApi.current) modsApi.current.focusFilter(); } };

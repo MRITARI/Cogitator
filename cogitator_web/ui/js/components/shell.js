@@ -3,7 +3,7 @@ import { icon } from "../icons.js";
 import { state, watch } from "../store.js";
 
 const NAV = [["mods", "Mods", "mods", true], ["profiles", "Profiles", "profiles", true], ["snapshots", "Snapshots", "snapshots", true],
-  ["tools", "Tools", "tools", false], ["settings", "Settings", "settings", true]];
+  ["tools", "Tools", "tools", true], ["settings", "Settings", "settings", true]];
 
 export function buildSidebar(onNav, version) {
   const items = new Map();

@@ -37,9 +37,9 @@ export function mount(container, ctx) {
     report(Number.isInteger(v) ? await call("snapshot_prune", v) : { ok: false, error: "Keep must be a whole number of at least 1." });
   } });
   container.append(h("div", { class: "toolbar", role: "toolbar", "aria-label": "Snapshots" }, create, prune), msg, list);
-  on("log", () => { if (!alive) return; clearTimeout(timer); timer = setTimeout(load, 150); });
+  const off = on("log", () => { if (!alive) return; clearTimeout(timer); timer = setTimeout(load, 150); });
   load();
   ctx.setHint("");
   ctx.setSummary("");
-  return { unmount() { alive = false; clearTimeout(timer); }, focus() { create.focus(); } };
+  return { unmount() { alive = false; off(); clearTimeout(timer); }, focus() { create.focus(); } };
 }
