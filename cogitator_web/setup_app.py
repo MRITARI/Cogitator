@@ -32,16 +32,12 @@ def _classic(argv: list[str]) -> int:
 def _need_webview(what: str, webview2_check: Callable[[], bool]):
     """The `webview` module, or None after telling the user why the classic window opens instead."""
     if not webview2_check():
-        notify(f"The Microsoft Edge WebView2 runtime is not installed, so the web-style {what} cannot open.
-
-Opening the classic {what} window instead.")
+        notify(f"The Microsoft Edge WebView2 runtime is not installed, so the web-style {what} cannot open.\n\nOpening the classic {what} window instead.")
         return None
     try:
         import webview
     except ImportError:
-        notify(f"The 'pywebview' package is not installed, so the web-style {what} cannot open.
-
-Opening the classic {what} window instead.")
+        notify(f"The 'pywebview' package is not installed, so the web-style {what} cannot open.\n\nOpening the classic {what} window instead.")
         return None
     return webview
 
