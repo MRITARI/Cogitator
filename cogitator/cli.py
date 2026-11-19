@@ -31,6 +31,7 @@ from .modinstall import (ModImportError, apply_update_premium, import_archive, i
 from .mods import INTERNAL_FOLDERS, mods_dir
 from .nexus import latest_main_file, parse_nexus_ref
 from .updates import cached_rows, run_checks
+from .versions import newer_versions, version_key
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -659,20 +660,8 @@ def cmd_check_updates(args) -> int:
     return 1 if (bad or upd or r.rate_limited) else 0
 
 
-def _version_key(v: str) -> tuple:
-    import re
-
-    return tuple(int(x) if x.isdigit() else x for x in re.split(r"[.\-_ ]+", v.strip().lstrip("vV")) if x)
-
-
 def _newer(versions: list[str], installed: str | None) -> list[str]:
-    ordered = sorted(versions, key=_version_key, reverse=True)
-    if not installed:
-        return ordered[:3]
-    try:
-        return [v for v in ordered if _version_key(v) > _version_key(installed)] or ordered[:1]
-    except TypeError:  # mixed number/text parts that cannot be compared
-        return ordered[:3]
+    return newer_versions(versions, installed)
 
 
 def _print_changelog(nx: NexusClient, mod_id: int, installed: str | None, everything: bool = False) -> bool:
@@ -680,7 +669,7 @@ def _print_changelog(nx: NexusClient, mod_id: int, installed: str | None, everyt
     if not log:
         print("(No changelog published on Nexus for this mod.)")
         return False
-    for v in (sorted(log, key=_version_key, reverse=True) if everything else _newer(list(log), installed)):
+    for v in (sorted(log, key=version_key, reverse=True) if everything else _newer(list(log), installed)):
         print(f"  v{v}")
         for line in log[v]:
             print(f"    - {line}")

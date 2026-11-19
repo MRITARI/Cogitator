@@ -117,7 +117,7 @@ class WorkflowMixin:
         self._bg(self._job_changelog, folder, name="changelog", group="net")
 
     def _job_changelog(self, folder: str) -> None:
-        from ..cli import _newer
+        from ..versions import newer_versions
 
         rec = self._meta(folder)
         key = get_api_key()
@@ -133,7 +133,7 @@ class WorkflowMixin:
         if not log:
             self._ui(self.log_line, f"{folder}: no changelog published on Nexus.", "yellow")
             return
-        for v in _newer(list(log), rec.get("installed_version")):
+        for v in newer_versions(list(log), rec.get("installed_version")):
             self._ui(self.log_line, f"{folder} v{v}", "bold")
             for line in log[v][:12]:
                 self._ui(self.log_line, f"   - {line}")
