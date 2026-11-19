@@ -232,35 +232,45 @@ class ToolFlows:
 
     # ---------------------------------------------------------------- theme
     def apply_theme(self, name: str, save: bool = False) -> None:
+        """`name` is the choice: system | light | dark. system follows the Windows app theme (light if it cannot be read)."""
         from tkinter import ttk
 
-        name = normalize_theme(name)
-        pal = PALETTES[name]
-        self.theme_name, self.palette = name, pal
+        from . import theme
+
+        choice = theme.normalize_choice(name)
+        resolved = theme.resolve_theme(choice)
+        pal = PALETTES[normalize_theme(resolved)]
+        self.theme_choice, self.theme_name, self.palette = choice, resolved, pal
         style = ttk.Style(self.root)
-        names = style.theme_names()
-        target = "clam" if name == "dark" and "clam" in names else self._base_theme
-        try:
-            style.theme_use(target)
-        except Exception:
-            log.debug("theme %s not applicable", target, exc_info=True)
-        for sty, opts in ttk_styles(pal).items():
-            style.configure(sty, **opts)
-        for sty, opts in ttk_state_maps(pal).items():
-            style.map(sty, **opts)
-        style.configure("Banner.TLabel", background="#c62828", foreground="#ffffff", padding=(8, 4))
-        style.configure("Update.TLabel", background="#0b6e99", foreground="#ffffff", padding=(8, 4))
+        if getattr(self, "sv_ok", False) and self._load_sv_theme(resolved):
+            self._setup_fonts()  # keeps the Treeview row height and heading font after a theme switch
+        else:
+            self.sv_ok = False
+            names = style.theme_names()
+            target = "clam" if resolved == "dark" and "clam" in names else self._base_theme
+            try:
+                style.theme_use(target)
+            except Exception:
+                log.debug("theme %s not applicable", target, exc_info=True)
+            for sty, opts in ttk_styles(pal).items():
+                style.configure(sty, **opts)
+            for sty, opts in ttk_state_maps(pal).items():
+                style.map(sty, **opts)
+        style.configure("Banner.TLabel", background="#c62828", foreground="#ffffff", padding=(10, 6))
+        style.configure("Update.TLabel", background="#0b6e99", foreground="#ffffff", padding=(10, 6))
+        style.configure("Hint.TLabel", foreground=pal["dim"])
         self.root.configure(bg=pal["bg"])
         for opt, val in (("Listbox.background", pal["log_bg"]), ("Listbox.foreground", pal["fg"]), ("Text.background", pal["log_bg"]),
                          ("Text.foreground", pal["fg"])):
             self.root.option_add("*" + opt, val)
+        theme.set_titlebar_dark(self.root, resolved == "dark")
         self.hdr.restyle(pal)
         self.logbox.restyle(pal)
         self._configure_tree_tags()
         if hasattr(self, "theme_var"):
-            self.theme_var.set(name)
-        if save and self.settings.gui_theme != name:
-            self.settings.gui_theme = name
+            self.theme_var.set(choice)
+        if save and self.settings.gui_theme != choice:
+            self.settings.gui_theme = choice
             try:
                 self.settings.save()
             except OSError as e:

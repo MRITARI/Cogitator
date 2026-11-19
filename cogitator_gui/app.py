@@ -36,7 +36,9 @@ from .controller import CHOICE, CONFIRM, TEXT, Controller, GuiUi
 from .dialogs import Dialogs
 from .tools import WATCH_MS, ToolFlows
 from .workflows import ModFlows
-from .viewmodel import COLUMNS, PALETTES, STRIPES, TAG_BAD, TAG_DIM, TAG_OK, TAG_WARN, ModListModel, move_steps, style_options, style_tag
+from . import theme
+from .viewmodel import (COLUMNS, PALETTES, STRIPES, TAG_BAD, TAG_DIM, TAG_OK, TAG_WARN, ModListModel, badgify, move_steps,
+                        style_options, style_tag)
 
 log = logging.getLogger("cogitator.gui")
 
@@ -82,6 +84,8 @@ class StyledText(ttk.Frame):
         self.bold.configure(weight="bold")
         self.text = tk.Text(self, height=height, wrap="word", state="disabled", relief="flat", padx=6, pady=3, font=self.font,
                             bg=palette["log_bg"] if mono else palette["bg"], fg=palette["fg"], cursor="arrow", takefocus=0)
+        if not mono:
+            self.text.configure(spacing1=3, spacing3=3)  # air between the badge lines
         self.text.grid(row=0, column=0, sticky="nsew")
         if scroll:
             sb = ttk.Scrollbar(self, command=self.text.yview)
@@ -170,6 +174,9 @@ class CogitatorGui(ModFlows, ToolFlows):
         self.selfupdater = None  # SelfUpdater; created once the registry is loaded. Tests inject their own.
         self.selfupdate_on_start = True
         self.theme_name = "light"
+        self.theme_choice = "system"
+        self.icon_font: str | None = None
+        self.sv_ok = False
         self._drag: dict | None = None
         # seams for tests
         self.game_running: Callable[[], bool] = darktide_running
@@ -201,24 +208,25 @@ class CogitatorGui(ModFlows, ToolFlows):
             log.debug("no window icon", exc_info=True)
         self._base_theme = "clam"
         style = ttk.Style(r)
-        for theme in ("vista", "xpnative", "winnative", "clam"):
-            if theme in style.theme_names():
-                try:
-                    style.theme_use(theme)
-                    self._base_theme = theme
-                    break
-                except tk.TclError:
-                    continue
-        rowh = max(22, tkfont.nametofont("TkDefaultFont").metrics("linespace") + 8)
-        style.configure("Treeview", rowheight=rowh)
-        style.configure("Banner.TLabel", background="#c62828", foreground="#ffffff", padding=(8, 4))
+        self.sv_ok = self._load_sv_theme(theme.resolve_theme(self.settings.gui_theme))
+        if not self.sv_ok:  # sv_ttk missing or unusable: the old look, as before
+            for name in ("vista", "xpnative", "winnative", "clam"):
+                if name in style.theme_names():
+                    try:
+                        style.theme_use(name)
+                        self._base_theme = name
+                        break
+                    except tk.TclError:
+                        continue
+        self._setup_fonts()
+        style.configure("Banner.TLabel", background="#c62828", foreground="#ffffff", padding=(10, 6))
         style.configure("Hint.TLabel", foreground=self.palette["dim"])
         r.columnconfigure(0, weight=1)
         r.rowconfigure(2, weight=1)
 
         self._build_menu()
         # header: game folder, frameworks, Nexus
-        head = ttk.Frame(r, padding=(8, 6, 8, 0))
+        head = ttk.Frame(r, padding=(12, 12, 12, 0))
         head.grid(row=0, column=0, sticky="ew")
         head.columnconfigure(0, weight=1)
         self.hdr = StyledText(head, height=3, palette=self.palette, scroll=False)
@@ -231,16 +239,17 @@ class CogitatorGui(ModFlows, ToolFlows):
         self.update_label.grid_remove()
 
         # toolbar + filter
-        bar = ttk.Frame(r, padding=(8, 6))
+        bar = ttk.Frame(r, padding=(12, 12, 12, 8))
         bar.grid(row=1, column=0, sticky="ew")
         self.tool_buttons: dict[str, ttk.Button] = {}
         for key, label, cmd in (("toggle", "On/Off", self.toggle_selected), ("up", "Move up", lambda: self.move_selected(-1)),
                                 ("down", "Move down", lambda: self.move_selected(1)), ("recheck", "Check updates", self.recheck),
                                 ("import", "Import zip...", self.import_archives), ("launch", "Launch game", self.launch)):
-            b = ttk.Button(bar, text=label, command=cmd)
-            b.pack(side="left", padx=(0, 6))
+            b = ttk.Button(bar, text=theme.button_text(key, label, bool(self.icon_font)), command=cmd,
+                           style="Accent.TButton" if key in theme.ACCENT_BUTTONS and self.sv_ok else "TButton")
+            b.pack(side="left", padx=(0, 8))
             self.tool_buttons[key] = b
-        ttk.Label(bar, text="Filter:").pack(side="left", padx=(14, 4))
+        ttk.Label(bar, text="Filter:").pack(side="left", padx=(16, 8))
         self.filter_var = tk.StringVar()
         self.filter_entry = ttk.Entry(bar, textvariable=self.filter_var, width=28)
         self.filter_entry.pack(side="left")
@@ -251,7 +260,7 @@ class CogitatorGui(ModFlows, ToolFlows):
 
         # table + log in a paned window
         pane = ttk.PanedWindow(r, orient="vertical")
-        pane.grid(row=2, column=0, sticky="nsew", padx=8)
+        pane.grid(row=2, column=0, sticky="nsew", padx=12)
         tf = ttk.Frame(pane)
         tf.columnconfigure(0, weight=1)
         tf.rowconfigure(0, weight=1)
@@ -269,7 +278,7 @@ class CogitatorGui(ModFlows, ToolFlows):
         pane.add(self.logbox, weight=1)
 
         # status line
-        st = ttk.Frame(r, padding=(8, 4))
+        st = ttk.Frame(r, padding=(12, 8, 12, 12))
         st.grid(row=3, column=0, sticky="ew")
         st.columnconfigure(0, weight=1)
         self.hint = ttk.Label(st, text="", style="Hint.TLabel", anchor="w", justify="left")
@@ -280,6 +289,40 @@ class CogitatorGui(ModFlows, ToolFlows):
 
         self._bind_events()
         self.apply_theme(self.settings.gui_theme)
+
+    def _load_sv_theme(self, name: str) -> bool:
+        """Switch ttk to the Sun Valley theme (light | dark). False when sv_ttk is not usable."""
+        try:
+            import sv_ttk
+
+            sv_ttk.set_theme(name, self.root)
+            return True
+        except Exception:
+            log.debug("sv_ttk not usable", exc_info=True)
+            return False
+
+    def _setup_fonts(self) -> None:
+        """Segoe UI Variable (else Segoe UI) at 10 pt, a monospace for the log, a roomier Treeview."""
+        try:
+            fams = set(tkfont.families(self.root))
+            ui, mono = theme.ui_family(fams), theme.mono_family(fams)
+            for n in ("TkDefaultFont", "TkTextFont", "TkMenuFont", "TkHeadingFont", "TkCaptionFont", "TkTooltipFont", "TkIconFont"):
+                tkfont.nametofont(n).configure(family=ui, size=theme.BASE_FONT_SIZE)
+            tkfont.nametofont("TkFixedFont").configure(family=mono, size=theme.BASE_FONT_SIZE)
+            head = tkfont.nametofont("TkHeadingFont")
+            semi = theme.heading_family(fams)
+            if semi:
+                head.configure(family=semi, weight="normal")
+            else:
+                head.configure(weight="bold")
+            self.icon_font = theme.icon_family(fams)
+            dpi = float(self.root.winfo_fpixels("1i"))
+            style = ttk.Style(self.root)
+            style.configure("Treeview", rowheight=theme.scaled(theme.ROW_HEIGHT_PX, dpi))
+            style.configure("Treeview.Heading", font="TkHeadingFont", padding=(theme.scaled(8, dpi), theme.scaled(6, dpi)))
+        except Exception:
+            log.debug("fonts not set", exc_info=True)
+            self.icon_font = None
 
     def _configure_tree_tags(self) -> None:
         p = self.palette
@@ -327,8 +370,8 @@ class CogitatorGui(ModFlows, ToolFlows):
                        None, ("Profiles...", self.profiles_window, "P", "profiles"), ("Snapshots...", self.snapshots_window, "", "snapshots"),
                        None, ("Find a crashing mod (bisect)...", self.bisect_wizard, "", "bisect"), ("Crash-log leads...", self.crashlog_window, "C", "crashlog")])
         view = tk.Menu(m, tearoff=False)
-        self.theme_var = tk.StringVar(value="light")
-        for label, val in (("Light theme", "light"), ("Dark theme", "dark")):
+        self.theme_var = tk.StringVar(value="system")
+        for label, val in (("System default", "system"), ("Light theme", "light"), ("Dark theme", "dark")):
             view.add_radiobutton(label=label, value=val, variable=self.theme_var, command=lambda v=val: self.apply_theme(v, save=True))
         m.add_cascade(label="View", menu=view)
         self.menus["View"] = view
@@ -472,7 +515,7 @@ class CogitatorGui(ModFlows, ToolFlows):
         segs += fw_segments(self.game_dir, self.registry, fw, state) + [("\n", "")]
         spin = "checking for updates..." if self.checking else ""
         segs += nexus_segments(bool(get_api_key()), self.registry.data["updates"].get("premium"), quota_text(self.registry), spin, gui=True)
-        self.hdr.set(segs)
+        self.hdr.set(badgify(segs))
         b = patch_banner(self.game_dir)
         if b:
             self.banner.configure(text=gui_words(b))

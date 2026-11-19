@@ -327,15 +327,20 @@ def test_unknown_game_asks_for_a_folder_and_cancelling_exits(root, tmp_path):
     assert Path(tmp_path).exists()
 
 
-def test_theme_switch_menus_and_real_menu_entries(root, game):
+def test_theme_switch_menus_and_real_menu_entries(root, game, monkeypatch):
+    from cogitator_gui import theme
+
+    monkeypatch.setattr(theme, "system_uses_light", lambda read=None: True)  # the machine's own Windows theme must not matter
     app = make(root, game)
-    assert app.settings.gui_theme == "light" and app.theme_name == "light"
+    assert app.settings.gui_theme == "system" and app.theme_name == "light" and app.theme_var.get() == "system"
+    app.apply_theme("system")
+    assert app.theme_name == "light"
     app.log_line("a coloured line", "bold green")
     app.apply_theme("dark", save=True)
     assert app.theme_name == "dark" and Settings.load().gui_theme == "dark" and Settings.load().theme == "tokyo-night"
-    assert str(app.hdr.text.cget("bg")).lower() == "#1b1b1f" and str(app.logbox.text.cget("bg")).lower() == "#15151a"
+    assert str(app.hdr.text.cget("bg")).lower() == "#1c1c1c" and str(app.logbox.text.cget("bg")).lower() == "#161616"
     app.apply_theme("light", save=True)
-    assert Settings.load().gui_theme == "light" and str(app.hdr.text.cget("bg")).lower() == "#ffffff"
+    assert Settings.load().gui_theme == "light" and str(app.hdr.text.cget("bg")).lower() == "#fafafa"
     assert {"View", "Tools", "Nexus", "Help"} <= set(app.menus)
     app.registry.set_mod("alpha", nexus_id=7)
     app.refresh_all()
