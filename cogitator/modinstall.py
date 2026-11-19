@@ -60,6 +60,17 @@ class ArchiveInfo:
     folders: list[str]
 
 
+def _unsafe_folder(name: str) -> bool:
+    """Folder names that must never become mods/<name>: empty, '.', '..', dot-prefixed, or containing a separator."""
+    return not name or name.startswith(".") or "/" in name or "\\" in name
+
+
+def _check_folders(prefix: str, folders) -> None:
+    bad = [f for f in folders if _unsafe_folder(f)]
+    if bad or any(part in (".", "..") for part in prefix.replace("\\", "/").split("/")):
+        raise ModImportError(f"Unsafe folder name in archive: {', '.join(bad) or prefix!r}.")
+
+
 def inspect_mod_zip(zip_path: Path) -> ArchiveInfo:
     """Find mod folders: directories X containing X.mod. Refuses framework archives and internal folders."""
     try:
@@ -78,6 +89,7 @@ def inspect_mod_zip(zip_path: Path) -> ArchiveInfo:
         raise ModImportError("No mod folder found (expected <folder>/<folder>.mod). Not a Darktide mod archive?")
     pre = min(found, key=lambda p: (len(p), p))  # shallowest layout wins
     folders = sorted(found[pre])
+    _check_folders(pre, folders)
     bad = [f for f in folders if f in INTERNAL_FOLDERS]
     if bad:
         raise ModImportError(f"Archive would replace loader/framework folder(s): {', '.join(bad)}.")
@@ -100,6 +112,7 @@ def install_mod_archive(zip_path: Path, game_dir: Path, info: ArchiveInfo, *, ma
     """Replace mods/<folder> for each folder (old copy kept in a rollback dir); append unlisted folders to the load
     order as enabled. Existing load-order state and position are untouched. Rolls back everything on error."""
     game_dir = Path(game_dir)
+    _check_folders(info.prefix, info.folders)
     ok, why = validate_game_dir(game_dir)
     if not ok:
         raise ModImportError(f"Not a Darktide folder: {why}")

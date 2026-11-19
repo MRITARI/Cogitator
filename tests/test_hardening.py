@@ -198,3 +198,64 @@ async def test_first_run_notice_keeps_its_ok_button_on_screen_at_80x24(game):
         await settle(app, pilot)
         r = app.screen.query_one("#ok").region
         assert r.height > 0 and r.bottom <= 24
+
+
+# ---- A3: Transaction.replace_dir journals before it moves anything
+
+def _tx_dirs(tmp_path):
+    src, dest = tmp_path / "src", tmp_path / "mods" / "m"
+    (src).mkdir()
+    (src / "new.txt").write_text("new")
+    dest.mkdir(parents=True)
+    (dest / "old.txt").write_text("old")
+    return src, dest
+
+
+def test_replace_dir_crash_after_log_before_move_rolls_back_cleanly(tmp_path, monkeypatch):
+    from cogitator import installer
+
+    src, dest = _tx_dirs(tmp_path)
+    tx = installer.Transaction(tmp_path / "rb")
+
+    def boom(*a, **k):
+        raise OSError("crash")
+
+    monkeypatch.setattr(installer.shutil, "move", boom)
+    with pytest.raises(OSError):
+        tx.replace_dir(src, dest)
+    monkeypatch.undo()
+    assert tx.journal_path.is_file() and "dir" in tx.journal_path.read_text()  # logged before the move was attempted
+    installer.Transaction.from_journal(tmp_path / "rb").rollback()
+    assert (dest / "old.txt").read_text() == "old"
+
+
+def test_replace_dir_crash_after_move_rolls_back_to_original(tmp_path, monkeypatch):
+    from cogitator import installer
+
+    src, dest = _tx_dirs(tmp_path)
+    tx = installer.Transaction(tmp_path / "rb")
+
+    def boom(*a, **k):
+        raise OSError("crash")
+
+    monkeypatch.setattr(installer.shutil, "copytree", boom)
+    with pytest.raises(OSError):
+        tx.replace_dir(src, dest)
+    monkeypatch.undo()
+    assert not dest.exists()
+    installer.Transaction.from_journal(tmp_path / "rb").rollback()
+    assert (dest / "old.txt").read_text() == "old"
+
+
+def test_replace_dir_refuses_a_destination_that_is_not_a_child_of_mods(tmp_path):
+    from cogitator import installer
+
+    src = tmp_path / "src"
+    src.mkdir()
+    (tmp_path / "mods").mkdir()
+    (tmp_path / "mods" / "keep.txt").write_text("k")
+    tx = installer.Transaction(tmp_path / "rb")
+    for bad in (tmp_path / "mods" / ".", tmp_path / "mods" / ".." / "mods", tmp_path / "elsewhere"):
+        with pytest.raises(ValueError):
+            tx.replace_dir(src, bad)
+    assert (tmp_path / "mods" / "keep.txt").read_text() == "k"

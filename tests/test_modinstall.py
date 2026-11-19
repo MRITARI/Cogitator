@@ -10,7 +10,7 @@ import respx
 from cogitator import cli, installer
 from cogitator.linking import link_mod
 from cogitator.loadorder import LoadOrder
-from cogitator.modinstall import (AmbiguousArchive, ModImportError, NotPremium, apply_update_premium, find_matching_download,
+from cogitator.modinstall import (AmbiguousArchive, ArchiveInfo, install_mod_archive, ModImportError, NotPremium, apply_update_premium, find_matching_download,
                                   import_archive, inspect_mod_zip, mod_page_url, open_files_page, wait_for_download)
 from cogitator.nexus import GAME, NexusClient, parse_files
 from cogitator.registry import Registry
@@ -397,3 +397,20 @@ def test_newest_download_picks_the_latest_recent_zip(tmp_path):
     assert newest_download(tmp_path) == new
     os.utime(new, (time.time() - 7200,) * 2)
     assert newest_download(tmp_path) is None  # nothing from the last hour
+
+
+@pytest.mark.parametrize("name", ["./..mod", "../x/x.mod", ".hidden/.hidden.mod", "./x/x.mod", "w/../x/x.mod"])
+def test_inspect_refuses_dot_and_traversal_folders(z, name):
+    with pytest.raises(ModImportError):
+        inspect_mod_zip(mkzip(z / "a.zip", {name: "return {}"}))
+
+
+@pytest.mark.parametrize("folder", [".", "..", ".hidden"])
+def test_install_refuses_unsafe_folder_names_and_leaves_mods_alone(game, z, folder):
+    (game / "mods" / "keep").mkdir()
+    (game / "mods" / "keep" / "keep.mod").write_text("x")
+    zp = mkzip(z / "a.zip", {f"{folder}/{folder}.mod": "return {}"})  # as ArchiveInfo(folders=[folder]) would claim
+    with pytest.raises(ModImportError):
+        install_mod_archive(zp, game, ArchiveInfo("", [folder]), max_bytes=10**7, max_files=100, **NOT_RUNNING)
+    assert (game / "mods" / "keep" / "keep.mod").is_file()
+    assert (game / "mods" / "mod_load_order.txt").is_file()

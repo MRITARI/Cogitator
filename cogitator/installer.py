@@ -74,12 +74,15 @@ class Transaction:
 
     def replace_dir(self, src: Path, dest: Path) -> None:
         dest = Path(dest)
+        if dest.name in ("", ".", "..") or dest.parent.name.casefold() != "mods":
+            raise ValueError(f"Refusing to replace {dest}: not a folder directly inside mods/.")
         backup = None
         if _lp(dest).exists():
             backup = self._slot()
             _lp(backup).parent.mkdir(parents=True, exist_ok=True)
+        self._log("dir", dest, backup)  # recorded BEFORE the move; rollback tolerates a backup that was never made
+        if backup is not None:
             shutil.move(str(_lp(dest)), str(_lp(backup)))
-        self._log("dir", dest, backup)
         shutil.copytree(_lp(src), _lp(dest))
 
     # ---- removals (reversible: the removed thing is moved into the rollback dir, never destroyed)
@@ -133,6 +136,8 @@ class Transaction:
                     if backup and _lp(backup).exists():
                         shutil.copy2(_lp(backup), _lp(dest))
                 elif kind == "dir":
+                    if backup is not None and not _lp(backup).exists():
+                        continue  # logged but the original was never moved away: dest still IS the original
                     if _lp(dest).exists():
                         shutil.rmtree(_lp(dest))
                     if backup and _lp(backup).exists():
