@@ -159,11 +159,11 @@ class Api:
         return {"ok": code is not None, "code": code or "", **({} if code else {"error": "Could not build a setup code."})}
 
     @_call
-    def profile_import(self, code):
+    def profile_import_code(self, code):
         code = self._text(code, 50000, "Setup code").strip()
         if not code:
             raise _Reject("Paste a setup code first.")
-        self._s.profile_import(code)
+        self._s.profile_import_code(code)
 
     @_call
     def snapshots_list(self):

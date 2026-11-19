@@ -259,7 +259,7 @@ def test_start_chain_asks_for_the_framework_bootstrap(game):
         Api(s).answer(q["id"], 2)
         s.ctl.join(5)
         assert win.of("state") and win.of("header")[-1]["header"]["frameworks"]["dml"]["status"] != "installed"
-        assert any("not installed" in p["text"] for p in win.of("log"))
+        wait(lambda: any("not installed" in p["text"] for p in win.of("log")))
     finally:
         s.release()
 
@@ -487,3 +487,66 @@ def test_changelog_is_shown_as_a_notice(web, monkeypatch):
     q = wait(lambda: asks(win))[0]
     assert q["kind"] == "notice" and q["title"] == "alpha changelog" and q["body"] == "2.0  fixed things\n1.0  first"
     json.dumps(q)
+
+
+# ---------------------------------------------------------------- profiles, snapshots, bulk (W3)
+def test_profiles_and_snapshots_reject_bad_input_and_serialise(web):
+    _, s, api, _ = web
+    for bad in ("nope", None, 5, ["a"], "../x", ""):
+        assert api.profile_switch(bad)["ok"] is False and api.profile_delete(bad)["ok"] is False
+        assert api.snapshot_restore(bad)["ok"] is False
+    assert api.profile_save("x" * 61)["ok"] is False and api.profile_save("../evil")["ok"] is False and api.profile_save(5)["ok"] is False
+    assert api.profile_import_code("c" * 50001)["ok"] is False and api.profile_import_code(None)["ok"] is False and api.profile_import_code("  ")["ok"] is False
+    for keep in (0, -1, 1001, "5", True, 2.5, None):
+        assert api.snapshot_prune(keep)["ok"] is False
+    assert api.snapshot_create("r" * 300)["ok"] is False and api.snapshot_create(7)["ok"] is False
+    assert api.bulk("format")["ok"] is False and api.bulk(3)["ok"] is False
+    for r in (api.profiles_list(), api.snapshots_list(), api.bulk_menu(), api.snapshot_prune(5)):
+        assert r["ok"] is True
+        json.dumps(r)
+
+
+def test_profile_share_save_and_switch_asks_first(web, monkeypatch):
+    win, s, api, _ = web
+    r = api.profile_share()
+    assert r["ok"] and r["code"].startswith("cog1:")
+    assert api.profile_save("duo") == {"ok": True}
+    wait(lambda: any("Saved profile" in p["text"] for p in win.of("log")))
+    items = api.profiles_list()["items"]
+    assert [p["name"] for p in items] == ["duo"]
+    from cogitator_web import session as sess
+
+    called = []
+    monkeypatch.setattr(sess.actions_setup, "switch_profile", lambda *a, **k: (called.append(1), actions.Outcome())[1])
+    assert api.profile_switch("duo") == {"ok": True}
+    q = wait(lambda: asks(win))[0]
+    assert q["kind"] == "confirm" and "duo" in q["title"] and not called
+    api.answer(q["id"], True)
+    wait(lambda: called)
+
+
+def test_snapshot_create_then_listed(web):
+    win, s, api, _ = web
+    assert api.snapshot_create("test") == {"ok": True}
+    items = wait(lambda: api.snapshots_list()["items"])
+    assert items and set(items[0]) == {"name", "label"}
+
+
+def test_bulk_touches_only_existing_marked_mods(web, monkeypatch):
+    from cogitator_web import session as sess
+
+    win, s, api, _ = web
+    assert api.bulk("enable")["ok"] is True  # nothing marked: only a log line
+    assert not [i for i in api.bulk_menu()["items"] if i["enabled"]]
+    api.mark("alpha")
+    api.mark("gamma")
+    with s._mlock:
+        s.model.marked.add("ghost")
+    assert all(i["enabled"] for i in api.bulk_menu()["items"])
+    seen = []
+    monkeypatch.setattr(sess.actions_setup, "bulk_set_enabled", lambda ctx, folders, enable: (seen.append((folders, enable)), [])[1])
+    api.bulk("disable")
+    wait(lambda: seen)
+    assert seen[0] == (["alpha", "gamma"], False)
+    api.bulk("clear")
+    assert not s.model.marked

@@ -37,7 +37,7 @@ export function mount(container, ctx) {
   } });
   const imp = button({ label: "Import", kind: "secondary", onClick: async () => {
     const code = await promptText({ title: "Paste a setup code", hint: "cog1:..." });
-    if (code) report(await call("profile_import", code));
+    if (code) report(await call("profile_import_code", code));
   } });
   container.append(h("div", { class: "toolbar", role: "toolbar", "aria-label": "Profiles" }, save, share, imp), msg, list);
   on("log", () => { if (!alive) return; clearTimeout(timer); timer = setTimeout(load, 150); });

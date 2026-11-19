@@ -641,7 +641,7 @@ class Session:
         self.say("Setup code ready.", "green")
         return code
 
-    def profile_import(self, code: str) -> None:
+    def profile_import_code(self, code: str) -> None:
         if not self.ready():
             return
         ctx = self.ctx()
