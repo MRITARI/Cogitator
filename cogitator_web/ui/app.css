@@ -45,7 +45,7 @@ html.icons-text .icon { font-family: var(--font); font-weight: 600; }
 .drawer-bar { display: flex; align-items: center; gap: var(--sp-2); height: 36px; padding: 0 var(--sp-4); color: var(--muted); font-size: 12px; }
 .drawer-bar button { display: flex; align-items: center; gap: var(--sp-2); border: 0; background: transparent; color: inherit; height: 26px; padding: 0 var(--sp-3); border-radius: var(--radius-pill); cursor: pointer; transition: background var(--t-fast), color var(--t-fast); }
 .drawer-bar button:hover { background: var(--secondary); color: var(--fg); }
-.drawer-body { height: 168px; overflow: auto; margin: 0 var(--sp-4) var(--sp-3); padding: var(--sp-3) var(--sp-4); border-radius: var(--radius-tile); background: var(--card); font: 12px/1.55 var(--mono); user-select: text; }
+.drawer-body { height: 104px; overflow: auto; margin: 0 var(--sp-4) var(--sp-3); padding: var(--sp-3) var(--sp-4); border-radius: var(--radius-tile); background: var(--card); font: 12px/1.55 var(--mono); user-select: text; }
 .drawer-body div { white-space: pre-wrap; overflow-wrap: anywhere; }
 .statusline { display: flex; gap: var(--sp-4); align-items: center; height: 28px; padding: 0 var(--sp-5); border-top: 1px solid var(--divider); background: var(--sidebar); color: var(--muted); font-size: 12px; user-select: none; }
 .statusline .grow { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -101,6 +101,9 @@ select.input option { background: var(--card); color: var(--fg); }
 .badge.ok .dot { background: var(--ok); } .badge.warn .dot { background: var(--attention); } .badge.bad .dot { background: var(--destructive); }
 .badge.primary { background: var(--primary); color: var(--primary-fg); }
 .badge .k { color: var(--muted); font-weight: 400; }
+.badge > span:last-child { overflow: hidden; text-overflow: ellipsis; }
+.mods .badge { max-width: 100%; }
+.mods tbody tr:hover .badge, .mods tbody tr[aria-selected="true"] .badge { background: var(--card); }
 
 /* ---------- toolbar */
 .badges { display: flex; flex-wrap: wrap; gap: var(--sp-2); margin-bottom: var(--sp-4); }
@@ -122,7 +125,7 @@ table.mods { width: 100%; border-collapse: collapse; table-layout: fixed; }
 .mods tbody tr[aria-selected="true"] { background: var(--secondary); }
 .mods tbody tr:focus-visible { outline: 2px solid var(--ring); outline-offset: -2px; }
 .mods td:first-child, .mods th:first-child { padding-left: var(--sp-4); }
-.mods col.c-en { width: 84px; } .mods col.c-installed, .mods col.c-latest { width: 120px; } .mods col.c-status { width: 26%; }
+.mods col.c-en { width: 84px; } .mods col.c-installed, .mods col.c-latest { width: 120px; } .mods col.c-status { width: 31%; }
 .mods td.name .in { display: flex; align-items: center; gap: var(--sp-2); min-width: 0; }
 .mods td.name .t { overflow: hidden; text-overflow: ellipsis; }
 .mods .muted { color: var(--muted); }
