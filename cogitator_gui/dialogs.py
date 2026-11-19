@@ -8,7 +8,8 @@ import tkinter.font as tkfont
 from pathlib import Path
 from tkinter import filedialog, messagebox, ttk
 
-from .viewmodel import style_options, style_tag
+from . import theme
+from .viewmodel import PALETTES, style_options, style_tag
 
 WRAP = 560
 
@@ -21,6 +22,8 @@ class Dialogs:
     def _top(self, title: str) -> tk.Toplevel:
         top = tk.Toplevel(self.root)
         top.title(title)
+        top.configure(bg=PALETTES["dark" if theme.is_dark() else "light"]["bg"])
+        theme.set_titlebar_dark(top, theme.is_dark())
         top.transient(self.root)
         top.resizable(True, True)
         top.columnconfigure(0, weight=1)
