@@ -17,7 +17,7 @@ from pathlib import Path
 from tkinter import ttk
 from typing import Callable
 
-from cogitator import __version__, actions, snapshots
+from cogitator import __version__, actions, actions_nexus, snapshots
 from cogitator.config import (InstanceLock, LockError, Settings, config_dir, get_api_key, log_path, redact)
 from cogitator.frameworks import detect_framework
 from cogitator.gamefinder import resolve_game_dir, validate_game_dir
@@ -29,17 +29,19 @@ from cogitator.patcher import ON, PatcherError, banner as patch_banner, default_
 from cogitator.patcher import toggle as toggle_mods
 from cogitator.procs import darktide_running
 from cogitator.registry import Registry
-from cogitator.updates import UPDATE, CheckBundle, FrameworkUpdate, ModRow, cached_frameworks, cached_rows, quota_text, run_checks
+from cogitator.updates import PROBABLY_OUTDATED, UPDATE, CheckBundle, FrameworkUpdate, ModRow, cached_frameworks, cached_rows, quota_text, run_checks
 from cogitator.viewtext import gui_words, NOTICE_BODY, NOTICE_TITLE, fw_segments, nexus_segments, report_segments
 
 from .controller import CHOICE, CONFIRM, TEXT, Controller, GuiUi
 from .dialogs import Dialogs
+from .workflows import ModFlows
 from .viewmodel import COLUMNS, PALETTES, STRIPES, TAG_BAD, TAG_DIM, TAG_OK, TAG_WARN, ModListModel, move_steps, style_options, style_tag
 
 log = logging.getLogger("cogitator.gui")
 
 TITLE = "Cogitator"
 POLL_MS = 40
+NXM_MS = 2000
 KEY_BLURB = ("Create one in your Nexus account settings, under API. It is stored in your OS keyring (or a private file) "
              "and is never logged or shown.")
 HELP_BODY = (
@@ -51,6 +53,9 @@ HELP_BODY = (
     "T or Ctrl+T             all mods on / off (the game patch)\n"
     "K or Ctrl+K             Nexus API key                X   mark a mod for bulk actions\n"
     "N   tags and note       *   favourite                / or Ctrl+F   filter the list\n"
+    "U   update the selected mod        Ctrl+U   update all mods\n"
+    "L   link to Nexus                  M   link all        F   update Mod Loader / Framework\n"
+    "F3  search Nexus Mods\n"
     "O   sort                Q or Ctrl+Q   quit\n"
     "\n"
     "Log file: {log}\n"
@@ -118,7 +123,7 @@ class StyledText(ttk.Frame):
         return self.text.get("1.0", "end-1c")
 
 
-class CogitatorGui:
+class CogitatorGui(ModFlows):
     def __init__(self, root: tk.Tk | None = None, *, game_dir: Path | None = None, game_override: str | None = None,
                  check_updates: bool = True, dialogs: Dialogs | None = None, controller: Controller | None = None,
                  settings: Settings | None = None, show_notice: bool = True):
@@ -149,6 +154,7 @@ class CogitatorGui:
         self.palette = PALETTES["light"]
         self._pending_asks: deque = deque()
         self._modal = 0
+        self._nxm_busy = False
         self._drag: dict | None = None
         # seams for tests
         self.game_running: Callable[[], bool] = darktide_running
@@ -156,11 +162,13 @@ class CogitatorGui:
         self.open_url: Callable[[str], object] = webbrowser.open
         self.open_path: Callable[[Path], object] = self._startfile
         self.pick_files_ok = True
+        self.download_wait_s = 180.0
 
         self._build_window()
         self.root.protocol("WM_DELETE_WINDOW", self.quit)
         self.root.report_callback_exception = self._tk_error
         self.root.after(POLL_MS, self._poll)
+        self.root.after(NXM_MS, self._nxm_loop)
         self.root.after(0, self.start)
 
     # ================================================================== layout
@@ -288,7 +296,10 @@ class CogitatorGui:
                       ("Tags and note...", self.edit_note, "N", "note"), ("Pin version", self.toggle_pin, "", "pin"),
                       None, ("Filter...", self.focus_filter, "Ctrl+F", None), ("Sort (cycle)", self.cycle_sort, "O", None),
                       None, ("Mods on / off (game patch)", self.toggle_global, "Ctrl+T", "global")])
-        menu("Nexus", [("Check for updates", self.recheck, "F5", "recheck"), None, ("Nexus API key...", self.set_key, "Ctrl+K", None)])
+        menu("Nexus", [("Check for updates", self.recheck, "F5", "recheck"), ("Update all mods", self.update_all, "Ctrl+U", "update_all"),
+                       ("Update Mod Loader / Framework", self.framework_update, "", "framework"), None,
+                       ("Link all mods to Nexus...", self.link_all_mods, "", "link_all"), ("Search Nexus Mods...", self.search_nexus, "F3", "search"),
+                       None, ("Nexus API key...", self.set_key, "Ctrl+K", None)])
         menu("Tools", [("Doctor (diagnose problems)", self.doctor, "Ctrl+D", "doctor"), ("Launch Darktide", self.launch, "Ctrl+G", "launch")])
         menu("Help", [("Help", self.show_help, "F1", None)])
         self.root.configure(menu=m)
@@ -297,8 +308,9 @@ class CogitatorGui:
         r, t = self.root, self.tree
         r.bind("<F5>", lambda e: self.recheck())
         r.bind("<F1>", lambda e: self.show_help())
+        r.bind("<F3>", lambda e: self.search_nexus())
         for seq, fn in (("<Control-i>", self.import_archives), ("<Control-g>", self.launch), ("<Control-d>", self.doctor),
-                        ("<Control-t>", self.toggle_global), ("<Control-k>", self.set_key), ("<Control-f>", self.focus_filter),
+                        ("<Control-t>", self.toggle_global), ("<Control-u>", self.update_all), ("<Control-k>", self.set_key), ("<Control-f>", self.focus_filter),
                         ("<Control-q>", self.quit)):
             r.bind(seq, lambda e, f=fn: (f(), "break")[1])
         t.bind("<Control-Up>", lambda e: (self.move_selected(-1), "break")[1])
@@ -313,7 +325,8 @@ class CogitatorGui:
         # plain letters act only while the table has focus (typing in the filter box must not trigger anything)
         for keys, fn in ((("r", "R"), self.recheck), (("i", "I"), self.import_archives), (("g", "G"), self.launch),
                          (("d", "D"), self.doctor), (("t", "T"), self.toggle_global), (("k", "K"), self.set_key),
-                         (("x", "X"), self.toggle_mark), (("n", "N"), self.edit_note), (("asterisk",), self.toggle_fav),
+                         (("u", "U"), self.update_selected), (("l", "L"), self.link_selected), (("m", "M"), self.link_all_mods),
+                         (("f", "F"), self.framework_update), (("x", "X"), self.toggle_mark), (("n", "N"), self.edit_note), (("asterisk",), self.toggle_fav),
                          (("slash",), self.focus_filter), (("o", "O"), self.cycle_sort), (("q", "Q"), self.quit)):
             for k in keys:
                 t.bind(f"<Key-{k}>", lambda e, f=fn: self._plain_key(e, f))
@@ -324,6 +337,17 @@ class CogitatorGui:
             return None
         fn()
         return "break"
+
+    def _nxm_loop(self) -> None:
+        try:
+            self.nxm_tick()
+        except Exception:
+            log.exception("nxm poll failed")
+        if not self.exiting:
+            try:
+                self.root.after(NXM_MS, self._nxm_loop)
+            except tk.TclError:
+                pass
 
     # ================================================================== message pump (UI thread only)
     def _poll(self) -> None:
@@ -500,10 +524,13 @@ class CogitatorGui:
             return
         pages = ", ".join(f"{k.upper()}: {NEXUS_PAGES[k]}" for k in missing)
         i = self._modal_call(self.dlg.choose, "Install Darktide Mod Loader and Mod Framework?",
-                             ["Import the Nexus zip(s) I downloaded (recommended)", "Not now"], 0)
+                             ["Import the Nexus zip(s) I downloaded (recommended)",
+                              "Fetch from GitHub (opt-in: unreleased source archives; you confirm each source)", "Not now"], 0)
         if i == 0:
             self.log_line(f"Download from Nexus: {pages}", "cyan")
             self.import_archives()
+        elif i == 1:
+            self.bootstrap_github(missing)
         else:
             self.log_line(f"Mod Loader/Framework not installed. {pages}", "yellow")
 
@@ -519,7 +546,8 @@ class CogitatorGui:
         return False
 
     def ctx(self) -> actions.Ctx:
-        return actions.Ctx(self.game_dir, self.registry, self.settings, self.lock, self.patch_runner, self.game_running)
+        return actions.Ctx(self.game_dir, self.registry, self.settings, self.lock, self.patch_runner, self.game_running,
+                           cancelled=self.ctl.closing.is_set, open_url=self.open_url, download_wait_s=self.download_wait_s)
 
     def refresh_all(self, keep: str | None = None) -> None:
         """Rescan mods and rebuild the table from cache (no network)."""
@@ -693,17 +721,19 @@ class CogitatorGui:
         meta = actions.mod_meta(self.registry, folder)
         listed = m.state != UNLISTED
         linked = bool(row is not None and row.nexus_id)
+        can_update = row is not None and row.status in (UPDATE, PROBABLY_OUTDATED)
         items: list = [
             ("Disable" if m.state == ENABLED else ("Enable" if m.state != UNLISTED else "Add to load order and enable"), "toggle", m.present),
             ("Move up", "up", listed and m.present), ("Move down", "down", listed and m.present), None,
-            ("Update...  (a later release)", "update", False),
-            ("Open Nexus page" if linked else "Link to Nexus...  (a later release)", "open_page" if linked else "link", linked),
+            ("Update" + (f" to {row.latest}" if can_update and row.latest else ""), "update", can_update and m.present),
+            ("Open Nexus page" if linked else "Link to Nexus...", "open_page" if linked else "link", m.present),
+            *([("Set installed version...", "link", m.present and actions_nexus.link_needs_version_only(row))] if linked else []),
             ("Open folder in Explorer" if sys.platform == "win32" else "Open folder", "open_folder", m.present), None,
             ("Unmark" if folder in self.model.marked else "Mark for bulk actions", "mark", True),
             ("Remove favourite" if meta.get("fav") else "Favourite", "fav", True),
             ("Tags and note...", "note", True)]
         if linked:
-            items += [("Show changelog...  (a later release)", "changelog", False),
+            items += [("Show changelog", "changelog", True),
                       ("Unpin version" if meta.get("pinned_version") else "Pin version", "pin", True)]
         items.append(None)
         if (self.registry.mod(folder) or {}).get("previous"):
@@ -736,6 +766,12 @@ class CogitatorGui:
                 self.log_line(f"Opened {open_files_page(row.nexus_id, self.open_url)}", "cyan")
         elif aid == "open_folder":
             self._open_folder(mods_dir(self.game_dir) / folder)
+        elif aid == "link":
+            self.link_selected(folder)
+        elif aid == "update":
+            self.update_selected(folder)
+        elif aid == "changelog":
+            self.show_changelog(folder)
         elif aid == "mark":
             self.toggle_mark()
         elif aid == "fav":
