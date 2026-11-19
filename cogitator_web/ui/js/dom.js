@@ -1,4 +1,4 @@
-// DOM building without innerHTML: text always goes through textContent / text nodes.
+// DOM building with createElement and text nodes only: text always goes through textContent.
 export function h(tag, attrs = {}, ...children) {
   const el = document.createElement(tag);
   for (const [k, v] of Object.entries(attrs || {})) {
