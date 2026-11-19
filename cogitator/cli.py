@@ -149,7 +149,7 @@ _LOCKS: list = []  # held until the process exits
 def _resolve(args) -> Resolution:
     s = Settings.load()
     res = resolve_game_dir(args.game_dir, s.game_dir)
-    if res.game_dir and res.source in ("steam", "override") and str(res.game_dir) != s.game_dir:
+    if res.game_dir and res.source == "steam" and str(res.game_dir) != s.game_dir:
         s.game_dir = str(res.game_dir)
         s.save()
     if res.game_dir and getattr(args, "cmd", None) in _MUTATING and getattr(args, "action", None) not in ("list", "diff", "show", "export", "status"):

@@ -187,3 +187,8 @@ def test_failed_restore_copy_leaves_the_live_folder_untouched(game, monkeypatch)
 def test_prune_rejects_keep_below_one(game):
     assert run(game, "snapshot", "prune", "--keep", "0") == 2
     assert run(game, "snapshot", "prune", "--keep", "-3") == 2
+
+
+def test_game_dir_override_is_not_persisted(game):
+    assert run(game, "status") == 0
+    assert config.Settings.load().game_dir == ""
