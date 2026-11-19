@@ -53,7 +53,7 @@ def test_programs_are_signed_before_they_are_zipped(tmp_path, monkeypatch):
     app.mkdir(parents=True)
     (app / "cogitator.exe").write_bytes(b"x")
     release.build("1.2.3", app, tmp_path / "out", kp, installer=False)
-    assert seen and set(seen[0]) >= {"cogitator.exe", "cogitator-updater.exe", "cogitator-nxm.exe", "Cogitator Setup.exe"}
+    assert seen and set(seen[0]) >= {"cogitator.exe", "cogitator-web.exe", "cogitator-updater.exe", "cogitator-nxm.exe", "Cogitator Setup.exe"}
 
 
 def test_the_sign_script_is_a_noop_without_secrets():
