@@ -115,3 +115,28 @@ export function info({ title: t, body, segments, wide }) {
     d.append(title(t), content, h("div", { class: "foot" }, af(button({ label: "Close", kind: "primary", onClick: () => fin(true) }))));
   } });
 }
+
+// Local prompts for the pages: resolve with the text (or null when cancelled).
+export function promptText({ title: t, hint, body, value, allowBlank }) {
+  return new Promise((resolve) => open({ cancelValue: null, done: resolve, build: (d, fin) => {
+    const input = h("input", { class: "input", type: "text", placeholder: hint || "", autocomplete: "off", spellcheck: "false", "aria-label": t });
+    input.value = value || "";
+    const ok = button({ label: "OK", kind: "primary", onClick: () => fin(input.value) });
+    const sync = () => { ok.disabled = !allowBlank && !input.value.trim(); };
+    input.addEventListener("input", sync);
+    input.addEventListener("keydown", (e) => { if (e.key === "Enter" && !ok.disabled) { e.preventDefault(); fin(input.value); } });
+    sync();
+    d.append(title(t), bodyEl(body), h("div", { class: "field" }, input), h("div", { class: "foot" }, button({ label: "Cancel", kind: "secondary", onClick: () => fin(null) }), ok));
+    af(input);
+  } }));
+}
+
+// A read-only text box with a Select all button (the share code).
+export function showCode({ title: t, code, note }) {
+  open({ cancelValue: true, build: (d, fin) => {
+    const box = h("textarea", { class: "input", readonly: true, rows: 6, spellcheck: "false", "aria-label": t });
+    box.value = code;
+    const sel = button({ label: "Select all", kind: "secondary", onClick: () => { box.focus(); box.select(); } });
+    d.append(title(t), bodyEl(note), h("div", { class: "field" }, box), h("div", { class: "foot" }, sel, af(button({ label: "Close", kind: "primary", onClick: () => fin(true) }))));
+  } });
+}

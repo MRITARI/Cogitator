@@ -7,10 +7,12 @@ import { h } from "./dom.js";
 import { detectIcons } from "./icons.js";
 import * as modsPage from "./pages/mods.js";
 import { modsApi } from "./pages/mods.js";
+import * as profilesPage from "./pages/profiles.js";
+import * as snapshotsPage from "./pages/snapshots.js";
 import * as settingsPage from "./pages/settings.js";
 import { applyTheme, on, state } from "./store.js";
 
-const PAGES = { mods: modsPage, settings: settingsPage };
+const PAGES = { mods: modsPage, profiles: profilesPage, snapshots: snapshotsPage, settings: settingsPage };
 let sidebar, content, head, status, drawer, mounted = null;
 
 function go(id, focus = false) {

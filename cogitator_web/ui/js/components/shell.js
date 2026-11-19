@@ -2,7 +2,7 @@ import { h, styleClass } from "../dom.js";
 import { icon } from "../icons.js";
 import { state, watch } from "../store.js";
 
-const NAV = [["mods", "Mods", "mods", true], ["profiles", "Profiles", "profiles", false], ["snapshots", "Snapshots", "snapshots", false],
+const NAV = [["mods", "Mods", "mods", true], ["profiles", "Profiles", "profiles", true], ["snapshots", "Snapshots", "snapshots", true],
   ["tools", "Tools", "tools", false], ["settings", "Settings", "settings", true]];
 
 export function buildSidebar(onNav, version) {
