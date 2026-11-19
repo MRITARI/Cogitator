@@ -103,8 +103,8 @@ async def test_tui_search_opens_the_chosen_page(tui_game, monkeypatch):
     s.save()
     opened = []
     monkeypatch.setattr(webbrowser, "open", lambda url: opened.append(url))
-    monkeypatch.setattr("cogitator.tui.workflow_mixin.get_api_key", lambda: "k")
-    monkeypatch.setattr("cogitator.tui.workflow_mixin.NexusClient", FakeNexus)
+    monkeypatch.setattr("cogitator.actions_nexus.get_api_key", lambda: "k")
+    monkeypatch.setattr("cogitator.actions_nexus.NexusClient", FakeNexus)
     app = make_app(tui_game)
     async with app.run_test(size=SIZE) as pilot:
         await settle(app, pilot)

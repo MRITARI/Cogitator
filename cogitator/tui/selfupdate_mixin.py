@@ -5,7 +5,7 @@ import logging
 
 
 
-from ..config import config_dir
+from .. import actions_setup
 from .screens import ChoiceScreen
 
 log = logging.getLogger("cogitator.tui")
@@ -27,17 +27,7 @@ class SelfUpdateMixin:
         return u.ready() if u and u.layout.in_place else None
 
     def _update_banner(self) -> str:
-        u = self.selfupdater
-        if u is None or u.settings.update_mode == "off":
-            return ""
-        a = u.announcement()
-        if not a:
-            return ""
-        if self.update_ready():
-            return f"Update available v{a.version} - downloaded and verified. Press A to install."
-        if u.layout.in_place:
-            return f"Update available v{a.version}. Press A to download and install it."
-        return f"Update available v{a.version}. {u.layout.guidance()}"
+        return actions_setup.update_banner_text(self.selfupdater, self.update_ready())
 
     def start_selfupdate_check(self) -> None:
         if not (self.selfupdate_on_start and self._check_on_start) or self.settings.update_mode == "off" or self._selfupdater() is None:
@@ -60,20 +50,8 @@ class SelfUpdateMixin:
 
     def _report_update_result(self, r: dict) -> None:
         """What the update helper did last time, in plain words (it ran after Cogitator had closed)."""
-        status, ver, detail = r.get("status"), r.get("version") or "", r.get("detail") or ""
-        if status == "ok":
-            self.log_line(f"Updated to v{ver}.", "green")
-        elif status == "rolled-back":
-            self.log_line("Went back to the previous version.", "green")
-        else:
-            why = {"aborted": "The update did not start; your current version is unchanged.",
-                   "reverted": "The new version failed its check, so your previous version was restored.",
-                   "broken": "The update failed and the old version could not be restored."}.get(status, "The update did not finish.")
-            self.log_line(f"Update to v{ver} failed. {why}", "bold red")
-            if detail:
-                self.log_line(f"Reason: {detail}", "red")
-            self.log_line(f"Details: {config_dir() / 'update.log'}. If it keeps failing, run the latest installer from the releases page; "
-                          "your mods and settings are kept.", "yellow")
+        for text, style in actions_setup.update_result_lines(r):
+            self.log_line(text, style)
 
     def _update_offer(self):
         u = self.selfupdater

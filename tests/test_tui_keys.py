@@ -4,6 +4,7 @@ import zipfile
 from pathlib import Path
 
 import pytest
+from cogitator import actions_nexus
 import respx
 from textual.widgets import RichLog, Static
 
@@ -38,8 +39,8 @@ async def test_u_and_capital_U_both_update_only_the_selected_mod(game, monkeypat
     reg.data["updates"]["premium"] = False
     reg.save()
     opened = []
-    monkeypatch.setattr(tui, "open_files_page", lambda mid: opened.append(mid) or "url")
-    monkeypatch.setattr(tui, "wait_for_download", lambda *a, **k: None)
+    monkeypatch.setattr(actions_nexus, "open_files_page", lambda mid: opened.append(mid) or "url")
+    monkeypatch.setattr(actions_nexus, "wait_for_download", lambda *a, **k: None)
     app = make_app(game)
     async with app.run_test(size=SIZE) as pilot:
         await settle(app, pilot)
@@ -85,8 +86,8 @@ async def test_F_with_nothing_to_update_says_so(game):
 async def test_F_free_account_confirms_opens_page_then_runs_the_import_flow(game, tmp_path, monkeypatch):
     zp = dml_zip(tmp_path)
     opened = []
-    monkeypatch.setattr(tui, "open_files_page", lambda mid: opened.append(mid) or "url")
-    monkeypatch.setattr(tui, "wait_for_download", lambda *a, **k: zp)
+    monkeypatch.setattr(actions_nexus, "open_files_page", lambda mid: opened.append(mid) or "url")
+    monkeypatch.setattr(actions_nexus, "wait_for_download", lambda *a, **k: zp)
     app = make_app(game)
     async with app.run_test(size=SIZE) as pilot:
         await settle(app, pilot)
@@ -109,7 +110,7 @@ async def test_F_free_account_confirms_opens_page_then_runs_the_import_flow(game
 
 async def test_F_declined_does_nothing(game, monkeypatch):
     opened = []
-    monkeypatch.setattr(tui, "open_files_page", lambda mid: opened.append(mid) or "url")
+    monkeypatch.setattr(actions_nexus, "open_files_page", lambda mid: opened.append(mid) or "url")
     app = make_app(game)
     async with app.run_test(size=SIZE) as pilot:
         await settle(app, pilot)
@@ -124,8 +125,8 @@ async def test_F_declined_does_nothing(game, monkeypatch):
 async def test_F_dml_update_while_mods_on_unpatches_installs_and_repatches(game, tmp_path, monkeypatch):
     zp = dml_zip(tmp_path)
     tool = FakeTool()
-    monkeypatch.setattr(tui, "open_files_page", lambda mid: "url")
-    monkeypatch.setattr(tui, "wait_for_download", lambda *a, **k: zp)
+    monkeypatch.setattr(actions_nexus, "open_files_page", lambda mid: "url")
+    monkeypatch.setattr(actions_nexus, "wait_for_download", lambda *a, **k: zp)
     db = game / "bundle" / "bundle_database.data"
     app = make_app(game)
     app.patch_runner = tool
@@ -156,7 +157,7 @@ async def test_F_premium_downloads_through_the_api_then_uses_the_same_import_flo
     data = dml_zip(tmp_path).read_bytes()
     respx.get(f"{B}/games/{GAME}/mods/19/files/5781/download_link.json").respond(200, json=[{"URI": "https://cdn.example/dml.zip"}], headers=HDR)
     respx.get("https://cdn.example/dml.zip").respond(200, content=data)
-    monkeypatch.setattr(tui, "open_files_page", lambda mid: pytest.fail("premium must not open a browser"))
+    monkeypatch.setattr(actions_nexus, "open_files_page", lambda mid: pytest.fail("premium must not open a browser"))
     app = make_app(game)
     async with app.run_test(size=SIZE) as pilot:
         await settle(app, pilot)

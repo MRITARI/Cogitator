@@ -24,3 +24,13 @@ def decide(mode: str, game_running: bool) -> str:
     if mode == "auto" and not game_running:
         return "patch"
     return "notify"
+
+
+def watch_step(last: str | None, state: str, game_dir: Path, registry, mode: str, game_running: bool) -> tuple[str, bool, str] | None:
+    """One tick of the game-update watcher, given the patch state just read. None: nothing changed since `last`.
+    Otherwise (new last state, redraw the header?, 'none' | 'notify' | 'patch'). The first reading never redraws."""
+    if state == last:
+        return None
+    if state != OFF or not needs_repair(game_dir, registry, state):
+        return state, last is not None, "none"
+    return state, last is not None, decide(mode, game_running)

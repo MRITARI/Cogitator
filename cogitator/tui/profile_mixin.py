@@ -1,9 +1,8 @@
 """Profile picker for the interface: switch, save, share and import named mod setups."""
 from __future__ import annotations
 
-from .. import profiles
+from .. import actions_setup, profiles
 from ..mods import ModError
-from ..modinstall import mod_page_url
 from .screens import ChoiceScreen, ConfirmScreen, InputScreen
 
 
@@ -34,12 +33,7 @@ class ProfileMixin:
             except (ModError, OSError) as e:
                 self.log_line(str(e), "bold red")
                 return
-            body = f"{len(plan['use'])} mod(s) are set as the profile lists them."
-            if plan["will_disable"]:
-                body += "\nDisabled (not deleted): " + ", ".join(plan["will_disable"])
-            if plan["missing"]:
-                body += "\nNot installed: " + ", ".join(plan["missing"])
-            body += "\nA snapshot is taken first."
+            body = actions_setup.switch_body(plan)
             self.push_screen(ConfirmScreen(f"Switch to profile {name}?", body, default_yes=False),
                              lambda ok, p=prof: ok and self._bg(self._job_profile_switch, p, name="switch profile",
                                                                group="install", exclusive=True))
@@ -63,34 +57,15 @@ class ProfileMixin:
     def _profile_name_entered(self, name: str | None) -> None:
         if not name:
             return
-        try:
-            prof = profiles.capture(self.game_dir, self.registry, name)
-            profiles.save(prof)
-            self.log_line(f"Saved profile '{prof['name']}' ({len(prof['entries'])} mods).", "green")
-        except (ModError, OSError) as e:
-            self.log_line(str(e), "bold red")
+        for text, style in actions_setup.save_profile(self._actx(), name):
+            self.log_line(text, style)
 
     def _profile_code_entered(self, code: str | None) -> None:
         if not code:
             return
-        try:
-            prof = profiles.decode(code)
-            profiles.save(prof)
-            self.log_line(f"Imported profile '{prof['name']}' ({len(prof['entries'])} mods). Open Profiles to switch to it.",
-                          "green")
-            for n in profiles.plan_switch(self.game_dir, prof)["missing"]:
-                m = prof["mods"].get(n, {})
-                self.log_line(f"  not installed: {n}" + (f"  {mod_page_url(m['nexus_id'])}" if m.get("nexus_id") else ""), "yellow")
-        except (ModError, OSError) as e:
-            self.log_line(str(e), "bold red")
+        for text, style in actions_setup.import_code(self._actx(), code):
+            self.log_line(text, style)
 
     def _job_profile_switch(self, prof: dict) -> None:
-        try:
-            with self._lock:
-                plan = profiles.switch(self.game_dir, prof, self.registry)
-            self._ui(self.log_line, f"Switched to profile '{prof['name']}'.", "green")
-            for n in plan["missing"]:
-                self._ui(self.log_line, f"  not installed: {n}", "yellow")
-        except (ModError, OSError) as e:
-            self._ui(self.log_line, f"Could not switch profile: {e}", "bold red")
+        actions_setup.switch_profile(self._actx(), self._tui_ui(), prof)
         self._ui(self.refresh_all)

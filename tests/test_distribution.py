@@ -185,7 +185,7 @@ class FakeNexus:
 @pytest.fixture
 def fake_nexus(monkeypatch):
     monkeypatch.setenv("COGITATOR_NEXUS_KEY", "k")
-    monkeypatch.setattr("cogitator.tui.workflow_mixin.NexusClient", FakeNexus)
+    monkeypatch.setattr("cogitator.actions_nexus.NexusClient", FakeNexus)
 
 
 async def test_a_queued_link_asks_then_downloads_and_imports(game, fake_nexus, monkeypatch, tmp_path):
@@ -202,7 +202,7 @@ async def test_a_queued_link_asks_then_downloads_and_imports(game, fake_nexus, m
     app = make_app(game)
     imported = []
     async with app.run_test(size=SIZE) as pilot:
-        app._job_import = lambda raw, mod_id: imported.append((Path(raw).name, mod_id))
+        monkeypatch.setattr("cogitator.actions_nexus.import_file", lambda ctx, ui, raw, mod_id, after: imported.append((Path(raw).name, mod_id)))
         await settle(app, pilot)
         path = nxm.enqueue(URL)
         app._nxm_tick()
@@ -237,7 +237,7 @@ async def test_declining_a_link_downloads_nothing(game, fake_nexus, monkeypatch)
 
 async def test_a_link_without_an_api_key_explains(game, monkeypatch):
     monkeypatch.delenv("COGITATOR_NEXUS_KEY", raising=False)
-    monkeypatch.setattr("cogitator.tui.workflow_mixin.get_api_key", lambda: None)
+    monkeypatch.setattr("cogitator.actions_nexus.get_api_key", lambda: None)
     app = make_app(game)
     async with app.run_test(size=SIZE) as pilot:
         await settle(app, pilot)

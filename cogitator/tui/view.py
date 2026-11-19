@@ -3,37 +3,21 @@ from __future__ import annotations
 
 import logging
 
-import time
 from pathlib import Path
 
 from rich.text import Text
 from textual.theme import Theme
 
-from ..config import redact
 from ..doctor import Check
-from ..frameworks import (detect_framework)
 from ..glyphs import Glyphs
 from ..mods import Mod, ENABLED, DISABLED, UNLISTED
-from ..patcher import ON, OFF
 from ..registry import Registry
-from ..updates import (FrameworkUpdate, ModRow, UP_TO_DATE, UPDATE, UNKNOWN, FAILED, NOT_LINKED,
-                       PROBABLY_OUTDATED, PROBABLY_UP_TO_DATE)
+from ..updates import (FrameworkUpdate, ModRow)
 
 log = logging.getLogger("cogitator.tui")
 
-NOTICE_TITLE = "Before you begin"
-NOTICE_BODY = (
-    "Darktide mods are NOT supported by Fatshark and are used at your own risk.\n\n"
-    "Mods run as Lua inside the game with the game's account permissions, and Nexus Mods does not scan Lua for "
-    "malware. Only install mods you trust.\n\n"
-    "Fatshark disallows mods that affect other players, progression, or servers. Cogitator does not include or "
-    "recommend any such mods.\n\n"
-    "Cogitator only writes inside the game folder and its own config/cache folders. It contacts GitHub to look for new "
-    "versions of itself and Nexus Mods (with your key, if you set one) to look for mod updates; nothing else leaves your "
-    "computer, there is no telemetry, and nothing is downloaded without you asking.")
-
-EMPTY_STATE = ("No mods installed yet. Download mods from nexusmods.com/warhammer40kdarktide, then press I to import the "
-               "zip (or drop it onto this window). Press ? for help.")
+from ..viewtext import (report_segments, SORT_COLUMNS, NOTICE_TITLE, NOTICE_BODY, EMPTY_STATE, BASELINE_UNKNOWN_LABEL, hint_for, STATUS_STYLE as _STATUS_STYLE,  # noqa: F401, E402
+                        fw_segments, installed_label, mod_suffix, nexus_segments, status_label)
 
 HELP_BODY = (
     "T  mods on/off (the game patch)\n"
@@ -60,7 +44,6 @@ HELP_BODY = (
 _MAIN_ACTIONS = {"help", "app_menu", "choose_theme", "link_all", "toggle_mods", "toggle_mod", "move_up", "move_down", "update_selected", "update_all", "recheck", "link", "import_archive",
                  "set_key", "cycle_sort", "quit_app", "framework_update", "doctor", "apply_update", "profiles", "toggle_mark", "bulk",
                  "launch", "edit_note", "toggle_fav", "filter", "crashlog", "bisect", "search"}
-SORT_COLUMNS = ("mod", "status", "installed", "latest", "en")
 DEFAULT_THEME = "tokyo-night"
 COGITATOR_THEMES = (
     Theme(name="black", primary="#4a90d9", secondary="#7f8c8d", accent="#f1c40f", foreground="#e8e8e8",
@@ -104,98 +87,35 @@ def _config_recovered() -> list:
 
 def mod_cell(mod: Mod) -> Text:
     t = Text(mod.folder, "dim" if mod.state == UNLISTED else "", no_wrap=True, overflow="ellipsis")
-    if not mod.present:
-        t.append("  (folder missing)", "red")
-    elif not mod.has_mod_file:
-        t.append("  (no .mod file!)", "yellow")
-    elif mod.state == UNLISTED:
-        t.append("  (not in load order)", "dim")
+    suffix = mod_suffix(mod)
+    if suffix:
+        t.append(*suffix)
     return t
-
-
-_STATUS_STYLE = {UP_TO_DATE: "green", UPDATE: "bold yellow", UNKNOWN: "dim", FAILED: "bold red", NOT_LINKED: "dim",
-                 PROBABLY_UP_TO_DATE: "green", PROBABLY_OUTDATED: "bold yellow", "pinned": "cyan"}
-BASELINE_UNKNOWN_LABEL = "version unknown - press L to set it"
 
 
 def installed_text(row: ModRow | None, mtime: float | None) -> Text:
     """Version, "~version" for a guess, else the folder's last-modified date."""
-    if row is not None and row.installed:
-        return Text(row.installed)
-    return Text(time.strftime("%Y-%m-%d", time.localtime(mtime)) if mtime else "-", "dim")
+    return Text(*installed_label(row, mtime))
 
 
 def status_text(row: ModRow | None, g: Glyphs, mod: Mod | None = None) -> Text:
-    if mod is not None and not mod.present:
-        return Text("folder missing", "red")
-    if row is None:
-        return Text("not linked", "dim")
-    label = row.status
-    if row.status == UNKNOWN and row.baseline_unknown:
-        label = BASELINE_UNKNOWN_LABEL
-    elif row.status in (UPDATE, PROBABLY_OUTDATED):
-        label = f"{row.status} ({row.installed or '?'} {g.arrow} {row.latest or '?'})"
-    return Text(label, _STATUS_STYLE.get(row.status, ""))
-
-
-def hint_for(mod: Mod | None, row: ModRow | None) -> str:
-    if mod is None:
-        return EMPTY_STATE
-    if not mod.present:
-        return f"'{mod.folder}' is listed in mod_load_order.txt but its folder is missing."
-    if not mod.has_mod_file:
-        return f"Warning: {mod.folder}/{mod.folder}.mod is missing - the archive may have been extracted badly."
-    if mod.state == UNLISTED:
-        return "Not in mod_load_order.txt. Press Space to add it to the load order (enabled)."
-    if row is None or row.status == NOT_LINKED:
-        return "Not linked to Nexus. Press L to link it so updates can be detected."
-    return f"{row.status}: {row.reason}"
+    return Text(*status_label(row, g.arrow, mod))
 
 
 def report_text(checks: list[Check]) -> Text:
-    """Doctor report with ASCII level markers (they survive any console) and colour on top."""
-    style = {"ok": "green", "warn": "bold yellow", "fail": "bold red"}
+    return _segments_text(report_segments(checks))
+
+
+def _segments_text(segments) -> Text:
     t = Text()
-    for c in checks:
-        t.append({"ok": "[OK]   ", "warn": "[WARN] ", "fail": "[FAIL] "}[c.level], style[c.level])
-        t.append(f"{c.name}: ", "bold")
-        t.append(redact(c.detail) + "\n")
-        if c.fix and c.level != "ok":
-            t.append(f"       fix: {c.fix}\n", "cyan")
-    n = {k: sum(1 for c in checks if c.level == k) for k in ("ok", "warn", "fail")}
-    t.append(f"\n{n['ok']} ok, {n['warn']} warning(s), {n['fail']} failure(s).", "bold")
+    for text, style in segments:
+        t.append(text, style)
     return t
 
 
 def fw_text(game_dir: Path | None, registry: Registry | None, fw: list[FrameworkUpdate], badge: str) -> Text:
-    t = Text()
-    if game_dir is None or registry is None:
-        return t
-    by = {u.kind: u for u in fw}
-    for kind in ("dml", "dmf"):
-        st = detect_framework(game_dir, kind)
-        rec = registry.framework(kind) or {}
-        ver = rec.get("version") or ("version unknown" if st.status == "installed" else "")
-        style = "green" if st.status == "installed" else "bold red"
-        t.append(f"{kind.upper()} ", "bold")
-        t.append(f"{st.status}" + (f" {ver}" if ver else ""), style)
-        u = by.get(kind)
-        if u is not None and u.status == UPDATE:
-            t.append(f" (update available -> {u.latest})", "bold yellow")
-        t.append("   ")
-    colour = {ON: "bold black on green", OFF: "bold white on red"}.get(badge, "bold black on yellow")
-    t.append(f" MODS: {badge} ", colour)
-    return t
+    return _segments_text(fw_segments(game_dir, registry, fw, badge))
 
 
 def nexus_text(key_set: bool, premium: bool | None, quota: str | None, checking: str = "") -> Text:
-    t = Text("Nexus: ")
-    if not key_set:
-        t.append("no API key - press K", "bold yellow")
-        return t
-    acct = "account unknown" if premium is None else ("premium" if premium else "free")
-    t.append(f"key {'ok' if premium is not None else 'set'} ({acct})", "green")
-    t.append("   quota: " + (quota or "unknown"), "")
-    if checking:
-        t.append("   " + checking, "cyan")
-    return t
+    return _segments_text(nexus_segments(key_set, premium, quota, checking))
