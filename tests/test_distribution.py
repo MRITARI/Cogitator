@@ -256,3 +256,12 @@ async def test_links_wait_while_a_dialog_is_open(game):
         await pilot.pause()
         app._nxm_tick()
         assert app._nxm_busy is False and len(nxm.pending()) == 1
+
+
+def test_i18n_detect_always_returns_a_two_letter_code(monkeypatch):
+    from cogitator import i18n
+
+    monkeypatch.delenv("COGITATOR_LANG", raising=False)
+    for loc, want in ((None, "en"), ("English_United States", "en"), ("fi_FI", "fi"), ("C", "en")):
+        monkeypatch.setattr(i18n.locale, "getlocale", lambda loc=loc: (loc, None))
+        assert i18n.detect("auto") == want

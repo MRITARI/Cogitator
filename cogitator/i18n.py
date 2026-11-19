@@ -67,7 +67,8 @@ def detect(setting: str = "auto") -> str:
         loc = locale.getlocale()[0] or ""
     except Exception:
         loc = ""
-    return loc.split("_")[0].lower() or "en"
+    lang = loc.split("_")[0].lower()
+    return lang if len(lang) == 2 and lang.isascii() and lang.isalpha() else "en"
 
 
 def set_language(code: str) -> bool:
