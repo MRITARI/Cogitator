@@ -44,7 +44,7 @@ function onKey(e) {
   if (k === "F1") return run(showHelp);
   if (k === "F5") return run(() => call("check_updates"));
   if (ctrl && !e.shiftKey && !e.altKey) {
-    const map = { i: () => call("import_zips"), g: () => call("launch"), d: () => call("doctor"), t: () => call("toggle_global"), q: () => call("quit"),
+    const map = { i: () => call("import_zips"), g: () => call("launch"), d: () => call("doctor"), t: () => call("toggle_global"), u: () => call("update_all"), q: () => call("quit"),
       k: () => { go("settings", true); }, f: () => { if (state.page !== "mods") go("mods"); if (modsApi.current) modsApi.current.focusFilter(); } };
     const fn = map[k.toLowerCase()];
     if (fn) return run(fn);
@@ -53,6 +53,7 @@ function onKey(e) {
   if (ctrl || e.altKey || typing || !mods || !mods.inTable()) return;
   // plain letters act only while the table has focus (typing in a field must not trigger anything)
   const letters = { r: () => call("check_updates"), i: () => call("import_zips"), g: () => call("launch"), d: () => call("doctor"), t: () => call("toggle_global"),
+    m: () => call("link_all"), f: () => call("framework_update"),
     k: () => go("settings", true), x: () => mods.mark(), n: () => mods.note(), o: () => mods.cycleSort(), "*": () => mods.fav(), "/": () => mods.focusFilter() };
   const fn = letters[k.length === 1 ? k.toLowerCase() : k];
   if (fn) run(fn);

@@ -16,13 +16,14 @@ import webbrowser
 from pathlib import Path
 from typing import Callable
 
-from cogitator import __version__, actions, snapshots
+from cogitator import __version__, actions, actions_nexus, snapshots
 from cogitator.config import InstanceLock, LockError, Settings, cache_dir, config_dir, get_api_key, log_path, redact
 from cogitator.frameworks import detect_framework
 from cogitator.gamefinder import resolve_game_dir, validate_game_dir
 from cogitator.linking import folder_mtime
 from cogitator.loader import NEXUS_PAGES
 from cogitator.modinstall import open_files_page
+from cogitator.nexus import parse_nexus_ref
 from cogitator.mods import DISABLED, ENABLED, UNLISTED, ModError, mods_dir, move_mod, scan_mods, toggle_mod
 from cogitator.patcher import ON, PatcherError, banner as patch_banner, default_runner, patch_state
 from cogitator.patcher import toggle as toggle_mods
@@ -47,6 +48,7 @@ SETTING_CHOICES = {"gui_theme": GUI_THEMES, "auto_repair": AUTO_REPAIR}
 SETTING_BOOLS = ("check_updates_on_start", "update_consent")
 ROW_ACTIONS = ("toggle", "up", "down", "open_page", "open_folder", "mark", "fav", "note", "pin", "rollback", "remove",
                "link", "update", "changelog")
+GLOBAL_ACTIONS = ("update_all", "link_all", "framework_update")
 HELP_BODY = (
     "Space or double-click   turn the selected mod on or off\n"
     "Ctrl+Up / Ctrl+Down     move it in the load order\n"
@@ -56,6 +58,7 @@ HELP_BODY = (
     "T or Ctrl+T             all mods on / off (the game patch)\n"
     "K or Ctrl+K             Nexus API key (Settings)     X   mark a mod\n"
     "N   tags and note       *   favourite                / or Ctrl+F   filter the list\n"
+    "Ctrl+U   update all     M   link all mods to Nexus     F   update Mod Loader / Framework\n"
     "O   sort (cycle)        F1  this help\n"
     "\n"
     "Log file: {log}\n"
@@ -297,10 +300,13 @@ class Session:
         if not missing:
             return
         pages = ", ".join(f"{k.upper()}: {NEXUS_PAGES[k]}" for k in missing)
-        i = self.ui.choose("Install Darktide Mod Loader and Mod Framework?", ["Import the Nexus zip(s) I downloaded (recommended)", "Not now"], 0)
+        i = self.ui.choose("Install Darktide Mod Loader and Mod Framework?", ["Import the Nexus zip(s) I downloaded (recommended)",
+                                 "Fetch from GitHub (opt-in: unreleased source archives; you confirm each source)", "Not now"], 0)
         if i == 0:
             self.say(f"Download from Nexus: {pages}", "cyan")
             self._job_import(None)
+        elif i == 1:
+            self._after_outcome_ui(actions_nexus.install_from_github(self.ctx(), self.ui, missing))
         else:
             self.say(f"Mod Loader/Framework not installed. {pages}", "yellow")
 
@@ -399,8 +405,7 @@ class Session:
             self.say(f"Opened {open_files_page(r.nexus_id, self.open_url)}", "cyan")
 
     def row_menu(self, folder: str) -> list[dict | None]:
-        """(label, id, enabled) entries of the right-click menu: the ones the tkinter window has; link / update / changelog
-        belong to a later phase of this interface and are listed but disabled."""
+        """(label, id, enabled) entries of the right-click menu: the ones the tkinter window has."""
         with self._mlock:
             m, row = self.model.mod(folder), self.model.urows.get(folder)
             marked = folder in self.model.marked
@@ -410,7 +415,7 @@ class Session:
         listed = m.state != UNLISTED
         linked = bool(row is not None and row.nexus_id)
         can_update = row is not None and row.status in (UPDATE, PROBABLY_OUTDATED)
-        later = " (coming soon)"
+        can_link = m.present and actions_nexus.link_refusal(folder) is None
 
         def item(label: str, aid: str, enabled: bool = True) -> dict:
             return {"label": label, "id": aid, "enabled": bool(enabled)}
@@ -418,13 +423,14 @@ class Session:
         items: list[dict | None] = [
             item("Disable" if m.state == ENABLED else ("Enable" if m.state != UNLISTED else "Add to load order and enable"), "toggle", m.present),
             item("Move up", "up", listed and m.present), item("Move down", "down", listed and m.present), None,
-            item("Update" + (f" to {row.latest}" if can_update and row.latest else "") + later, "update", False),
-            item("Open Nexus page" if linked else "Link to Nexus..." + later, "open_page" if linked else "link", linked and m.present),
+            item("Update" + (f" to {row.latest}" if can_update and row.latest else ""), "update", can_update and m.present),
+            item("Open Nexus page" if linked else "Link to Nexus...", "open_page" if linked else "link", m.present if linked else can_link),
+            *([item("Set installed version...", "link", can_link and actions_nexus.link_needs_version_only(row))] if linked else []),
             item("Open folder in Explorer" if sys.platform == "win32" else "Open folder", "open_folder", m.present), None,
             item("Unmark" if marked else "Mark for bulk actions", "mark"),
             item("Remove favourite" if meta.get("fav") else "Favourite", "fav"), item("Tags and note...", "note")]
         if linked:
-            items += [item("Show changelog" + later, "changelog", False),
+            items += [item("Show changelog", "changelog", True),
                       item("Unpin version" if meta.get("pinned_version") else "Pin version", "pin")]
         items.append(None)
         if (self.registry.mod(folder) or {}).get("previous"):
@@ -453,8 +459,124 @@ class Session:
             self.job("roll back", "install", lambda: self._after_outcome_ui(actions.roll_back(self.ctx(), self.ui, folder)))
         elif aid == "remove":
             self.remove(folder)
-        else:  # link / update / changelog: a later phase
-            self.say("That action is not in the web interface yet; use the tkinter window (cogitator-gui) for now.", "yellow")
+        elif aid == "link":
+            self.link(folder)
+        elif aid == "update":
+            self.update(folder)
+        elif aid == "changelog":
+            self.changelog(folder)
+
+    # ================================================================== Nexus flows (workers)
+    def link(self, folder: str) -> None:
+        if not self.ready():
+            return
+        why = actions_nexus.link_refusal(folder)
+        if why:
+            self.say(why, "yellow")
+            return
+        with self._mlock:
+            row = self.model.urows.get(folder)
+        ctx, ui = self.ctx(), self.ui
+
+        def work() -> None:
+            if actions_nexus.link_needs_version_only(row):
+                self._after_outcome_ui(actions_nexus.set_version(ctx, ui, folder, row.nexus_id))
+                return
+            ref = ui.ask_text(f"Link '{folder}' to its Nexus page", "https://www.nexusmods.com/warhammer40kdarktide/mods/<id>  or  numeric id")
+            if not ref:
+                return
+            mod_id, problem = parse_nexus_ref(ref)
+            if mod_id is None:
+                self.say(problem or "Bad Nexus reference.", "bold red")
+                return
+            self._after_outcome_ui(actions_nexus.link_one_mod(ctx, ui, folder, mod_id))
+
+        self.job("link", "link", work)
+
+    def link_all(self) -> None:
+        if not self.ready():
+            return
+        with self._mlock:
+            present = [m.folder for m in self.model.mods if m.present]
+        ctx, ui = self.ctx(), self.ui
+        self.job("link all", "link", lambda: self._after_outcome_ui(actions_nexus.link_all(ctx, ui, present)))
+
+    def _premium_update(self, ctx, folders: list[str]) -> None:
+        out = actions_nexus.premium_update(ctx, self.ui, folders)
+        self._after_outcome_ui(actions.Outcome(refresh=True))
+        if out.recheck:
+            self.ctl.ui(lambda: self.start_check(force=True))
+
+    def update(self, folder: str) -> None:
+        if not self.ready():
+            return
+        with self._mlock:
+            row = self.model.urows.get(folder)
+        if row is None or row.status not in (UPDATE, PROBABLY_OUTDATED):
+            self.say(f"'{folder}': nothing to update ({row.status if row else 'not linked'}).", "yellow")
+            return
+        ctx, ui = self.ctx(), self.ui
+
+        def work() -> None:
+            if actions_nexus.is_premium(ctx):
+                if ui.confirm(f"Download and install the update for {folder}?", row.reason):
+                    self._premium_update(ctx, [folder])
+            else:
+                actions_nexus.manual_update(ctx, ui, folder, self._after_outcome_ui)
+
+        self.job("update", "install", work)
+
+    def update_all(self) -> None:
+        if not self.ready():
+            return
+        with self._mlock:
+            urows = dict(self.model.urows)
+        targets = actions_nexus.update_candidates(urows)
+        if not targets:
+            self.say("No mods have an update available.", "yellow")
+            return
+        ctx, ui = self.ctx(), self.ui
+
+        def work() -> None:
+            if not actions_nexus.is_premium(ctx):
+                actions_nexus.free_update_all_help(ui, urows, targets)
+            elif ui.confirm(f"Download and install {len(targets)} update(s)?", "\n".join(targets)):
+                self._premium_update(ctx, targets)
+
+        self.job("update all", "install", work)
+
+    def framework_update(self) -> None:
+        if not self.ready():
+            return
+        seen = self.fw_updates or cached_frameworks(self.registry)
+        ups = actions_nexus.pending_framework_updates(seen)
+        if not ups:
+            st = ", ".join(f"{u.kind.upper()} {u.status}" for u in seen) or "not installed"
+            self.say(f"No framework update to apply ({st}). Check for updates first.", "yellow")
+            return
+        ctx, ui = self.ctx(), self.ui
+
+        def work() -> None:
+            body = actions_nexus.framework_update_body(ups, actions_nexus.is_premium(ctx))
+            if ui.confirm(f"Update {' and '.join(u.kind.upper() for u in ups)}?", body):
+                actions_nexus.framework_update(ctx, ui, ups, self._after_outcome_ui)
+
+        self.job("framework update", "download", work)
+
+    def changelog(self, folder: str) -> None:
+        if not self.ready():
+            return
+        reg = self.registry
+
+        def work() -> None:
+            res = actions_nexus.changelog_for(reg, folder)
+            if res.ok:
+                self.ctl.ask(NOTICE, title=f"{folder} changelog", body="\n".join(t for t, _ in res.lines), button="Close", dismissable=True)
+            else:
+                for t, st in res.lines:
+                    self.say(t, st)
+
+        self.job("changelog", "net", work)
 
     # ================================================================== per-mod flows that ask (workers)
     def edit_note(self, folder: str) -> None:

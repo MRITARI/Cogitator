@@ -149,7 +149,9 @@ def test_row_menu_has_the_tk_entries(web):
     items = api.row_menu("alpha")["items"]
     ids = [i["id"] for i in items if i]
     assert {"toggle", "up", "down", "mark", "fav", "note", "remove"} <= set(ids)
-    assert all(not i["enabled"] for i in items if i and i["id"] in ("update", "changelog"))  # later phase: listed but disabled
+    en = {i["id"]: i["enabled"] for i in items if i}
+    assert en["update"] is False and "changelog" not in en  # not linked, nothing to update
+    assert en["link"] is True
     json.dumps(items)
 
 
@@ -253,8 +255,8 @@ def test_start_chain_asks_for_the_framework_bootstrap(game):
         assert Api(s).answer(n1["id"], True)["ok"]
         wait(lambda: Settings.load().notice_accepted)
         q = wait(lambda: asks(win)[1:])[0]
-        assert q["kind"] == "choice" and q["options"][-1] == "Not now"
-        Api(s).answer(q["id"], 1)
+        assert q["kind"] == "choice" and q["options"][-1] == "Not now" and "GitHub" in q["options"][1]
+        Api(s).answer(q["id"], 2)
         s.ctl.join(5)
         assert win.of("state") and win.of("header")[-1]["header"]["frameworks"]["dml"]["status"] != "installed"
         assert any("not installed" in p["text"] for p in win.of("log"))

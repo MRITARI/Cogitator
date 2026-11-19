@@ -100,7 +100,7 @@ class Api:
     def row_action(self, folder, action):
         if not isinstance(action, str) or action not in ROW_ACTIONS:
             raise _Reject("Unknown action.")
-        self._s.row_action(self._mod(folder, present=action in ("toggle", "up", "down", "open_folder")), action)
+        self._s.row_action(self._mod(folder, present=action in ("toggle", "up", "down", "open_folder", "link", "update")), action)
 
     @_call
     def toggle(self, folder):
@@ -128,6 +128,18 @@ class Api:
     @_call
     def check_updates(self):
         self._s.recheck()
+
+    @_call
+    def update_all(self):
+        self._s.update_all()
+
+    @_call
+    def link_all(self):
+        self._s.link_all()
+
+    @_call
+    def framework_update(self):
+        self._s.framework_update()
 
     @_call
     def import_zips(self):
