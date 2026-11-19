@@ -42,7 +42,7 @@ def test_no_remote_urls(path):
     assert not re.search(r"https?://|//cdn\.|@import", path.read_text(encoding="utf-8")), rel(path)
 
 
-@pytest.mark.parametrize("page", ["index.html", "setup.html"])
+@pytest.mark.parametrize("page", ["index.html", "setup.html", "uninstall.html"])
 def test_csp_meta_is_strict(page):
     html = (UI / page).read_text(encoding="utf-8")
     m = re.search(r'<meta\s+http-equiv="Content-Security-Policy"\s+content="([^"]+)"', html)
@@ -54,7 +54,7 @@ def test_csp_meta_is_strict(page):
     assert not re.search(r"https?:|\*", m.group(1))
 
 
-@pytest.mark.parametrize("page", ["index.html", "setup.html"])
+@pytest.mark.parametrize("page", ["index.html", "setup.html", "uninstall.html"])
 def test_html_has_no_inline_script_style_or_handlers(page):
     html = (UI / page).read_text(encoding="utf-8")
     assert not re.search(r"<script(?![^>]*\bsrc=)", html)
@@ -76,7 +76,7 @@ def test_local_references_exist():
 
 
 def test_every_js_module_is_reachable_from_main():
-    seen, todo = set(), [UI / "js" / "main.js", UI / "js" / "setup" / "main.js"]
+    seen, todo = set(), [UI / "js" / "main.js", UI / "js" / "setup" / "main.js", UI / "js" / "uninstall" / "main.js"]
     while todo:
         p = todo.pop()
         if p in seen:
@@ -146,7 +146,7 @@ def test_light_variants_are_identical_and_complete():
 
 def test_css_uses_only_defined_variables():
     css, dark, _, _ = _themes()
-    app = (UI / "app.css").read_text(encoding="utf-8") + (UI / "setup.css").read_text(encoding="utf-8")
+    app = (UI / "app.css").read_text(encoding="utf-8") + (UI / "setup.css").read_text(encoding="utf-8") + (UI / "uninstall.css").read_text(encoding="utf-8")
     used = set(re.findall(r"var\(--([\w-]+)", app))
     assert used <= set(dark), used - set(dark)
     assert "prefers-reduced-motion" in app and "prefers-color-scheme" in css
