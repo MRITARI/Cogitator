@@ -268,7 +268,7 @@ def test_gui_theme_is_its_own_setting_and_does_not_touch_the_terminal_theme():
     from cogitator.config import Settings
 
     s = Settings.load()
-    assert s.gui_theme == "light" and s.theme == "tokyo-night"
+    assert s.gui_theme == "system" and s.theme == "tokyo-night"
     s.gui_theme = "dark"
     s.save()
     again = Settings.load()

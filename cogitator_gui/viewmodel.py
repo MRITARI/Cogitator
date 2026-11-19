@@ -159,11 +159,33 @@ def move_steps(listed: list[str], src: str, dst: str) -> int | None:
 # ---------------------------------------------------------------- text styles (rich-style strings from the shared flows)
 
 PALETTES = {
-    "light": {"fg": "#1a1a1a", "bg": "#ffffff", "stripe": "#f3f6fa", "dim": "#6b6b6b", "green": "#1b7f3b", "red": "#c62828",
-              "yellow": "#9a6700", "cyan": "#0b6e99", "black": "#000000", "white": "#ffffff", "log_bg": "#fbfbfb"},
-    "dark": {"fg": "#e8e8e8", "bg": "#1b1b1f", "stripe": "#24242a", "dim": "#8d8d96", "green": "#4cc26a", "red": "#ff6b6b",
-             "yellow": "#f1c40f", "cyan": "#5ac8e8", "black": "#000000", "white": "#ffffff", "log_bg": "#15151a"},
+    "light": {"fg": "#1c1c1c", "bg": "#fafafa", "stripe": "#f1f1f1", "dim": "#616161", "green": "#17713a", "red": "#c62828",
+              "yellow": "#8a5a00", "cyan": "#0b6e99", "black": "#000000", "white": "#ffffff", "log_bg": "#ffffff",
+              "ok_bg": "#dff3e3", "ok_fg": "#0e5a24", "warn_bg": "#fff1c2", "warn_fg": "#6b4600", "bad_bg": "#fde0e2", "bad_fg": "#9b1c24"},
+    "dark": {"fg": "#fafafa", "bg": "#1c1c1c", "stripe": "#252525", "dim": "#9a9a9a", "green": "#4cc26a", "red": "#ff7b7b",
+             "yellow": "#f1c40f", "cyan": "#5ac8e8", "black": "#000000", "white": "#ffffff", "log_bg": "#161616",
+             "ok_bg": "#17381f", "ok_fg": "#8be3a3", "warn_bg": "#44370f", "warn_fg": "#f7d56b", "bad_bg": "#4a1f22", "bad_fg": "#ffa3a3"},
 }
+
+# rich styles of the header's status words -> the badge (chip) look. Text stays the same; the colours come from the palette.
+BADGE_OF_STYLE = {"green": "ok", "bold black on green": "ok", "bold red": "bad", "bold white on red": "bad",
+                  "yellow": "warn", "bold yellow": "warn", "bold black on yellow": "warn"}
+
+
+def badge_style(kind: str) -> str:
+    return f"badge_{kind}"
+
+
+def badgify(segments: list[tuple[str, str]]) -> list[tuple[str, str]]:
+    """Header segments -> the same text, with status words as padded badges (a one-space pad each side where not already there)."""
+    out = []
+    for text, style in segments:
+        kind = BADGE_OF_STYLE.get(style)
+        if kind and text.strip():
+            text = " " + text.strip() + " " if style not in ("bold black on green", "bold white on red", "bold black on yellow") else text
+            style = badge_style(kind)
+        out.append((text, style))
+    return out
 
 
 def style_options(style: str, palette: dict[str, str]) -> dict[str, object]:
@@ -176,6 +198,9 @@ def style_options(style: str, palette: dict[str, str]) -> dict[str, object]:
             on = True
         elif w == "bold":
             out["bold"] = True
+        elif w.startswith("badge_"):
+            kind = w[6:]
+            out.update(foreground=palette[kind + "_fg"], background=palette[kind + "_bg"], bold=True)
         elif w == "dim":
             out["foreground"] = palette["dim"]
         elif w in palette:

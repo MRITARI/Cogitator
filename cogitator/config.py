@@ -109,7 +109,7 @@ class Settings:
     max_extract_files: int = 20000
     notice_accepted: bool = False
     theme: str = "tokyo-night"  # colours; changed from the Menu (Theme...)
-    gui_theme: str = "light"  # the graphical window: light | dark (its colours are not the terminal UI's theme names)
+    gui_theme: str = "system"  # the graphical window: system | light | dark (system follows Windows; its colours are not the terminal UI's theme names)
     snapshot_keep: int = 20  # how many snapshots of the mod setup are kept
     language: str = "auto"  # auto (from the system) or a language code such as "de"; COGITATOR_LANG overrides it
     auto_repair: str = "ask"  # off | ask | auto: what to do when a game update switched the mods off
