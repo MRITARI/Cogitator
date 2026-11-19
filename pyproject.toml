@@ -23,6 +23,7 @@ dependencies = [
   "httpx>=0.27",
   "platformdirs>=4",
   "vdf>=3.4",
+  "sv-ttk>=2.6",  # Sun Valley (Windows 11 look) theme for the tkinter GUI; MIT
   "cryptography>=42",
   "tomli>=2; python_version < '3.11'",
   # Windows Credential Locker for the Nexus key by default; elsewhere it stays optional (0600-file fallback).
