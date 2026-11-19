@@ -692,8 +692,7 @@ class Session:
             self.job("tag", "bulk", tag)
         elif action == "remove":
             def remove() -> None:
-                body = ", ".join(marked) + "
-Their folders are moved (not deleted) so you can restore them."
+                body = ", ".join(marked) + "\nTheir folders are moved (not deleted) so you can restore them."
                 if ui.confirm(f"Remove {len(marked)} mod(s)?", body, False):
                     out = actions_setup.remove_many(ctx, ui, marked)
                     self.ctl.ui(self.model.marked.difference_update, marked)
