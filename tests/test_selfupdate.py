@@ -31,7 +31,7 @@ def make_zip(files=None) -> bytes:
 
 
 class FakeGitHub:
-    def __init__(self, ver="1.1.0", *, pre=False, zip_bytes=None, sign_with=KEY, sig=True, redirect_to=None):
+    def __init__(self, ver="1.1.0", *, pre=False, zip_bytes=None, sign_with=KEY, sig=True, redirect_to=None, sums_sign_with=KEY):
         self.ver, self.pre = ver, pre
         self.zip = zip_bytes if zip_bytes is not None else make_zip()
         self.sig = sign_with.sign(self.zip) if (sig and sign_with) else None
@@ -40,11 +40,13 @@ class FakeGitHub:
         self.etag = '"abc"'
         self.status = None
         self.signed_zip = self.zip
+        self.sums_sign_with = sums_sign_with
 
     def release_list(self):
         name = f"Cogitator-{self.ver}-win-x64.zip"
         assets = [{"name": name, "browser_download_url": f"{DL}/v{self.ver}/{name}", "size": len(self.zip)},
-                  {"name": "SHA256SUMS", "browser_download_url": f"{DL}/v{self.ver}/SHA256SUMS", "size": 90}]
+                  {"name": "SHA256SUMS", "browser_download_url": f"{DL}/v{self.ver}/SHA256SUMS", "size": 90},
+                  {"name": "SHA256SUMS.sig", "browser_download_url": f"{DL}/v{self.ver}/SHA256SUMS.sig", "size": 64}]
         if self.sig is not None:
             assets.append({"name": name + ".sig", "browser_download_url": f"{DL}/v{self.ver}/{name}.sig", "size": 64})
         return [{"tag_name": f"v{self.ver}", "draft": False, "prerelease": self.pre, "body": "Fixes <b>things</b>\x1b[31m", "assets": assets}]
@@ -63,11 +65,16 @@ class FakeGitHub:
         name = f"Cogitator-{self.ver}-win-x64.zip"
         if path.endswith(".zip") or req.url.host == "objects.githubusercontent.com":
             return httpx.Response(200, content=self.zip)
+        if path.endswith("SHA256SUMS.sig"):
+            return httpx.Response(200, content=self.sums_sign_with.sign(self.sums_text().encode()))
         if path.endswith(".sig"):
             return httpx.Response(200, content=self.sig)
         if path.endswith("SHA256SUMS"):
-            return httpx.Response(200, text=f"{hashlib.sha256(self.signed_zip).hexdigest()}  {name}\n")
+            return httpx.Response(200, text=self.sums_text())
         return httpx.Response(404)
+
+    def sums_text(self):
+        return f"{hashlib.sha256(self.signed_zip).hexdigest()}  Cogitator-{self.ver}-win-x64.zip\n"
 
     def factory(self):
         return lambda: su.make_client(httpx.MockTransport(self.handler))
@@ -116,7 +123,7 @@ def test_signature_valid_tampered_wrong_key_and_missing():
 def rel(tag, pre=False, assets=True, draft=False):
     v = tag.lstrip("v")
     n = f"Cogitator-{v}-win-x64.zip"
-    names = [n, n + ".sig", "SHA256SUMS"] if assets else [n]
+    names = [n, n + ".sig", "SHA256SUMS", "SHA256SUMS.sig"] if assets else [n]
     return {"tag_name": tag, "prerelease": pre, "draft": draft, "body": "", "assets": [
         {"name": x, "browser_download_url": f"{DL}/{tag}/{x}", "size": 5} for x in names]}
 
@@ -461,3 +468,18 @@ def test_the_helper_is_started_outside_the_app_folder(root, tmp_path):
     u.apply()
     cwd = Path(spawned[0]["cwd"])
     assert cwd.name.startswith("cogitator-update-") and root not in cwd.parents  # a folder in use cannot be renamed
+
+
+def test_forged_checksum_list_is_refused_even_with_a_validly_signed_zip(root):
+    """A validly signed (e.g. older) zip relabelled as a new version: the checksum list that vouches for the name is not signed."""
+    gh = FakeGitHub("1.1.0", sums_sign_with=Ed25519PrivateKey.generate())
+    u = updater(gh, root)
+    info = select_release(gh.release_list(), Version.parse("1.0.0"))
+    with pytest.raises(UpdateError, match="checksum"):
+        u.stage(info)
+
+
+def test_release_without_a_signed_checksum_list_is_not_offered():
+    r = rel("v1.3.0")
+    r["assets"] = [a for a in r["assets"] if a["name"] != "SHA256SUMS.sig"]
+    assert select_release([r], Version.parse("1.2.0")) is None

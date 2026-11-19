@@ -148,6 +148,7 @@ class ReleaseInfo:
     sig_url: str
     sums_url: str
     published: str = ""
+    sums_sig_url: str = ""
 
     @property
     def zip_name(self) -> str:
@@ -192,18 +193,19 @@ def select_release(releases: list[dict], current: Version, channel: str = "stabl
             continue
         assets = {a.get("name"): a for a in (r.get("assets") or []) if isinstance(a, dict)}
         zip_name = f"Cogitator-{v}-win-x64.zip"
-        z, s, c = assets.get(zip_name), assets.get(zip_name + ".sig"), assets.get("SHA256SUMS")
-        if not (z and s and c):
-            log.info("release %s skipped: missing zip, signature or SHA256SUMS", tag)
+        z, s, c, cs = assets.get(zip_name), assets.get(zip_name + ".sig"), assets.get("SHA256SUMS"), assets.get("SHA256SUMS.sig")
+        if not (z and s and c and cs):
+            log.info("release %s skipped: missing zip, signature, SHA256SUMS or SHA256SUMS.sig", tag)
             continue
         try:
-            for a in (z, s, c):
+            for a in (z, s, c, cs):
                 check_host(a.get("browser_download_url") or "")
         except UpdateError as e:
             log.warning("release %s skipped: %s", tag, e)
             continue
         info = ReleaseInfo(v, tag, pre, plain_notes(r.get("body")), z["browser_download_url"], int(z.get("size") or 0),
-                           s["browser_download_url"], c["browser_download_url"], r.get("published_at") or "")
+                           s["browser_download_url"], c["browser_download_url"], r.get("published_at") or "",
+                           cs["browser_download_url"])
         if best is None or best.version < v:
             best = info
     return best
@@ -467,9 +469,15 @@ class SelfUpdater:
             with self._client_factory() as c:
                 zip_bytes = self._fetch(c, info.zip_url, MAX_ZIP)
                 sig = self._fetch(c, info.sig_url, MAX_SIG)
-                sums = self._fetch(c, info.sums_url, MAX_SUMS).decode("utf-8", "replace")
+                sums_raw = self._fetch(c, info.sums_url, MAX_SUMS)
+                sums_sig = self._fetch(c, info.sums_sig_url, MAX_SIG) if info.sums_sig_url else None
         except httpx.HTTPError as e:
             raise UpdateError("Could not reach GitHub to download the update.") from e
+        try:  # the list binds the version-named file to its hash; unsigned, it could vouch for any validly signed old zip
+            verify_signature(sums_raw, sums_sig, self.public_key)
+        except UpdateError as e:
+            raise UpdateError("The checksum list is not signed by the release key, so the update was not installed.") from e
+        sums = sums_raw.decode("utf-8", "replace")
         digest = hashlib.sha256(zip_bytes).hexdigest()
         listed = {parts[1].lstrip("*"): parts[0].lower() for parts in (ln.split() for ln in sums.splitlines()) if len(parts) == 2}
         if listed.get(info.zip_name) != digest:
