@@ -189,9 +189,12 @@ def test_prune_rejects_keep_below_one(game):
     assert run(game, "snapshot", "prune", "--keep", "-3") == 2
 
 
-def test_game_dir_override_is_not_persisted(game):
+def test_game_dir_override_is_saved_only_when_nothing_is_saved(game, tmp_path):
     assert run(game, "status") == 0
-    assert config.Settings.load().game_dir == ""
+    assert config.Settings.load().game_dir == str(game)  # first-time flag is remembered
+    other = build(tmp_path / "other")
+    assert run(other, "status") == 0
+    assert config.Settings.load().game_dir == str(game)  # a one-off flag never overwrites
 
 
 def test_check_updates_takes_the_instance_lock_because_it_saves_the_registry():
