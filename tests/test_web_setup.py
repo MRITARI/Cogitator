@@ -267,5 +267,9 @@ def test_entry_gate_flags_and_delegation(monkeypatch):
     un = lambda argv, flags, mode: calls.append(("un", mode)) or 0
     assert setup_app.main(["--uninstall"], build=22631, installed=True, runner=runner, uninstall_runner=un) == 0 and calls[-1] == ("un", "uninstall")
     assert setup_app.main([], build=22631, installed=True, runner=runner, uninstall_runner=un) == 0 and calls[-1] == ("un", "maintenance")
-    assert setup_app.main(["--self-check"], build=22631, installed=True, runner=runner, uninstall_runner=un) == 0 and calls[-1] == ("tk", ["--self-check"])
+    from cogitator_web import selfcheck
+
+    monkeypatch.setattr(selfcheck, "run_setup", lambda expect=None, **kw: calls.append(("selfcheck", expect)) or 0)
+    assert setup_app.main(["--self-check", "--expect-version", "9.9"], build=22631, installed=True, runner=runner, uninstall_runner=un) == 0
+    assert calls[-1] == ("selfcheck", "9.9")
     assert setup_app.main(["--help"]) == 0

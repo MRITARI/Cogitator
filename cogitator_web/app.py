@@ -147,6 +147,12 @@ def main(argv: list[str] | None = None) -> int:
     if "-h" in argv or "--help" in argv:
         print(USAGE)
         return 0
+    if "--self-check" in argv:
+        from cogitator.config import setup_logging
+        from .selfcheck import parse_expect, run as self_check
+
+        setup_logging()
+        return self_check(parse_expect(argv))
     game_dir = None
     for i, a in enumerate(argv):
         if a == "--game-dir" and i + 1 < len(argv):

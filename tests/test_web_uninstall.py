@@ -433,8 +433,10 @@ def test_routing_of_uninstall_modes_and_silent_exit_codes(monkeypatch):
         assert setup_app.main(["--uninstall", "--silent"], build=22631, installed=True, runner=runner, uninstall_runner=un,
                               silent_fn=silent) == code and len(got) == 1
     assert len(calls) == 3  # silent never opens a window
-    monkeypatch.setattr(setup_app, "_classic", lambda argv: ("tk", argv))
-    assert setup_app.main(["--self-check"], build=22631, installed=True) == ("tk", ["--self-check"])
+    from cogitator_web import selfcheck
+
+    monkeypatch.setattr(selfcheck, "run_setup", lambda expect=None, **kw: 7)
+    assert setup_app.main(["--self-check"], build=22631, installed=True) == 7
 
 
 def test_silent_uninstall_default_matches_the_tkinter_function(installed):

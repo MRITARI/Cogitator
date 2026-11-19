@@ -140,7 +140,12 @@ def main(argv: list[str] | None = None, *, build=_DETECT, show_error: Callable[[
         print(USAGE.replace("cogitator-setup", "cogitator-setup-web"))
         return 0
     if "--self-check" in argv:
-        return _classic(argv)
+        from cogitator.config import setup_logging
+
+        from .selfcheck import parse_expect, run_setup
+
+        setup_logging()
+        return run_setup(parse_expect(argv))
     from cogitator_setup.app import _default_show_error
 
     err = show_error or _default_show_error
@@ -179,5 +184,13 @@ def main(argv: list[str] | None = None, *, build=_DETECT, show_error: Callable[[
         return 3
 
 
+def entry(argv: list[str] | None = None) -> int:
+    """Program entry (Cogitator Setup.exe, cogitator-setup): `--classic` forces the tkinter setup; it is stripped before parsing."""
+    argv = list(sys.argv[1:] if argv is None else argv)
+    if "--classic" in argv:
+        return _classic([a for a in argv if a != "--classic"])
+    return main(argv)
+
+
 if __name__ == "__main__":
-    sys.exit(main())
+    sys.exit(entry())

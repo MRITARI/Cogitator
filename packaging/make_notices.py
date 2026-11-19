@@ -32,6 +32,9 @@ TEXT_NAMES = ("LICENSE", "LICENCE", "COPYING", "NOTICE")
 SKIP = {"cogitator", "pyinstaller", "pyinstaller-hooks-contrib"}  # ours; PyInstaller has its own section below
 PYTHON_LICENSE_NAMES = ("LICENSE.txt", "LICENSE_PYTHON.txt")  # python.org / Store build, conda build
 SECTION = "=" * 78
+# Wheels that ship no licence text: the upstream repository's file, vendored here (name -> (file, licence, where it came from)).
+SUPPLEMENTAL = {"proxy-tools": ("licenses/proxy_tools-LICENSE.txt", "BSD (its metadata says MIT; the upstream LICENSE.txt is BSD)",
+                                "https://github.com/jtushman/proxy_tools/blob/master/LICENSE.txt")}
 
 
 class NoticesError(SystemExit):
@@ -223,14 +226,18 @@ def collect(pyz: list[Path] | None = None, app_dir: Path | None = None) -> tuple
         d = dists[key]
         title = f"{d.metadata['Name']} {d.version}"
         texts = _text_files(d)
+        lic = licence_name(d)
+        if not texts and key in SUPPLEMENTAL:
+            f, lic, src = SUPPLEMENTAL[key]
+            texts = [(f"not shipped in the wheel; copied from {src}", read(Path(__file__).parent / f))]
         if not texts:
             problems.append(f"{title}: no licence text found in its metadata or package folder")
             continue
         if key == "cryptography":
             apache = next((t for p, t in texts if "LICENSE.APACHE" in p), None)
-        index.append(f"  {title}  ({licence_name(d)})")
+        index.append(f"  {title}  ({lic})")
         body = "\n\n".join(f"--- {p} ---\n{t}" for p, t in texts)
-        sections.append(f"{SECTION}\n{title}   License: {licence_name(d)}\n{SECTION}\n{body}")
+        sections.append(f"{SECTION}\n{title}   License: {lic}\n{SECTION}\n{body}")
         if key == "certifi":
             try:
                 sections[-1] += ("\n\n--- MPL-2.0 notice ---\ncertifi is licensed under the Mozilla Public License 2.0 (text above).\n"
