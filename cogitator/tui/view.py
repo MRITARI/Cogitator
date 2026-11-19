@@ -8,7 +8,6 @@ from pathlib import Path
 from rich.text import Text
 from textual.theme import Theme
 
-from ..config import redact
 from ..doctor import Check
 from ..glyphs import Glyphs
 from ..mods import Mod, ENABLED, DISABLED, UNLISTED
@@ -17,7 +16,7 @@ from ..updates import (FrameworkUpdate, ModRow)
 
 log = logging.getLogger("cogitator.tui")
 
-from ..viewtext import (NOTICE_TITLE, NOTICE_BODY, EMPTY_STATE, BASELINE_UNKNOWN_LABEL, hint_for, STATUS_STYLE as _STATUS_STYLE,  # noqa: F401, E402
+from ..viewtext import (report_segments, SORT_COLUMNS, NOTICE_TITLE, NOTICE_BODY, EMPTY_STATE, BASELINE_UNKNOWN_LABEL, hint_for, STATUS_STYLE as _STATUS_STYLE,  # noqa: F401, E402
                         fw_segments, installed_label, mod_suffix, nexus_segments, status_label)
 
 HELP_BODY = (
@@ -45,7 +44,6 @@ HELP_BODY = (
 _MAIN_ACTIONS = {"help", "app_menu", "choose_theme", "link_all", "toggle_mods", "toggle_mod", "move_up", "move_down", "update_selected", "update_all", "recheck", "link", "import_archive",
                  "set_key", "cycle_sort", "quit_app", "framework_update", "doctor", "apply_update", "profiles", "toggle_mark", "bulk",
                  "launch", "edit_note", "toggle_fav", "filter", "crashlog", "bisect", "search"}
-SORT_COLUMNS = ("mod", "status", "installed", "latest", "en")
 DEFAULT_THEME = "tokyo-night"
 COGITATOR_THEMES = (
     Theme(name="black", primary="#4a90d9", secondary="#7f8c8d", accent="#f1c40f", foreground="#e8e8e8",
@@ -105,18 +103,7 @@ def status_text(row: ModRow | None, g: Glyphs, mod: Mod | None = None) -> Text:
 
 
 def report_text(checks: list[Check]) -> Text:
-    """Doctor report with ASCII level markers (they survive any console) and colour on top."""
-    style = {"ok": "green", "warn": "bold yellow", "fail": "bold red"}
-    t = Text()
-    for c in checks:
-        t.append({"ok": "[OK]   ", "warn": "[WARN] ", "fail": "[FAIL] "}[c.level], style[c.level])
-        t.append(f"{c.name}: ", "bold")
-        t.append(redact(c.detail) + "\n")
-        if c.fix and c.level != "ok":
-            t.append(f"       fix: {c.fix}\n", "cyan")
-    n = {k: sum(1 for c in checks if c.level == k) for k in ("ok", "warn", "fail")}
-    t.append(f"\n{n['ok']} ok, {n['warn']} warning(s), {n['fail']} failure(s).", "bold")
-    return t
+    return _segments_text(report_segments(checks))
 
 
 def _segments_text(segments) -> Text:

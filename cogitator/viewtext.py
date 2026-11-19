@@ -7,6 +7,8 @@ from __future__ import annotations
 import time
 from pathlib import Path
 
+from .config import redact
+from .doctor import Check
 from .frameworks import detect_framework
 from .mods import Mod, UNLISTED
 from .patcher import OFF, ON
@@ -29,6 +31,7 @@ NOTICE_BODY = (
 EMPTY_STATE = ("No mods installed yet. Download mods from nexusmods.com/warhammer40kdarktide, then press I to import the "
                "zip (or drop it onto this window). Press ? for help.")
 BASELINE_UNKNOWN_LABEL = "version unknown - press L to set it"
+SORT_COLUMNS = ("mod", "status", "installed", "latest", "en")
 
 STATUS_STYLE = {UP_TO_DATE: "green", UPDATE: "bold yellow", UNKNOWN: "dim", FAILED: "bold red", NOT_LINKED: "dim",
                 PROBABLY_UP_TO_DATE: "green", PROBABLY_OUTDATED: "bold yellow", "pinned": "cyan"}
@@ -114,3 +117,18 @@ def nexus_segments(key_set: bool, premium: bool | None, quota: str | None, check
 def where_text(where: str) -> str:
     return ("in the Windows credential store" if where == "keyring"
             else "in a plain-text file in your settings folder (the credential store was not available)")
+
+
+def report_segments(checks: list[Check]) -> list[Segment]:
+    """Doctor report with ASCII level markers (they survive any console) and colour on top."""
+    style = {"ok": "green", "warn": "bold yellow", "fail": "bold red"}
+    out: list[Segment] = []
+    for c in checks:
+        out.append(({"ok": "[OK]   ", "warn": "[WARN] ", "fail": "[FAIL] "}[c.level], style[c.level]))
+        out.append((f"{c.name}: ", "bold"))
+        out.append((redact(c.detail) + "\n", ""))
+        if c.fix and c.level != "ok":
+            out.append((f"       fix: {c.fix}\n", "cyan"))
+    n = {k: sum(1 for c in checks if c.level == k) for k in ("ok", "warn", "fail")}
+    out.append((f"\n{n['ok']} ok, {n['warn']} warning(s), {n['fail']} failure(s).", "bold"))
+    return out

@@ -42,9 +42,10 @@ cogitator = "cogitator.cli:main"
 
 [project.gui-scripts]
 cogitator-setup = "cogitator_setup.app:main"
+cogitator-gui = "cogitator_gui.app:main"
 
 [tool.setuptools.packages.find]
-include = ["cogitator*", "cogitator_setup*"]
+include = ["cogitator*", "cogitator_setup*", "cogitator_gui*"]
 
 [tool.setuptools.package-data]
 cogitator = ["locales/*.json"]
