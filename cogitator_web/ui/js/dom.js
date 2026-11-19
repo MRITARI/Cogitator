@@ -15,7 +15,7 @@ export function h(tag, attrs = {}, ...children) {
 }
 
 export function append(el, children) {
-  for (const c of children.flat()) {
+  for (const c of children.flat(Infinity)) {
     if (c === null || c === undefined || c === false) continue;
     el.append(c instanceof Node ? c : document.createTextNode(String(c)));
   }
