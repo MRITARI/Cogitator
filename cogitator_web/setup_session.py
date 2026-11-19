@@ -47,9 +47,9 @@ def _locked(fn: Callable) -> Callable:
 
 
 def _launch_cogitator() -> None:
-    from cogitator_setup.launch import launch_cogitator
+    from .launch import launch_app
 
-    launch_cogitator()
+    launch_app()
 
 
 class WizardSession:

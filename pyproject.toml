@@ -43,7 +43,8 @@ dev = ["pytest", "respx", "pytest-asyncio", "pytest-cov", "ruff", "mypy"]
 cogitator = "cogitator.cli:main"
 
 [project.gui-scripts]
-cogitator-setup = "cogitator_setup.app:main"
+cogitator-setup = "cogitator_web.setup_app:entry"
+cogitator-setup-classic = "cogitator_setup.app:main"
 cogitator-gui = "cogitator_gui.app:main"
 cogitator-web = "cogitator_web.app:main"
 cogitator-setup-web = "cogitator_web.setup_app:main"

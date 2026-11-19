@@ -39,6 +39,7 @@ API = "https://api.github.com"
 ALLOWED_HOSTS = frozenset({"github.com", "api.github.com", "objects.githubusercontent.com",
                            "github-releases.githubusercontent.com", "release-assets.githubusercontent.com"})
 REQUIRED_EXE = "cogitator.exe"
+WEB_EXE = "cogitator-web.exe"  # shares the build with REQUIRED_EXE; restarted after an update when it started the update
 MAX_ZIP = 200 * 1024 * 1024
 MAX_UNPACKED = 600 * 1024 * 1024
 MAX_FILES = 20000
@@ -244,6 +245,13 @@ class Layout:
         }.get(self.kind, "")
 
 
+def starter_exe() -> str:
+    """The program that is running: cogitator-web.exe stays the web program after an update, anything else restarts cogitator.exe."""
+    if getattr(sys, "frozen", False) and Path(sys.executable).name.lower() == WEB_EXE:
+        return WEB_EXE
+    return REQUIRED_EXE
+
+
 def detect_layout(*, frozen: bool | None = None, executable: str | None = None, package_file: str | None = None,
                   prefix: str | None = None) -> Layout:
     frozen = bool(getattr(sys, "frozen", False)) if frozen is None else frozen
@@ -335,8 +343,9 @@ class SelfUpdater:
     def __init__(self, registry: Registry, settings: Settings, *, current: str = __version__, layout: Layout | None = None,
                  client_factory: Callable[[], httpx.Client] | None = None, now: Callable[[], float] = time.time,
                  public_key: str | None = None, popen: Callable[..., object] = subprocess.Popen,
-                 pid: Callable[[], int] = os.getpid):
+                 pid: Callable[[], int] = os.getpid, starter: str | None = None):
         self.reg, self.settings = registry, settings
+        self.starter = starter or starter_exe()
         self.current = Version.parse(current) or Version(0, 0, 0)
         self.layout = layout or detect_layout()
         self.now, self.popen, self.pid = now, popen, pid
@@ -567,10 +576,15 @@ class SelfUpdater:
     def _common_args(self, version: str) -> list[str]:
         app = self.layout.app_dir
         exe = str(app / REQUIRED_EXE)
-        check = [exe, "--self-check"] + (["--expect-version", version] if version != "previous" else [])  # binds the build to the release version
+        tail = ["--self-check"] + (["--expect-version", version] if version != "previous" else [])  # binds the build to the release version
+        check: list = [exe, *tail]
+        relaunch = [exe]
+        if self.starter == WEB_EXE and (app / WEB_EXE).is_file():  # the web program stays the web program; both are verified
+            check = [check, [str(app / WEB_EXE), *tail]]
+            relaunch = [str(app / WEB_EXE)]
         return ["--app", str(app), "--previous", str(self.layout.previous_dir), "--version", version,
                 "--wait-pid", str(self.pid()), "--result", str(config_dir() / RESULT_FILE),
-                "--check", json.dumps(check), "--relaunch", json.dumps([exe])]
+                "--check", json.dumps(check), "--relaunch", json.dumps(relaunch)]
 
     def apply(self) -> Ready:
         """Start the helper that swaps in the staged build. The caller must exit right after this returns."""

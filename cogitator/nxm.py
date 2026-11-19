@@ -164,8 +164,10 @@ def download(link: NxmLink, nexus, dest_dir: Path, client=None, now: Callable[[]
 # ------------------------------------------------------------------ the click: queue it and make sure Cogitator is open
 
 def _spawn_command() -> list[str]:
+    """A click with no window open starts the web window when this install has one (cogitator-web.exe), else the terminal UI."""
     if getattr(sys, "frozen", False):
-        return [str(Path(sys.executable).parent / "cogitator.exe")]
+        web = Path(sys.executable).parent / "cogitator-web.exe"
+        return [str(web if web.is_file() else web.with_name("cogitator.exe"))]
     return [sys.executable, "-m", "cogitator"]
 
 
@@ -208,8 +210,10 @@ def handle_click(url: str, popen=subprocess.Popen, running: Callable[[], bool | 
         return 2
     if running() is True:
         return 0  # the open interface picks the link up within a couple of seconds
-    flags = getattr(subprocess, "CREATE_NEW_CONSOLE", 0)
-    popen(_spawn_command(), creationflags=flags, close_fds=True)
+    cmd = _spawn_command()
+    # the windowed web program needs no console of its own; the terminal UI does
+    flags = 0 if Path(cmd[0]).name.lower() == "cogitator-web.exe" else getattr(subprocess, "CREATE_NEW_CONSOLE", 0)
+    popen(cmd, creationflags=flags, close_fds=True)
     return 0
 
 
