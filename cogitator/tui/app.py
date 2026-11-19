@@ -19,16 +19,13 @@ from textual.containers import Horizontal, Vertical
 from textual.widgets import DataTable, RichLog, Static
 from textual.worker import get_current_worker
 
-from .. import __version__
-from ..archives import parse_archive_name
-from ..config import InstanceLock, LockError, Settings, config_dir, get_api_key, log_path, redact, set_api_key
-from ..frameworks import (describe_plan, plan_local, classify_zip)
-from ..fwupdate import install_framework_plan, needs_repatch
+from .. import __version__, actions
+from ..config import InstanceLock, LockError, Settings, config_dir, get_api_key, log_path, redact
 from ..gamefinder import resolve_game_dir, validate_game_dir
 from ..glyphs import Glyphs, detect, glyphs_for
 from ..linking import apply_guess, choose_baseline, folder_mtime, link_mod, rank_candidates
 from ..loader import LoaderError
-from ..modinstall import (ModImportError, NotPremium, apply_update_premium, dropped_paths, import_archive, inspect_mod_zip, mod_page_url, newest_download, open_files_page,
+from ..modinstall import (ModImportError, NotPremium, apply_update_premium, dropped_paths, mod_page_url, open_files_page,
                           wait_for_download)
 from ..mods import INTERNAL_FOLDERS, Mod, mods_dir, toggle_mod, move_mod, ModError
 from ..nexus import InvalidKey, NexusClient, NexusError, RateLimited, latest_main_file, parse_nexus_ref
@@ -99,6 +96,25 @@ def pick_files(initial: Path | None = None) -> list[Path] | None:
         logging.getLogger("cogitator.tui").debug("file dialog unavailable", exc_info=True)
         return None
     return [Path(n) for n in names] if names else []
+
+
+class _TuiUi:
+    """`actions.Ui` for the terminal UI: called from a worker thread, blocks that worker on a modal screen."""
+
+    def __init__(self, app: "CogitatorApp"):
+        self.app = app
+
+    def log(self, msg: str, style: str = "") -> None:
+        self.app._ui(self.app.log_line, msg, style)
+
+    def confirm(self, title: str, body: str = "", default_yes: bool = True) -> bool:
+        return bool(self.app.ask(ConfirmScreen(title, body, default_yes=default_yes)))
+
+    def ask_text(self, title: str, hint: str = "", body: str = "", allow_blank: bool = False) -> str | None:
+        return self.app.ask(InputScreen(title, hint, body=body, allow_blank=allow_blank))
+
+    def choose(self, question: str, options: list[str], selected: int = 0) -> int | None:
+        return self.app.ask(ChoiceScreen(question, options, selected=selected))
 
 
 # ------------------------------------------------------------------ app
@@ -510,18 +526,11 @@ class CogitatorApp(SelfUpdateMixin, TableMixin, FrameworkMixin, ProfileMixin, Wo
         self._bg(self._job_key, key, name="validate key", group="key", exclusive=True)
 
     def _job_key(self, key: str) -> None:
-        try:
-            with NexusClient(key) as nx:
-                who = nx.validate()
-        except NexusError as e:
-            self._ui(self.log_line, redact(f"Key not saved: {e}", key), "bold red")
+        r = actions.store_key(self._actx(), key)
+        if not r.ok:
+            self._ui(self.log_line, r.message, "bold red")
             return
-        where = set_api_key(key)
-        with self._lock:
-            upd = self.registry.data["updates"]
-            upd["premium"], upd["premium_checked"] = bool(who.get("is_premium")), time.time()
-            self.registry.save()
-        self._ui(self.log_line, f"Key valid ({'premium' if who.get('is_premium') else 'free'}); stored {_where_text(where)}.", "green")
+        self._ui(self.log_line, r.message, "green")
         self._ui(self.refresh_header)
         self._ui(lambda: self.start_check(force=True))
 
@@ -724,77 +733,21 @@ class CogitatorApp(SelfUpdateMixin, TableMixin, FrameworkMixin, ProfileMixin, Wo
         return Path(self.settings.downloads_dir) if self.settings.downloads_dir else Path.home() / "Downloads"
 
     def _job_import(self, raw: str, mod_id: int | None) -> None:
-        raw = raw.strip()
-        if not raw:
-            p = newest_download(self._downloads_dir())
-            if p is None:
-                self._ui(self.log_line, f"No .zip from the last hour in {self._downloads_dir()}.", "bold red")
-                return
-            self._ui(self.log_line, f"Using the newest download: {p.name}", "dim")
-        else:
-            found = dropped_paths(raw)
-            if len(found) > 1:
-                for f in found:
-                    self._job_import(str(f), None)
-                return
-            p = found[0] if found else Path(raw.strip('"'))
-        if not p.is_file():
-            self._ui(self.log_line, f"No such file: {p}", "bold red")
-            return
-        try:
-            kind = classify_zip(p)[0]
-        except LoaderError:
-            kind = None
-        if kind:  # DML / DMF archive
-            plan = plan_local(p)
-            body = describe_plan(plan)
-            if needs_repatch(plan, self.game_dir):
-                body += "\n\nMods are currently ON: Cogitator will un-patch the game, install, then re-patch it."
-            if not self.ask(ConfirmScreen(f"Install {kind.upper()} into the game folder?", body)):
-                return
-            try:
-                with self._lock:
-                    fi = install_framework_plan(plan, self.game_dir, self.registry, runner=self.patch_runner,
-                                                is_running=self.game_running,
-                                                max_bytes=self.settings.extract_limits()[0], max_files=self.settings.extract_limits()[1])
-            except PatcherError as e:
-                self._ui(self.log_line, f"{kind.upper()}: {e}", "bold red")
-                self._ui(self.refresh_header)
-                return
-            self._ui(self.log_line, f"{kind.upper()} installed ({fi.result.written} files).", "green")
-            for n in fi.notes:
-                self._ui(self.log_line, n, "green")
-            self._ui(self._after_registry_change, None)
+        actions.import_file(self._actx(), self._tui_ui(), raw, mod_id, self._import_done)
+
+    def _import_done(self, out: actions.Outcome) -> None:
+        if out.refresh:
+            self._ui(self._after_registry_change, out.folder)
+        elif out.header:
+            self._ui(self.refresh_header)
+        if out.recheck:
             self._ui(self.start_check)
-            return
-        info = inspect_mod_zip(p)  # ModImportError surfaces through _bg's handler
-        parsed = parse_archive_name(p.name)
-        if mod_id is None and parsed.mod_id is None and len(info.folders) == 1 \
-                and not (self.registry.mod(info.folders[0]) or {}).get("nexus_id"):
-            ref = self.ask(InputScreen(f"'{p.name}' does not say which Nexus mod it is",
-                                       "Nexus URL or id (blank = install without linking)"))
-            if ref:
-                mod_id, problem = parse_nexus_ref(ref)
-                if mod_id is None:
-                    self._ui(self.log_line, problem or "Bad reference.", "bold red")
-                    return
-        if not self.ask(ConfirmScreen(f"Install {', '.join(info.folders)}?", f"From {p.name}\nInto {self.game_dir / 'mods'}")):
-            return
-        key = get_api_key()
-        nx = NexusClient(key) if key else None
-        try:
-            with self._lock:
-                r = import_archive(p, self.game_dir, self.registry, nx, mod_id=mod_id,
-                                   choose=lambda q, o: self.ask(ChoiceScreen(q, o)), is_running=self.game_running,
-                                   max_bytes=self.settings.extract_limits()[0], max_files=self.settings.extract_limits()[1])
-        finally:
-            if nx:
-                nx.close()
-        msg = f"Installed {', '.join(r.folders)}" + (f"; added to load order: {', '.join(r.added_to_load_order)}" if r.added_to_load_order else "")
-        self._ui(self.log_line, msg, "green")
-        for n in r.notes:
-            self._ui(self.log_line, n, "yellow")
-        self._ui(self._after_registry_change, r.linked or (r.folders[0] if r.folders else None))
+
+    def _tui_ui(self) -> "_TuiUi":
+        return _TuiUi(self)
+
+    def _actx(self) -> actions.Ctx:
+        return actions.Ctx(self.game_dir, self.registry, self.settings, self._lock, self.patch_runner, self.game_running)
 
     # -------------------------------------------------------------- U / Shift+U: updates
     def _premium(self) -> bool:

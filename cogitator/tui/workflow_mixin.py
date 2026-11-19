@@ -6,7 +6,7 @@ from typing import TYPE_CHECKING, Any
 
 from rich.text import Text
 
-from .. import bisect, crashlog, gamefinder, nxm, repair
+from .. import actions, bisect, crashlog, gamefinder, nxm, repair
 from ..config import cache_dir, get_api_key
 from ..doctor import console_log_dirs
 from ..loadorder import LoadOrder
@@ -36,24 +36,10 @@ class WorkflowMixin:
         return Text(prefix) + t if prefix else t
 
     def _visible(self, m) -> bool:
-        q = self.filter_text.strip().casefold()
-        if not q:
-            return True
-        meta = self._meta(m.folder)
-        hay = " ".join([m.folder, " ".join(meta.get("tags") or []), meta.get("notes") or "", "fav" if meta.get("fav") else "",
-                        "pinned" if meta.get("pinned_version") else ""]).casefold()
-        return all(w in hay for w in q.split())
+        return actions.mod_visible(m.folder, self._meta(m.folder), self.filter_text)
 
     def _meta_hint(self, folder: str) -> str:
-        meta = self._meta(folder)
-        bits = []
-        if meta.get("pinned_version"):
-            bits.append(f"pinned to {meta['pinned_version']}")
-        if meta.get("tags"):
-            bits.append("tags: " + ", ".join(meta["tags"]))
-        if meta.get("notes"):
-            bits.append("note: " + meta["notes"])
-        return "  |  " + "  |  ".join(bits) if bits else ""
+        return actions.meta_hint(self._meta(folder))
 
     def action_toggle_mark(self) -> None:
         f = self.selected()
@@ -86,31 +72,20 @@ class WorkflowMixin:
     def _note_entered(self, folder: str, text: str | None) -> None:
         if text is None:
             return
-        words = text.split()
-        tags = [w[1:].lower()[:30] for w in words if w.startswith("#") and len(w) > 1]
-        note = " ".join(w for w in words if not (w.startswith("#") and len(w) > 1))
-        self.registry.set_mod(folder, tags=tags, notes=note[:500])
+        msg = actions.set_note(self.registry, folder, text)
         self._refresh_mod_row(folder)
-        self.log_line(f"{folder}: " + (f"tags {', '.join(tags) or '(none)'}; note saved." if text else "tags and note cleared."), "green")
+        self.log_line(msg, "green")
 
     def action_toggle_fav(self) -> None:
         f = self.selected()
         if not (self._need_game() and f):
             return
-        fav = not self._meta(f).get("fav")
-        self.registry.set_mod(f, fav=fav)
+        msg = actions.toggle_fav(self.registry, f)
         self._refresh_mod_row(f)
-        self.log_line(f"{f}: {'favourite' if fav else 'not a favourite'}.", "green")
+        self.log_line(msg, "green")
 
     def _toggle_pin(self, folder: str) -> None:
-        meta = self._meta(folder)
-        if meta.get("pinned_version"):
-            self.registry.set_mod(folder, pinned_version=None)
-            self.log_line(f"{folder}: unpinned.", "green")
-        else:
-            v = str(meta.get("installed_version") or "the installed version")
-            self.registry.set_mod(folder, pinned_version=v)
-            self.log_line(f"{folder}: pinned to {v}; its updates are skipped until you unpin it.", "green")
+        self.log_line(actions.toggle_pin(self.registry, folder), "green")
         self._after_registry_change(folder)
 
     def _show_changelog(self, folder: str) -> None:

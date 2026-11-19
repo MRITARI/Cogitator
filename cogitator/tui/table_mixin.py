@@ -10,10 +10,11 @@ from typing import Callable
 from rich.text import Text
 from textual.widgets import DataTable, Static
 
+from .. import actions
 from ..config import cache_dir
 from ..linking import folder_mtime
 from ..modinstall import (open_files_page)
-from ..mods import Mod, mods_dir, ENABLED, DISABLED, UNLISTED, scan_mods, move_mod, remove_mod, ModError
+from ..mods import Mod, mods_dir, ENABLED, DISABLED, UNLISTED, scan_mods, move_mod, ModError
 from ..updates import (FrameworkUpdate, ModRow, UPDATE, PROBABLY_OUTDATED, cached_rows)
 from .screens import ChoiceScreen, ConfirmScreen, MenuScreen
 from .widgets import ModTable, TitleButton
@@ -269,34 +270,14 @@ class TableMixin:
             self.log_line(f"Could not open {path}: {e}", "bold red")
 
     def _job_rollback(self, folder: str) -> None:
-        from ..modinstall import ModImportError, rollback_mod
-
-        try:
-            with self._lock:
-                msg = rollback_mod(folder, self.game_dir, self.registry, is_running=self.game_running)
-            self._ui(self.log_line, msg, "green")
-        except (ModImportError, OSError) as e:
-            self._ui(self.log_line, f"Could not roll back {folder}: {e}", "bold red")
-        self._ui(self._after_registry_change, folder)
+        self._apply_outcome(actions.roll_back(self._actx(), self._tui_ui(), folder))
 
     def _job_remove(self, folder: str) -> None:
-        if self.game_running():
-            self._ui(self.log_line, "Close Darktide before removing a mod.", "bold yellow")
-            return
-        try:
-            with self._lock:
-                from .. import snapshots
+        self._apply_outcome(actions.remove_one(self._actx(), self._tui_ui(), folder))
 
-                snapshots.auto(self.game_dir, "remove", folders=[folder], registry=self.registry)
-                dest = remove_mod(self.game_dir, folder, cache_dir() / "removed")
-                self.registry.forget_mod(folder)
-                from .. import integrity
-
-                integrity.forget(folder)
-            self._ui(self.log_line, f"Removed {folder}. Its files are in {dest}", "green")
-        except (ModError, OSError) as e:
-            self._ui(self.log_line, f"Could not remove {folder}: {e}", "bold red")
-        self._ui(self._after_registry_change, None)
+    def _apply_outcome(self, out) -> None:
+        if out is not None and out.refresh:
+            self._ui(self._after_registry_change, out.folder)
 
     def on_mod_table_dragging(self, msg: ModTable.Dragging) -> None:
         if msg.over != msg.folder:
