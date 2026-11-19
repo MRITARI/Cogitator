@@ -127,6 +127,8 @@ class FrameworkMixin:
                     continue
                 with self._lock:
                     fi = install_framework_plan(plan, self.game_dir, self.registry, runner=self.patch_runner,
-                                                is_running=self.game_running)
+                                                is_running=self.game_running,
+                                                max_bytes=self.settings.extract_limits()[0],
+                                                max_files=self.settings.extract_limits()[1])
                 self._ui(self.log_line, f"{kind.upper()} installed ({fi.result.written} files).", "green")
         self._ui(self._after_registry_change, None)

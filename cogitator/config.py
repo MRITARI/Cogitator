@@ -113,6 +113,10 @@ class Settings:
     language: str = "auto"  # auto (from the system) or a language code such as "de"; COGITATOR_LANG overrides it
     auto_repair: str = "ask"  # off | ask | auto: what to do when a game update switched the mods off
 
+    def extract_limits(self) -> tuple[int, int]:
+        """(max_bytes, max_files) for archive extraction."""
+        return self.max_extract_mb * 1024 * 1024, self.max_extract_files
+
     @classmethod
     def path(cls) -> Path:
         return config_dir() / "config.toml"

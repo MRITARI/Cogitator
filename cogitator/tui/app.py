@@ -756,8 +756,7 @@ class CogitatorApp(SelfUpdateMixin, TableMixin, FrameworkMixin, ProfileMixin, Wo
                 with self._lock:
                     fi = install_framework_plan(plan, self.game_dir, self.registry, runner=self.patch_runner,
                                                 is_running=self.game_running,
-                                                max_bytes=self.settings.max_extract_mb * 1024 * 1024,
-                                                max_files=self.settings.max_extract_files)
+                                                max_bytes=self.settings.extract_limits()[0], max_files=self.settings.extract_limits()[1])
             except PatcherError as e:
                 self._ui(self.log_line, f"{kind.upper()}: {e}", "bold red")
                 self._ui(self.refresh_header)
@@ -787,7 +786,7 @@ class CogitatorApp(SelfUpdateMixin, TableMixin, FrameworkMixin, ProfileMixin, Wo
             with self._lock:
                 r = import_archive(p, self.game_dir, self.registry, nx, mod_id=mod_id,
                                    choose=lambda q, o: self.ask(ChoiceScreen(q, o)), is_running=self.game_running,
-                                   max_bytes=self.settings.max_extract_mb * 1024 * 1024, max_files=self.settings.max_extract_files)
+                                   max_bytes=self.settings.extract_limits()[0], max_files=self.settings.extract_limits()[1])
         finally:
             if nx:
                 nx.close()
@@ -837,8 +836,7 @@ class CogitatorApp(SelfUpdateMixin, TableMixin, FrameworkMixin, ProfileMixin, Wo
                 try:
                     with self._lock:
                         r = apply_update_premium(f, self.game_dir, self.registry, nx, premium=self._premium(),
-                                                 is_running=self.game_running, max_bytes=self.settings.max_extract_mb * 1024 * 1024,
-                                                 max_files=self.settings.max_extract_files)
+                                                 is_running=self.game_running, max_bytes=self.settings.extract_limits()[0], max_files=self.settings.extract_limits()[1])
                     self._ui(self.log_line, f"{f}: updated to {r.version or r.file_id}.", "green")
                 except (ModImportError, LoaderError, NexusError, NotPremium) as e:
                     self._ui(self.log_line, f"{f}: {e}", "bold red")

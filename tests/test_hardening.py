@@ -291,3 +291,9 @@ def test_registry_set_mod_is_safe_from_two_threads(tmp_path, monkeypatch):
     [t.join() for t in ts]
     assert not overlaps
     assert len(json.loads(written[-1])["mods"]) == 120 == len(reg.data["mods"])  # the last save holds every update
+
+
+def test_settings_extract_limits():
+    from cogitator.config import Settings
+    s = Settings(max_extract_mb=2, max_extract_files=7)
+    assert s.extract_limits() == (2 * 1024 * 1024, 7)

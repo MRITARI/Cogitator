@@ -976,7 +976,7 @@ def cmd_import(args) -> int:
         print("(No Nexus API key: the installed file cannot be identified yet; status will stay 'unknown'.)")
     try:
         r = import_archive(zp, res.game_dir, reg, nx, choose=_choose if interactive else None, mod_id=mod_id,
-                           max_bytes=s.max_extract_mb * 1024 * 1024, max_files=s.max_extract_files)
+                           max_bytes=s.extract_limits()[0], max_files=s.extract_limits()[1])
     except (ModImportError, LoaderError, NexusError) as e:
         print(f"Error: {e}", file=sys.stderr)
         return 2
@@ -1034,7 +1034,7 @@ def cmd_update(args) -> int:
                     continue
                 try:
                     r = apply_update_premium(f, res.game_dir, reg, nx, premium=True,
-                                             max_bytes=s.max_extract_mb * 1024 * 1024, max_files=s.max_extract_files)
+                                             max_bytes=s.extract_limits()[0], max_files=s.extract_limits()[1])
                     print(f"{f}: updated to {r.version or r.file_id}. Rollback copies: {r.backup_dir}")
                 except (ModImportError, LoaderError, NexusError) as e:
                     print(f"{f}: {e}", file=sys.stderr)
@@ -1148,7 +1148,7 @@ def cmd_install_framework(args) -> int:
             if not _confirm(f"Install {p.component.upper()} from the source above?", args.yes):
                 print("Cancelled.")
                 return 2
-            fi = install_framework_plan(p, game, reg, max_bytes=s.max_extract_mb * 1024 * 1024, max_files=s.max_extract_files)
+            fi = install_framework_plan(p, game, reg, max_bytes=s.extract_limits()[0], max_files=s.extract_limits()[1])
             r = fi.result
             kept = f"; kept existing {', '.join(r.kept)}" if r.kept else ""
             print(f"{p.component.upper()} installed: {r.written} files{kept}. Rollback copies: {r.backup_dir}")
