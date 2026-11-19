@@ -48,7 +48,9 @@ def make_dir_link(link, target) -> None:
     import subprocess
 
     if os.name == "nt":
-        r = subprocess.run(["cmd", "/c", "mklink", "/J", str(link), str(target)], capture_output=True, text=True)
+        from .procs import no_window
+
+        r = subprocess.run(["cmd", "/c", "mklink", "/J", str(link), str(target)], capture_output=True, text=True, **no_window())
         if r.returncode != 0:
             raise OSError((r.stderr or r.stdout).strip() or "mklink failed")
     else:

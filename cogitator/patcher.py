@@ -22,7 +22,7 @@ from .config import cache_dir
 from .frameworks import detect_framework
 from .fsutil import atomic_write_bytes
 from .gamefinder import validate_game_dir
-from .procs import darktide_running
+from .procs import darktide_running, no_window
 from .registry import Registry
 
 log = logging.getLogger(__name__)
@@ -105,7 +105,7 @@ Runner = Callable[[list, Path], "tuple[int, str, str]"]
 
 def default_runner(args: list, cwd: Path) -> tuple[int, str, str]:
     r = subprocess.run([str(a) for a in args], cwd=cwd, capture_output=True, text=True, timeout=TIMEOUT_S,
-                       stdin=subprocess.DEVNULL, shell=False)
+                       stdin=subprocess.DEVNULL, shell=False, **no_window())
     return r.returncode, r.stdout or "", r.stderr or ""
 
 

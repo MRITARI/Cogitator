@@ -6,6 +6,15 @@ import subprocess
 import sys
 
 log = logging.getLogger(__name__)
+CREATE_NO_WINDOW = 0x08000000
+
+
+def no_window() -> dict:
+    """subprocess kwargs so a console program started by the window (tasklist, mklink, ...) does not flash its own console.
+    The GUI has no console of its own, and Windows gives every console child a new visible one unless told not to."""
+    return {"creationflags": CREATE_NO_WINDOW} if sys.platform == "win32" else {}
+
+
 PROCESS_NAME = "Darktide.exe"  # present in <game>/binaries on the inspected install
 
 
@@ -13,7 +22,7 @@ def darktide_running(run=subprocess.run) -> bool:
     try:
         if sys.platform == "win32":
             r = run(["tasklist", "/FI", f"IMAGENAME eq {PROCESS_NAME}", "/NH", "/FO", "CSV"],
-                    capture_output=True, text=True, timeout=15)
+                    capture_output=True, text=True, timeout=15, **no_window())
             return PROCESS_NAME.lower() in (r.stdout or "").lower()
         # Proton: the Windows exe shows up inside wine/proton command lines
         r = run(["ps", "-eo", "args"], capture_output=True, text=True, timeout=15)

@@ -41,3 +41,22 @@ def test_build_script_bundles_the_gui_and_its_theme_and_selfcheck_covers_it(caps
     assert "--collect-submodules cogitator_gui" in build and "--collect-data sv_ttk" in build
     assert selfcheck.run() == 0
     assert "ok    GUI" in capsys.readouterr().out
+
+
+def test_console_children_do_not_flash_a_console(monkeypatch):
+    from cogitator import procs
+
+    monkeypatch.setattr(procs.sys, "platform", "win32")
+    seen = {}
+
+    def run(argv, **kw):
+        seen.update(kw)
+
+        class R:
+            stdout = "Darktide.exe"
+
+        return R()
+
+    assert procs.darktide_running(run=run) is True and seen["creationflags"] == procs.CREATE_NO_WINDOW
+    monkeypatch.setattr(procs.sys, "platform", "linux")
+    assert procs.no_window() == {}
