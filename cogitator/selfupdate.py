@@ -579,7 +579,11 @@ class SelfUpdater:
         tail = ["--self-check"] + (["--expect-version", version] if version != "previous" else [])  # binds the build to the release version
         check: list = [exe, *tail]
         relaunch = [exe]
-        if self.starter == WEB_EXE and (app / WEB_EXE).is_file():  # the web program stays the web program; both are verified
+        has_web = (app / WEB_EXE).is_file()
+        if version == "previous":  # the folder swapped in is the previous one: it decides
+            prev = self.layout.previous_dir
+            has_web = prev is not None and (prev / WEB_EXE).is_file()
+        if self.starter == WEB_EXE and has_web:  # the web program stays the web program; both are verified
             check = [check, [str(app / WEB_EXE), *tail]]
             relaunch = [str(app / WEB_EXE)]
         return ["--app", str(app), "--previous", str(self.layout.previous_dir), "--version", version,

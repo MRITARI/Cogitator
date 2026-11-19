@@ -189,3 +189,20 @@ def test_helper_launches_web_exe_without_a_terminal_and_runs_all_checks(monkeypa
     monkeypatch.setattr(updater.subprocess, "run", lambda argv, **k: runs.append(argv) or type("R", (), {"returncode": 0 if "ok" in argv[0] else 1})())
     assert updater._check([["ok1", "--self-check"], ["ok2", "--self-check"]]) is True
     assert updater._check([["ok1"], ["bad"]]) is False
+
+
+def test_rollback_to_a_build_without_the_web_exe_uses_the_console_exe(tmp_path):
+    import json
+
+    from cogitator.selfupdate import REQUIRED_EXE, WEB_EXE
+
+    u, app = _updater_with(tmp_path, WEB_EXE)
+    prev = app.parent / "app.previous"
+    prev.mkdir()
+    (prev / REQUIRED_EXE).write_bytes(b"x")  # an older build: no cogitator-web.exe
+    a = u._common_args("previous")
+    assert json.loads(a[a.index("--relaunch") + 1]) == [str(app / REQUIRED_EXE)]
+    assert json.loads(a[a.index("--check") + 1]) == [str(app / REQUIRED_EXE), "--self-check"]
+    (prev / WEB_EXE).write_bytes(b"x")  # a previous build that has it: web stays web
+    a = u._common_args("previous")
+    assert json.loads(a[a.index("--relaunch") + 1]) == [str(app / WEB_EXE)]
