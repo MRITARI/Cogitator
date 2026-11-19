@@ -367,3 +367,15 @@ def test_launch_does_not_repatch_after_a_deliberate_unpatch(game, monkeypatch):
     reg.data["patch"] = {"last_patch_at": 3.0, "last_unpatch_at": 2.0}  # patched later, now OFF again: a game update
     fake_launch(game, reg)
     assert calls == ["patch"]
+
+
+def test_crashlog_handles_mod_folders_with_spaces_and_dots(tmp_path):
+    p = tmp_path / "console.log"
+    p.write_text("[Lua] [Mod] Loading ./../mods/My Cool Mod/My Cool Mod.mod\n"
+                 "Error: scripts/mods/My Cool Mod/x.lua:3: attempt to call nil\n"
+                 "Error: scripts/mods/my.mod.v2/y.lua:3: attempt to call nil\n"
+                 "Error: 'scripts/mods/quoted/z.lua' [scripts/mods/bracket/z.lua] failed\n"
+                 "Error: see mods/ and /path/x.lua failed\n")
+    rep = crashlog.analyze(p)
+    assert dict(rep.suspects) == {"My Cool Mod": 1, "my.mod.v2": 1, "quoted": 1, "bracket": 1}
+    assert rep.loaded == ["My Cool Mod"]

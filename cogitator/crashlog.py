@@ -9,8 +9,9 @@ from pathlib import Path
 
 from .doctor import _ERR, _MAX_LOG_BYTES
 
-_MOD_PATH = re.compile(r"(?:scripts/mods|\.\./mods|mods)/([^/\\\s\"'\]:]+)/", re.I)
-_LOADING = re.compile(r"Loading \./\.\./mods/([^/\\\s]+)/", re.I)
+# Folder names may contain inner spaces ("My Cool Mod") but never start/end with one, so prose like "mods/ and /x" cannot match.
+_MOD_PATH = re.compile(r"(?:scripts/mods|\.\./mods|mods)/([^/\\\s\"'\]:](?:[^/\\\"'\]:]*[^/\\\s\"'\]:])?)/", re.I)
+_LOADING = re.compile(r"Loading \./\.\./mods/([^/\\\s](?:[^/\\]*[^/\\\s])?)/", re.I)
 _INTERNAL = {"base", "dmf"}
 
 
