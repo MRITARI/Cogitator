@@ -6,6 +6,7 @@ import logging
 from pathlib import Path
 
 
+from .. import actions_nexus
 from ..config import get_api_key
 from ..doctor import exit_code as doctor_exit_code, run_doctor
 from ..frameworks import (describe_plan, detect_framework, plan_github)
@@ -48,36 +49,7 @@ class FrameworkMixin:
                                                     exclusive=True))
 
     def _job_framework(self, ups: list[FrameworkUpdate]) -> None:
-        import shutil
-        import tempfile
-
-        key = get_api_key()
-        for u in sorted(ups, key=lambda x: x.kind != "dml"):  # loader before framework
-            mod_id = FRAMEWORK_MODS[u.kind]
-            latest = {"file_name": u.latest_file_name, "version": u.latest, "file_id": u.latest_file_id}
-            tmp: Path | None = None
-            try:
-                if self._premium():
-                    tmp = Path(tempfile.mkdtemp(prefix="fw-", dir=self._work_dir()))
-                    with NexusClient(key) as nx:
-                        found = fetch_premium_download(nx, mod_id, u.latest_file_id, u.latest_file_name, u.latest_size, tmp,
-                                                       premium=True)
-                else:
-                    found = self._watch_download(mod_id, latest, u.kind.upper())
-                if found:
-                    self._job_import(str(found), None)  # the existing import flow: shows source, asks, installs, re-patches
-            except (ModImportError, LoaderError, NexusError, NotPremium) as e:
-                self._ui(self.log_line, f"{u.kind.upper()} update: {e}", "bold red")
-            finally:
-                if tmp:
-                    shutil.rmtree(tmp, ignore_errors=True)
-
-    def _work_dir(self) -> Path:
-        from ..config import cache_dir
-
-        d = cache_dir() / "work"
-        d.mkdir(parents=True, exist_ok=True)
-        return d
+        actions_nexus.framework_update(self._actx(), self._tui_ui(), ups, self._import_done)
 
     # -------------------------------------------------------------- D: doctor
     def action_doctor(self) -> None:
@@ -117,18 +89,5 @@ class FrameworkMixin:
             self.log_line(f"Mod Loader/Framework not installed. {pages}", "yellow")
 
     def _job_github(self, missing: list[str]) -> None:
-        import tempfile
-
-        with tempfile.TemporaryDirectory(prefix="cogitator-gh-") as wd, make_client(github_only=True) as client:
-            for kind in sorted(missing, key=lambda k: k != "dml"):
-                plan = plan_github(kind, client, Path(wd))
-                if not self.ask(ConfirmScreen(f"Install {kind.upper()} from GitHub?", describe_plan(plan))):
-                    self._ui(self.log_line, f"{kind.upper()} install declined.", "yellow")
-                    continue
-                with self._lock:
-                    fi = install_framework_plan(plan, self.game_dir, self.registry, runner=self.patch_runner,
-                                                is_running=self.game_running,
-                                                max_bytes=self.settings.extract_limits()[0],
-                                                max_files=self.settings.extract_limits()[1])
-                self._ui(self.log_line, f"{kind.upper()} installed ({fi.result.written} files).", "green")
+        actions_nexus.install_from_github(self._actx(), self._tui_ui(), missing)
         self._ui(self._after_registry_change, None)

@@ -46,6 +46,9 @@ class Ctx:
     lock: threading.RLock = field(default_factory=threading.RLock)
     patch_runner: Callable = default_runner
     game_running: Callable[[], bool] = darktide_running
+    cancelled: Callable[[], bool] = lambda: False  # a flow that waits (a download) gives up when this turns true
+    open_url: Callable[[str], object] | None = None  # None = the system browser (webbrowser.open)
+    download_wait_s: float = 180.0
 
     def downloads_dir(self) -> Path:
         return Path(self.settings.downloads_dir) if self.settings.downloads_dir else Path.home() / "Downloads"

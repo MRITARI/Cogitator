@@ -3,6 +3,7 @@ import asyncio
 import json
 import logging
 import threading
+from cogitator import actions_nexus
 import time
 import zipfile
 from pathlib import Path
@@ -604,8 +605,8 @@ async def test_U_on_free_account_opens_page_and_offers_import(game, tmp_path, mo
         mod_zip(dl / REAL_NAME, "alpha", "v2")  # the "browser download" lands
         return f"https://www.nexusmods.com/{GAME}/mods/{mod_id}?tab=files"
 
-    monkeypatch.setattr(tui, "open_files_page", fake_open)
-    monkeypatch.setattr(tui, "wait_for_download", lambda *a, **k: dl / REAL_NAME)
+    monkeypatch.setattr(actions_nexus, "open_files_page", fake_open)
+    monkeypatch.setattr(actions_nexus, "wait_for_download", lambda *a, **k: dl / REAL_NAME)
     app = make_app(game)
     async with app.run_test(size=SIZE) as pilot:
         await settle(app, pilot)
@@ -650,7 +651,7 @@ async def test_ctrl_U_premium_updates_all_after_one_confirm(game, monkeypatch):
     reg.data["updates"]["premium"] = True
     reg.save()
     done = []
-    monkeypatch.setattr(tui, "apply_update_premium", lambda f, *a, **k: done.append(f) or type("R", (), {"version": "9", "file_id": 1})())
+    monkeypatch.setattr(actions_nexus, "apply_update_premium", lambda f, *a, **k: done.append(f) or type("R", (), {"version": "9", "file_id": 1})())
     monkeypatch.setattr(tui, "run_checks", lambda *a, **k: type("B", (), {"mods": type("M", (), {"rows": [], "rate_limited": False, "error": ""})(),
                                                                           "frameworks": [], "key_set": True, "live": False, "requests": 0})())
     app = make_app(game)

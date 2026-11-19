@@ -6,7 +6,7 @@ from typing import TYPE_CHECKING, Any
 
 from rich.text import Text
 
-from .. import actions, bisect, crashlog, gamefinder, nxm, repair
+from .. import actions, actions_nexus, bisect, crashlog, gamefinder, nxm, repair
 from ..config import cache_dir, get_api_key
 from ..doctor import console_log_dirs
 from ..loadorder import LoadOrder
@@ -92,26 +92,8 @@ class WorkflowMixin:
         self._bg(self._job_changelog, folder, name="changelog", group="net")
 
     def _job_changelog(self, folder: str) -> None:
-        from ..versions import newer_versions
-
-        rec = self._meta(folder)
-        key = get_api_key()
-        if not (rec.get("nexus_id") and key):
-            self._ui(self.log_line, "Link the mod to Nexus and set your API key (K) to see its changelog.", "yellow")
-            return
-        try:
-            with NexusClient(key) as nx:
-                log = nx.changelogs(int(rec["nexus_id"]))
-        except NexusError as e:
-            self._ui(self.log_line, f"Changelog: {e}", "bold red")
-            return
-        if not log:
-            self._ui(self.log_line, f"{folder}: no changelog published on Nexus.", "yellow")
-            return
-        for v in newer_versions(list(log), rec.get("installed_version")):
-            self._ui(self.log_line, f"{folder} v{v}", "bold")
-            for line in log[v][:12]:
-                self._ui(self.log_line, f"   - {line}")
+        for text, style in actions_nexus.changelog_for(self.registry, folder).lines:
+            self._ui(self.log_line, text, style)
 
     # ------------------------------------------------------------ bulk actions on marked mods
     def action_bulk(self) -> None:
@@ -242,39 +224,9 @@ class WorkflowMixin:
             self._bg(self._job_nxm, path, link, name="nxm link", group="install", exclusive=True)
 
     def _job_nxm(self, path, link) -> None:
-        import shutil
-
-        from ..modinstall import ModImportError
-
-        work = cache_dir() / "nxm"
         try:
-            key = get_api_key()
-            if not key:
-                self._ui(self.log_line, "A Nexus link arrived, but no API key is set. Press K to set it, then click the button again.", "bold yellow")
-                return
-            with NexusClient(key) as nx:
-                try:
-                    name = nx.mod(link.mod_id).get("name") or f"mod {link.mod_id}"
-                    f = next((x for x in nx.files(link.mod_id) if x.file_id == link.file_id), None)
-                except NexusError as e:
-                    self._ui(self.log_line, f"Nexus link: {e}", "bold red")
-                    return
-                what = f"{name}\n{f.file_name or f.name} (v{f.version})" if f else f"{name} (file {link.file_id})"
-                ok = self.ask(ConfirmScreen("Install from Nexus?", what + "\n\nThis came from the website's Mod Manager Download button. "
-                                            "Only install mods you trust.", default_yes=False))
-                if not ok:
-                    self._ui(self.log_line, "Nexus link cancelled.", "yellow")
-                    return
-                self._ui(self.log_line, f"Downloading {name}...", "dim")
-                try:
-                    zp, _ = nxm.download(link, nx, work)
-                except (nxm.NxmError, NexusError, ModImportError, OSError) as e:
-                    self._ui(self.log_line, f"Download failed: {e}", "bold red")
-                    return
-            self._job_import(str(zp), link.mod_id)
+            actions_nexus.nxm_install(self._actx(), self._tui_ui(), path, link, self._import_done)
         finally:
-            nxm.done(path)
-            shutil.rmtree(work, ignore_errors=True)
             self._nxm_busy = False
 
     # ------------------------------------------------------------ search Nexus
@@ -287,30 +239,7 @@ class WorkflowMixin:
             self._bg(self._job_search, text, name="search", group="net", exclusive=True)
 
     def _job_search(self, text: str) -> None:
-        from ..modinstall import mod_page_url
-
-        key = get_api_key()
-        if not key:
-            self._ui(self.log_line, "Set your Nexus API key first (K).", "yellow")
-            return
-        try:
-            with NexusClient(key) as nx:
-                rows = nx.search_mods(text, count=10)
-        except NexusError as e:
-            self._ui(self.log_line, f"Search: {e}", "bold red")
-            return
-        if not rows:
-            self._ui(self.log_line, f"Nothing found for '{text}'.", "yellow")
-            return
-        i = self.ask(ChoiceScreen(f"Results for '{text}' (Enter opens the page)", [f"{r['name']}  (#{r['mod_id']})" for r in rows]))
-        if i is None:
-            return
-        url = mod_page_url(rows[i]["mod_id"]).replace("?tab=files", "")
-        import webbrowser
-
-        webbrowser.open(url)
-        self._ui(self.log_line, f"{rows[i]['name']}: {url}", "cyan")
-        self._ui(self.log_line, "Download it from the page, then press I to import it (or use the website's Mod Manager Download button if Cogitator handles nxm links).", "dim")
+        actions_nexus.search_nexus(self._actx(), self._tui_ui(), text)
 
     # ------------------------------------------------------------ crash log leads
     def action_crashlog(self) -> None:

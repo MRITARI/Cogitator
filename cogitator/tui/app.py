@@ -19,7 +19,7 @@ from textual.containers import Horizontal, Vertical
 from textual.widgets import DataTable, RichLog, Static
 from textual.worker import get_current_worker
 
-from .. import __version__, actions
+from .. import __version__, actions, actions_nexus
 from ..config import InstanceLock, LockError, Settings, config_dir, get_api_key, log_path, redact
 from ..gamefinder import resolve_game_dir, validate_game_dir
 from ..glyphs import Glyphs, detect, glyphs_for
@@ -559,31 +559,7 @@ class CogitatorApp(SelfUpdateMixin, TableMixin, FrameworkMixin, ProfileMixin, Wo
         self._bg(self._job_link, folder, mod_id, name="link", group="link", exclusive=True)
 
     def _job_link(self, folder: str, mod_id: int) -> None:
-        key = get_api_key()
-        if not key:
-            self._ui(self.log_line, "Linking validates through the API - press K to set your Nexus key first.", "yellow")
-            return
-        try:
-            with NexusClient(key) as nx:
-                info, files = nx.mod(mod_id), nx.files(mod_id)
-        except NexusError as e:
-            self._ui(self.log_line, f"Link failed: {e}", "bold red")
-            return
-        name = info.get("name") or f"mod {mod_id}"
-        latest = latest_main_file(files)
-        lv = latest.version if latest else "n/a"
-        choice = self.ask(ChoiceScreen(
-            f"Nexus mod {mod_id}: {name} (latest {lv}). Link '{folder}' to it?",
-            ["Link and mark current as installed (only newer uploads will be flagged)",
-             "Link, but leave the installed file unknown (status stays 'unknown')", "Cancel"]))
-        if choice not in (0, 1):
-            self._ui(self.log_line, "Link cancelled.", "dim")
-            return
-        with self._lock:
-            rec = link_mod(self.registry, folder, mod_id, name, files, via="manual",
-                           baseline="current" if choice == 0 else "none")
-        self._ui(self._after_registry_change, folder)
-        self._ui(self.log_line, f"Linked '{folder}' to {name}." + ("" if rec["installed_file_id"] else " Baseline unknown."), "green")
+        self._apply_outcome(actions_nexus.link_one_mod(self._actx(), self._tui_ui(), folder, mod_id))
 
     # -------------------------------------------------------------- M: link every unlinked mod
     def action_link_all(self) -> None:
@@ -591,103 +567,10 @@ class CogitatorApp(SelfUpdateMixin, TableMixin, FrameworkMixin, ProfileMixin, Wo
             self._bg(self._job_link_all, name="link all", group="link", exclusive=True)
 
     def _job_link_all(self) -> None:
-        key = get_api_key()
-        if not key:
-            self._ui(self.log_line, "Linking validates through the API - press K to set your Nexus key first.", "yellow")
-            return
-        todo = [m.folder for m in self.mods if m.present and m.folder not in INTERNAL_FOLDERS
-                and not (self.registry.mod(m.folder) or {}).get("nexus_id")]
-        if not todo:
-            self._ui(self.log_line, "Every mod is already linked.", "dim")
-            return
-        done = 0
-        try:
-            with NexusClient(key) as nx:
-                for folder in todo:
-                    r = self._link_one(nx, folder)
-                    if r is None:
-                        break
-                    done += bool(r)
-        except NexusError as e:
-            self._ui(self.log_line, f"Link all stopped: {e}", "bold red")
-        self._ui(self._after_registry_change)
-        self._ui(self.log_line, f"Link all finished: {done} linked.", "green")
-
-    def _link_one(self, nx: NexusClient, folder: str) -> bool | None:
-        """True linked, False skipped, None stop. Never links without the user's confirmation."""
-        mod_id = None
-        try:
-            cands = rank_candidates(folder, nx.search_mods(folder.replace("_", " ")))
-        except (InvalidKey, RateLimited):
-            raise
-        except NexusError as e:
-            self._ui(self.log_line, f"Name search unavailable ({e}); paste a URL or id.", "yellow")
-            cands = []
-        if cands:
-            opts = [f"Yes - link to: {cands[0]['name']} (mod {cands[0]['mod_id']})"]
-            opts += [f"Use instead: {c['name']} (mod {c['mod_id']})" for c in cands[1:]]
-            opts += ["No - paste a Nexus URL or id", "Skip this mod", "Stop"]
-            c = self.ask(ChoiceScreen(f"Link '{folder}'?", opts))
-            if c is None or c == len(opts) - 1:
-                return None
-            if c == len(opts) - 2:
-                return False
-            if c < len(cands):
-                mod_id = cands[c]["mod_id"]
-        if mod_id is None:
-            ref = self.ask(InputScreen(f"Link '{folder}' to its Nexus page", "URL or numeric id (blank = skip)", allow_blank=True))
-            if ref is None:
-                return None
-            if not ref:
-                return False
-            mod_id, problem = parse_nexus_ref(ref)
-            if mod_id is None:
-                self._ui(self.log_line, f"{folder}: {problem}", "bold red")
-                return False
-        try:
-            info, files = nx.mod(mod_id), nx.files(mod_id)
-        except (InvalidKey, RateLimited):
-            raise
-        except NexusError as e:
-            self._ui(self.log_line, f"{folder}: {e}", "bold red")
-            return False
-        with self._lock:
-            link_mod(self.registry, folder, mod_id, info.get("name") or f"mod {mod_id}", files, via="manual", baseline="none")
-            apply_guess(self.registry, folder, files, folder_mtime(mods_dir(self.game_dir) / folder))
-        self._pick_version(folder, files)
-        self._ui(self.log_line, f"Linked '{folder}' to {info.get('name') or mod_id}.", "green")
-        return True
-
-    def _pick_version(self, folder: str, files) -> None:
-        """Version picker with dates; the current guess is preselected. The last option keeps whatever is stored."""
-        pool = sorted((f for f in files if f.file_id is not None), key=lambda f: (f.uploaded or 0, f.file_id), reverse=True)[:40]
-        if not pool:
-            return
-        guess = (self.registry.mod(folder) or {}).get("installed_file_id")
-        opts = [f"{f.version or '?'}   {time.strftime('%Y-%m-%d', time.localtime(f.uploaded)) if f.uploaded else '?'}   "
-                f"{f.category or ''} {f.name or f.file_name or ''}".rstrip() + ("   <- guess" if f.file_id == guess else "")
-                for f in pool] + ["I do not know"]
-        sel = next((i for i, f in enumerate(pool) if f.file_id == guess), 0)
-        c = self.ask(ChoiceScreen(f"Which version of '{folder}' is installed?", opts, selected=sel))
-        if c is not None and c < len(pool):
-            with self._lock:
-                choose_baseline(self.registry, folder, files, pool[c].file_id)
+        self._apply_outcome(actions_nexus.link_all(self._actx(), self._tui_ui(), [m.folder for m in self.mods if m.present]))
 
     def _job_set_version(self, folder: str, mod_id: int) -> None:
-        key = get_api_key()
-        if not key:
-            self._ui(self.log_line, "Press K to set your Nexus key first.", "yellow")
-            return
-        try:
-            with NexusClient(key) as nx:
-                files = nx.files(mod_id)
-        except NexusError as e:
-            self._ui(self.log_line, f"Could not load versions: {e}", "bold red")
-            return
-        with self._lock:
-            apply_guess(self.registry, folder, files, folder_mtime(mods_dir(self.game_dir) / folder))
-        self._pick_version(folder, files)
-        self._ui(self._after_registry_change, folder)
+        self._apply_outcome(actions_nexus.set_version(self._actx(), self._tui_ui(), folder, mod_id))
 
     def _after_registry_change(self, folder: str | None = None) -> None:
         self.refresh_all(keep=folder)
@@ -747,11 +630,18 @@ class CogitatorApp(SelfUpdateMixin, TableMixin, FrameworkMixin, ProfileMixin, Wo
         return _TuiUi(self)
 
     def _actx(self) -> actions.Ctx:
-        return actions.Ctx(self.game_dir, self.registry, self.settings, self._lock, self.patch_runner, self.game_running)
+        def cancelled() -> bool:
+            try:
+                return get_current_worker().is_cancelled or self._exiting
+            except Exception:  # not on a worker thread
+                return self._exiting
+
+        return actions.Ctx(self.game_dir, self.registry, self.settings, self._lock, self.patch_runner, self.game_running,
+                           cancelled=cancelled, download_wait_s=self.download_wait_s)
 
     # -------------------------------------------------------------- U / Shift+U: updates
     def _premium(self) -> bool:
-        return bool(self.registry and self.registry.data["updates"].get("premium") and get_api_key())
+        return actions_nexus.is_premium(self._actx())
 
     def action_update_selected(self) -> None:
         f = self.selected()
@@ -770,7 +660,7 @@ class CogitatorApp(SelfUpdateMixin, TableMixin, FrameworkMixin, ProfileMixin, Wo
     def action_update_all(self) -> None:
         if not self._need_game():
             return
-        targets = [f for f, r in self.urows.items() if r.status == UPDATE]
+        targets = actions_nexus.update_candidates(self.urows)
         if not targets:
             self.log_line("No mods have an update available.", "yellow")
             return
@@ -783,41 +673,16 @@ class CogitatorApp(SelfUpdateMixin, TableMixin, FrameworkMixin, ProfileMixin, Wo
                 self.log_line(f"  {f}: {mod_page_url(self.urows[f].nexus_id)}")
 
     def _job_premium(self, folders: list[str]) -> None:
-        key = get_api_key()
-        with NexusClient(key) as nx:
-            for f in folders:
-                try:
-                    with self._lock:
-                        r = apply_update_premium(f, self.game_dir, self.registry, nx, premium=self._premium(),
-                                                 is_running=self.game_running, max_bytes=self.settings.extract_limits()[0], max_files=self.settings.extract_limits()[1])
-                    self._ui(self.log_line, f"{f}: updated to {r.version or r.file_id}.", "green")
-                except (ModImportError, LoaderError, NexusError, NotPremium) as e:
-                    self._ui(self.log_line, f"{f}: {e}", "bold red")
+        out = actions_nexus.premium_update(self._actx(), self._tui_ui(), folders)
         self._ui(self._after_registry_change, None)
-        self._ui(lambda: self.start_check(force=True))
+        if out.recheck:
+            self._ui(lambda: self.start_check(force=True))
 
     def _watch_download(self, mod_id: int, latest: dict, label: str) -> Path | None:
-        """Free-account path: open the files page, then wait (cancellably) for the finished download to appear."""
-        since = time.time()
-        url = open_files_page(mod_id)
-        dl = Path(self.settings.downloads_dir) if self.settings.downloads_dir else Path.home() / "Downloads"
-        self._ui(self.log_line, f"Opened {url} - download '{latest.get('file_name')}' for {label}. Watching {dl} ...", "cyan")
-        w = get_current_worker()
-        found = wait_for_download(dl, mod_id, latest, since=since, timeout_s=self.download_wait_s,
-                                  cancelled=lambda: w.is_cancelled or self._exiting)
-        if not found:
-            self._ui(self.log_line, "No matching download seen. When it finishes, press I and enter its path.", "yellow")
-        return found
+        return actions_nexus.watch_download(self._actx(), self._tui_ui(), mod_id, latest, label)
 
     def _job_manual(self, folder: str) -> None:
-        rec = self.registry.mod(folder) or {}
-        latest = rec.get("latest") or {}
-        if not rec.get("nexus_id") or not latest:
-            self._ui(self.log_line, f"{folder}: not linked or not checked yet.", "yellow")
-            return
-        found = self._watch_download(rec["nexus_id"], latest, folder)
-        if found and self.ask(ConfirmScreen(f"Import {found.name}?", f"Update {folder} from the file you just downloaded.")):
-            self._job_import(str(found), rec["nexus_id"])
+        actions_nexus.manual_update(self._actx(), self._tui_ui(), folder, self._import_done)
 
     # -------------------------------------------------------------- quit
     def _release(self) -> None:
