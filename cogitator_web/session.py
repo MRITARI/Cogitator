@@ -16,7 +16,7 @@ import webbrowser
 from pathlib import Path
 from typing import Callable
 
-from cogitator import __version__, actions, actions_nexus, snapshots
+from cogitator import __version__, actions, actions_nexus, actions_setup, profiles, snapshots
 from cogitator.config import InstanceLock, LockError, Settings, cache_dir, config_dir, get_api_key, log_path, redact
 from cogitator.frameworks import detect_framework
 from cogitator.gamefinder import resolve_game_dir, validate_game_dir
@@ -49,6 +49,7 @@ SETTING_BOOLS = ("check_updates_on_start", "update_consent")
 ROW_ACTIONS = ("toggle", "up", "down", "open_page", "open_folder", "mark", "fav", "note", "pin", "rollback", "remove",
                "link", "update", "changelog")
 GLOBAL_ACTIONS = ("update_all", "link_all", "framework_update")
+BULK_IDS = ("enable", "disable", "update", "tag", "remove", "clear")
 HELP_BODY = (
     "Space or double-click   turn the selected mod on or off\n"
     "Ctrl+Up / Ctrl+Down     move it in the load order\n"
@@ -59,6 +60,7 @@ HELP_BODY = (
     "K or Ctrl+K             Nexus API key (Settings)     X   mark a mod\n"
     "N   tags and note       *   favourite                / or Ctrl+F   filter the list\n"
     "Ctrl+U   update all     M   link all mods to Nexus     F   update Mod Loader / Framework\n"
+    "B   bulk actions on the marked mods\n"
     "O   sort (cycle)        F1  this help\n"
     "\n"
     "Log file: {log}\n"
@@ -562,6 +564,162 @@ class Session:
                 actions_nexus.framework_update(ctx, ui, ups, self._after_outcome_ui)
 
         self.job("framework update", "download", work)
+
+    # ================================================================== profiles, snapshots, bulk
+    def _lines(self, lines) -> None:
+        for t, st in lines:
+            self.say(t, st)
+
+    def _job_lines(self, name: str, group: str, fn: Callable) -> None:
+        self.job(name, group, lambda: (self._lines(fn()), self.ctl.ui(self.refresh_all)))
+
+    def profiles_list(self) -> list[dict]:
+        rows = profiles.list_profiles()
+        return [{"name": r["name"], "label": lab} for r, lab in zip(rows, actions_setup.profile_labels(rows))]
+
+    def snapshots_list(self) -> list[dict]:
+        rows = snapshots.list_snapshots()
+        return [{"name": r["name"], "label": actions_setup.snapshot_label(r)} for r in rows]
+
+    def profile_known(self, name: object) -> bool:
+        try:
+            return isinstance(name, str) and any(p["name"] == name for p in self.profiles_list())
+        except OSError:
+            return False
+
+    def snapshot_known(self, name: object) -> bool:
+        try:
+            return isinstance(name, str) and any(p["name"] == name for p in self.snapshots_list())
+        except OSError:
+            return False
+
+    def profile_switch(self, name: str) -> None:
+        if not self.ready():
+            return
+        ctx, ui = self.ctx(), self.ui
+
+        def work() -> None:
+            try:
+                prof, body = actions_setup.prepare_switch(ctx, name)
+            except (ModError, OSError) as e:
+                self.say(str(e), "bold red")
+                return
+            if ui.confirm(f"Switch to profile {name}?", body, False):
+                self._after_outcome_ui(actions_setup.switch_profile(ctx, ui, prof))
+
+        self.job("switch profile", "install", work)
+
+    def profile_save(self, name: str) -> None:
+        if not self.ready():
+            return
+        ctx, ui = self.ctx(), self.ui
+
+        def work() -> None:
+            if actions_setup.profile_exists(name) and not ui.confirm(f"A profile named '{name}' exists. Replace it?", "", False):
+                return
+            self._lines(actions_setup.save_profile(ctx, name))
+
+        self.job("save profile", "profile", work)
+
+    def profile_delete(self, name: str) -> None:
+        ui = self.ui
+
+        def work() -> None:
+            if ui.confirm(f"Delete profile '{name}'?", "The setup it describes is not changed.", False):
+                self._lines(actions_setup.delete_profile(name))
+
+        self.job("delete profile", "profile", work)
+
+    def profile_share(self) -> str | None:
+        if not self.ready():
+            return None
+        try:
+            code = actions_setup.share_code(self.ctx())
+        except (ModError, OSError) as e:
+            self.say(str(e), "bold red")
+            return None
+        self.say("Setup code ready.", "green")
+        return code
+
+    def profile_import(self, code: str) -> None:
+        if not self.ready():
+            return
+        ctx = self.ctx()
+        self.job("import code", "profile", lambda: self._lines(actions_setup.import_code(ctx, code)))
+
+    def snapshot_create(self, reason: str = "manual") -> None:
+        if not self.ready():
+            return
+        ctx = self.ctx()
+        self.job("snapshot", "install", lambda: self._lines(actions_setup.create_snapshot(ctx, reason or "manual")))
+
+    def snapshot_restore(self, name: str) -> None:
+        if not self.ready():
+            return
+        ctx, ui = self.ctx(), self.ui
+        self.job("restore snapshot", "install", lambda: self._after_outcome_ui(actions_setup.restore_snapshot(ctx, ui, name)))
+
+    def snapshot_prune(self, keep: int) -> None:
+        self._lines(actions_setup.prune_snapshots(keep))
+
+    def bulk_menu(self) -> list[dict]:
+        with self._mlock:
+            n = len(self.model.marked)
+        return [{"label": lab, "id": BULK_IDS[i], "enabled": n > 0}
+                for i, lab in enumerate(actions_setup.bulk_options(n))]
+
+    def bulk(self, action: str) -> None:
+        if not self.ready():
+            return
+        with self._mlock:
+            marked = sorted(self.model.marked)
+        marked = [f for f in marked if self.mod_known(f)]
+        if not marked:
+            self.say("Mark mods first (X, or right-click > Mark for bulk actions). Marked mods show a +.", "yellow")
+            return
+        ctx, ui = self.ctx(), self.ui
+        if action in ("enable", "disable"):
+            self._job_lines("bulk", "bulk", lambda: actions_setup.bulk_set_enabled(ctx, marked, action == "enable"))
+        elif action == "update":
+            self.update_marked(marked)
+        elif action == "tag":
+            def tag() -> None:
+                text = ui.ask_text("Tag the marked mods", "tag names separated by spaces")
+                if text:
+                    self._lines(actions_setup.bulk_tag(ctx, marked, text))
+                    self.ctl.ui(self.refresh_all)
+
+            self.job("tag", "bulk", tag)
+        elif action == "remove":
+            def remove() -> None:
+                body = ", ".join(marked) + "
+Their folders are moved (not deleted) so you can restore them."
+                if ui.confirm(f"Remove {len(marked)} mod(s)?", body, False):
+                    out = actions_setup.remove_many(ctx, ui, marked)
+                    self.ctl.ui(self.model.marked.difference_update, marked)
+                    self._after_outcome_ui(out)
+
+            self.job("remove marked", "install", remove)
+        else:
+            with self._mlock:
+                self.model.marked.clear()
+            self.refresh_all()
+
+    def update_marked(self, marked: list[str]) -> None:
+        ctx, ui = self.ctx(), self.ui
+        with self._mlock:
+            urows = dict(self.model.urows)
+        todo = actions_nexus.update_candidates(urows, marked)
+
+        def work() -> None:
+            if not actions_nexus.is_premium(ctx):
+                self.say("Free account: updates need a download for each mod. Right-click one and choose Update.", "yellow")
+            elif not todo:
+                self.say("None of the marked mods has an update available.", "yellow")
+            else:
+                self._premium_update(ctx, todo)
+
+        self.job("update marked", "install", work)
 
     def changelog(self, folder: str) -> None:
         if not self.ready():

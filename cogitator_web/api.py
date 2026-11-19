@@ -10,10 +10,12 @@ import functools
 import logging
 from typing import Callable
 
+from cogitator import profiles
 from cogitator.config import redact
+from cogitator.mods import ModError
 
 from .bridge import Bridge
-from .session import ROW_ACTIONS, Session, valid_folder_name
+from .session import BULK_IDS, ROW_ACTIONS, Session, valid_folder_name
 
 log = logging.getLogger("cogitator.web")
 
@@ -123,6 +125,75 @@ class Api:
     @_call
     def edit_note(self, folder):
         self._s.edit_note(self._mod(folder))
+
+    # ---- profiles, snapshots, bulk
+    def _profile(self, name: object) -> str:
+        if not self._s.profile_known(name):
+            raise _Reject("Unknown profile.")
+        return name  # type: ignore[return-value]
+
+    @_call
+    def profiles_list(self):
+        return {"ok": True, "items": self._s.profiles_list()}
+
+    @_call
+    def profile_switch(self, name):
+        self._s.profile_switch(self._profile(name))
+
+    @_call
+    def profile_save(self, name):
+        name = self._text(name, 60, "Profile name")
+        try:
+            profiles.check_name(name)
+        except ModError as e:
+            raise _Reject(str(e))
+        self._s.profile_save(name.strip())
+
+    @_call
+    def profile_delete(self, name):
+        self._s.profile_delete(self._profile(name))
+
+    @_call
+    def profile_share(self):
+        code = self._s.profile_share()
+        return {"ok": code is not None, "code": code or "", **({} if code else {"error": "Could not build a setup code."})}
+
+    @_call
+    def profile_import(self, code):
+        code = self._text(code, 50000, "Setup code").strip()
+        if not code:
+            raise _Reject("Paste a setup code first.")
+        self._s.profile_import(code)
+
+    @_call
+    def snapshots_list(self):
+        return {"ok": True, "items": self._s.snapshots_list(), "keep": max(1, self._s.settings.snapshot_keep)}
+
+    @_call
+    def snapshot_create(self, reason="manual"):
+        self._s.snapshot_create(self._text(reason, 200, "Reason").strip() or "manual")
+
+    @_call
+    def snapshot_restore(self, name):
+        if not self._s.snapshot_known(name):
+            raise _Reject("Unknown snapshot.")
+        self._s.snapshot_restore(name)
+
+    @_call
+    def snapshot_prune(self, keep):
+        if not isinstance(keep, int) or isinstance(keep, bool) or not 1 <= keep <= 1000:
+            raise _Reject("Keep must be a whole number from 1 to 1000.")
+        self._s.snapshot_prune(keep)
+
+    @_call
+    def bulk_menu(self):
+        return {"ok": True, "items": self._s.bulk_menu()}
+
+    @_call
+    def bulk(self, action):
+        if not isinstance(action, str) or action not in BULK_IDS:
+            raise _Reject("Unknown action.")
+        self._s.bulk(action)
 
     # ---- global actions
     @_call
