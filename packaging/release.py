@@ -65,7 +65,7 @@ def build(version: str, app_dir: Path, out: Path, key_path: Path, installer: boo
         raise SystemExit("the signing key is not an Ed25519 key")
     out.mkdir(parents=True, exist_ok=True)
     # Sign the programs BEFORE they are zipped or packed into the installer, so the hashes and the Ed25519 signatures cover signed files.
-    sign_files([app_dir / n for n in ("cogitator.exe", "cogitator-updater.exe", "cogitator-nxm.exe")]
+    sign_files([app_dir / n for n in ("cogitator.exe", "cogitator-web.exe", "cogitator-updater.exe", "cogitator-nxm.exe")]
                + [app_dir.parent / "Cogitator Setup" / "Cogitator Setup.exe"])
     name = f"Cogitator-{version}-win-x64.zip"
     zpath = out / name

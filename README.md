@@ -136,6 +136,17 @@ from it, but check it before posting).
 
 
 
+## Windows packaging
+
+`packaginguild_exe.ps1` (in a venv with `pip install ".[web]" pyinstaller==6.22.3`) builds, then self-checks every program:
+`dist\cogitator\` holds `cogitator.exe` (console: CLI and terminal UI) and `cogitator-web.exe` (windowed web UI) from one spec
+(`packaging\cogitator.spec`) and one shared `_internal` folder, plus `cogitator-updater.exe` and `cogitator-nxm.exe`;
+`dist\Cogitator Setup\Cogitator Setup.exe` is the setup/uninstall program. `packaging\cogitator.iss` (Inno Setup) packs both
+into the installer: shortcuts "Cogitator" (web) and "Cogitator (terminal)", then the web wizard opens. `Cogitator Setup.exe --classic`
+forces the tkinter setup. Without the Microsoft Edge WebView2 runtime (or pywebview) every web window falls back to its tkinter
+version; the installer says so and does not block. `--self-check [--expect-version V]` works on every exe and, for the windowed ones,
+writes its result to the log file.
+
 ## Third-party software
 
 The installer bundles Python and these libraries, each under its own licence (copyright their authors):

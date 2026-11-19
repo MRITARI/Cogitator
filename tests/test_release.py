@@ -133,7 +133,7 @@ def test_installer_path_is_done_by_the_cli_not_by_pascal():
     assert not [c for c in iss if ord(c) < 32 and c not in "\r\n\t"]  # a stray control character (BEL) was the 0.1.6 PATH bug
     un = iss.split("[UninstallRun]")[1].split("[UninstallDelete]")[0]
     assert 'Parameters: "path remove"; Flags: runhidden' in un and "RunOnceId:" in un
-    for gone in ("RegWriteExpandStringValue", "RegQueryStringValue", "AddToPath", "RemoveFromPath(", "{app}pp"):
+    for gone in ("RegWriteExpandStringValue", "RegWriteStringValue", "AddToPath", "RemoveFromPath(", "{app}pp"):
         assert gone not in iss
 
 

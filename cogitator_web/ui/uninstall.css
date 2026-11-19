@@ -1,0 +1,8 @@
+/* Uninstall / maintenance extras on top of setup.css. Tokens come from theme.css only. */
+.setup .big-actions { display: flex; gap: var(--sp-3); flex-wrap: wrap; margin: var(--sp-2) 0; }
+.setup .big-actions .btn { height: 48px; padding: 0 var(--sp-6); font-size: 15px; }
+.setup .notes { margin: 0; max-height: 170px; min-height: 80px; overflow: auto; white-space: pre-wrap; overflow-wrap: anywhere; background: var(--tile); border-radius: var(--radius-tile); padding: var(--sp-3) var(--sp-4); font-size: 13px; line-height: 1.5; color: var(--fg); width: 100%; box-sizing: border-box; }
+.setup .sub { padding-left: var(--sp-6); }
+.setup .sub .s-row { min-height: 40px; }
+.setup .warn-text { color: var(--attention-text); }
+.setup .mini { color: var(--muted); font-size: 13px; overflow-wrap: anywhere; }

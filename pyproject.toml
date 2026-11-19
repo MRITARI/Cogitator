@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "cogitator"
-version = "0.3.0-beta.2"
+version = "0.3.0-beta.3"
 description = "Terminal mod manager for Warhammer 40,000: Darktide"
 readme = "README.md"
 license = "MIT"
@@ -36,20 +36,25 @@ Issues = "https://github.com/MRITARI/Cogitator/issues"
 
 [project.optional-dependencies]
 keyring = ["keyring>=24"]
+web = ["pywebview>=5"]  # the web-style window (cogitator-web); needs the Edge WebView2 runtime. BSD-3-Clause
 dev = ["pytest", "respx", "pytest-asyncio", "pytest-cov", "ruff", "mypy"]
 
 [project.scripts]
 cogitator = "cogitator.cli:main"
 
 [project.gui-scripts]
-cogitator-setup = "cogitator_setup.app:main"
+cogitator-setup = "cogitator_web.setup_app:entry"
+cogitator-setup-classic = "cogitator_setup.app:main"
 cogitator-gui = "cogitator_gui.app:main"
+cogitator-web = "cogitator_web.app:main"
+cogitator-setup-web = "cogitator_web.setup_app:main"
 
 [tool.setuptools.packages.find]
-include = ["cogitator*", "cogitator_setup*", "cogitator_gui*"]
+include = ["cogitator*", "cogitator_setup*", "cogitator_gui*", "cogitator_web*"]
 
 [tool.setuptools.package-data]
 cogitator = ["locales/*.json"]
+cogitator_web = ["ui/*", "ui/js/*", "ui/js/*/*", "ui/img/*", "assets/*"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

@@ -48,7 +48,12 @@ def wait_for_exit(pid: int, timeout: float = 60.0, alive: Callable[[int], bool] 
     return True
 
 
+WEB_EXE = "cogitator-web.exe"
+
+
 def _check(argv: list[str]) -> bool:
+    if argv and isinstance(argv[0], list):  # several programs share one build: every one must pass
+        return all(_check(a) for a in argv)
     try:
         return subprocess.run(argv, capture_output=True, timeout=120).returncode == 0
     except (OSError, subprocess.SubprocessError):
@@ -59,7 +64,9 @@ def _launch(argv: list[str]) -> None:
     """Start Cogitator again. It is a terminal program, so it needs a console: Windows Terminal when present, else a new
     console window (a detached process has none and would exit at once). Its folder must not be the app folder."""
     flags = 0
-    if os.name == "nt":
+    if os.name == "nt" and Path(argv[0]).name.lower() == WEB_EXE:  # windowed: no terminal, no console
+        flags = 0x00000008 | 0x00000200  # DETACHED_PROCESS | CREATE_NEW_PROCESS_GROUP
+    elif os.name == "nt":
         wt = shutil.which("wt.exe")
         if wt:
             argv = [wt, "--title", "Cogitator", *argv]

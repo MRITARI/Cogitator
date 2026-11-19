@@ -4,7 +4,8 @@
 ; Resulting layout (what cogitator.selfupdate.detect_layout() recognises as "installer"):
 ;   %LOCALAPPDATA%\Programs\Cogitator\
 ;       install.json              written by the [Code] section below
-;       app\cogitator.exe ...     the PyInstaller folder; the self-updater swaps this folder
+;       app\cogitator.exe         console program (CLI/TUI); app\cogitator-web.exe is the windowed web UI (same _internal folder)
+;       app\...                   the PyInstaller folder; the self-updater swaps this folder
 ;       app\cogitator-updater.exe
 ;       setup\Cogitator Setup.exe ...
 ;       (app.previous\ and staging\ are created later by the updater)
@@ -28,6 +29,7 @@ ArchitecturesAllowed=x64compatible
 ArchitecturesInstallIn64BitMode=x64compatible
 DisableProgramGroupPage=yes
 DisableDirPage=auto
+DisableReadyPage=yes
 SetupIconFile=cogitator.ico
 UninstallDisplayIcon={app}\app\cogitator.exe
 UninstallDisplayName=Cogitator
@@ -47,9 +49,10 @@ Source: "..\LICENSE"; DestDir: "{app}"; Flags: ignoreversion
 Source: "..\dist\cogitator\THIRD-PARTY-NOTICES.txt"; DestDir: "{app}"; Flags: ignoreversion
 
 [Icons]
-Name: "{autoprograms}\Cogitator"; Filename: "{app}\app\cogitator.exe"; WorkingDir: "{%USERPROFILE}"; IconFilename: "{app}\cogitator.ico"
+Name: "{autoprograms}\Cogitator"; Filename: "{app}\app\cogitator-web.exe"; WorkingDir: "{%USERPROFILE}"; IconFilename: "{app}\cogitator.ico"
+Name: "{autoprograms}\Cogitator (terminal)"; Filename: "{app}\app\cogitator.exe"; WorkingDir: "{%USERPROFILE}"; IconFilename: "{app}\cogitator.ico"
 Name: "{autoprograms}\Cogitator Setup"; Filename: "{app}\setup\Cogitator Setup.exe"; IconFilename: "{app}\cogitator.ico"
-Name: "{autodesktop}\Cogitator"; Filename: "{app}\app\cogitator.exe"; WorkingDir: "{%USERPROFILE}"; IconFilename: "{app}\cogitator.ico"; Tasks: desktopicon
+Name: "{autodesktop}\Cogitator"; Filename: "{app}\app\cogitator-web.exe"; WorkingDir: "{%USERPROFILE}"; IconFilename: "{app}\cogitator.ico"; Tasks: desktopicon
 
 [Tasks]
 Name: "desktopicon"; Description: "Create a &desktop shortcut"; Flags: checkedonce
@@ -77,12 +80,59 @@ Type: filesandordirs; Name: "{app}\staging"
 Type: files; Name: "{app}\install.json"
 
 [Code]
+// Same keys, hives and "version >= 86" rule as cogitator_web.app.webview2_available(); keep the two in step.
+function WebView2KeyOk(Root: Integer; Sub, Guid: String): Boolean;
+var
+  Pv: String;
+begin
+  Result := False;
+  if RegQueryStringValue(Root, Sub + '\' + Guid, 'pv', Pv) then
+  begin
+    if Pos('.', Pv) > 0 then
+      Pv := Copy(Pv, 1, Pos('.', Pv) - 1);
+    Result := StrToIntDef(Pv, -1) >= 86;
+  end;
+end;
+
+function WebView2Present(): Boolean;
+var
+  Guids: array[0..3] of String;
+  I: Integer;
+begin
+  Guids[0] := '{F3017226-FE2A-4295-8BDF-00C3A9A7E4C5}'; // runtime
+  Guids[1] := '{2CD8A007-E189-409D-A2C8-9AF4EF3C72AA}'; // Beta
+  Guids[2] := '{0D50BFEC-CD6A-4F9A-964C-C7416E3ACB10}'; // Dev
+  Guids[3] := '{65C35B14-6C1D-4122-AC46-7148CC9D6497}'; // Canary
+  Result := False;
+  for I := 0 to 3 do
+    if WebView2KeyOk(HKLM, 'SOFTWARE\WOW6432Node\Microsoft\EdgeUpdate\Clients', Guids[I]) or
+       WebView2KeyOk(HKLM, 'SOFTWARE\Microsoft\EdgeUpdate\Clients', Guids[I]) or
+       WebView2KeyOk(HKCU, 'Software\Microsoft\EdgeUpdate\Clients', Guids[I]) then
+    begin
+      Result := True;
+      exit;
+    end;
+end;
+
+// The welcome page adds nothing; the Tasks page stays.
+function ShouldSkipPage(PageID: Integer): Boolean;
+begin
+  Result := PageID = wpWelcome;
+end;
+
 procedure CurStepChanged(CurStep: TSetupStep);
 begin
   if CurStep = ssPostInstall then
+  begin
     // Its presence next to the app\ folder is what makes the Update panel live (detect_layout -> "installer").
     SaveStringToFile(ExpandConstant('{app}\install.json'),
       '{"installer": "inno", "version": "{#AppVersion}"}' + #13#10, False);
+    // No download, no network: without WebView2 the wizard and the app open their classic (tkinter) windows by themselves.
+    if not WebView2Present() then
+      SuppressibleMsgBox('The Microsoft Edge WebView2 runtime was not found on this computer.' + #13#10 + #13#10 +
+        'Setup continues with the classic window, and Cogitator opens its classic window too. Nothing else is needed; ' +
+        'installing WebView2 later gives you the newer window.', mbInformation, MB_OK, IDOK);
+  end;
 end;
 
 function InitializeUninstall(): Boolean;
