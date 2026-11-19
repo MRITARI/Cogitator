@@ -47,7 +47,8 @@ def test_one_job_per_group_and_the_refused_one_says_so():
     assert c.run("first", gate.wait, group="net") is True
     assert c.busy("net")
     assert c.run("second", lambda: None, group="net") is False
-    assert "wait for the net task" in c.drain()[0][1]
+    msg = c.drain()[0][1]
+    assert "Cannot start 'second'" in msg and "'first' is still running" in msg and "net task" in msg
     assert c.run("other", lambda: None, group="patch") is True  # other groups are independent
     gate.set()
     c.join()
@@ -113,3 +114,47 @@ def test_nothing_is_queued_after_close():
     c.close()
     c.log("late")
     assert c.drain() == []
+
+
+def _serve(c, answer, timeout=5.0):
+    """Answer the next question a worker asks, like the window would; returns the asked message."""
+    end = time.time() + timeout
+    while time.time() < end:
+        for m in c.drain():
+            if m[0] == "ask":
+                c.answer(m[3], answer)
+                return m
+        time.sleep(0.01)
+    raise AssertionError("the worker never asked")
+
+
+def test_new_flows_confirm_round_trip_cancel_and_exception(tmp_path):
+    from gui_fakes import make_ctx
+
+    from cogitator import actions_setup
+
+    ctx = make_ctx(tmp_path)
+    actions_setup.create_snapshot(ctx, "one")
+    from cogitator import snapshots
+
+    name = snapshots.list_snapshots()[0]["name"]
+    lo = ctx.game_dir / "mods" / "mod_load_order.txt"
+    c, results = Controller(), []
+    lo.write_text("beta\n")
+    c.run("restore snapshot", lambda: results.append(actions_setup.restore_snapshot(ctx, GuiUi(c), name)), "install")
+    asked = _serve(c, False)  # the person says no: nothing is restored
+    c.join()
+    assert asked[1] == "confirm" and asked[2]["title"] == "Restore this snapshot?" and results == [None] and lo.read_text() == "beta\n"
+    c.run("restore snapshot", lambda: results.append(actions_setup.restore_snapshot(ctx, GuiUi(c), name)), "install")
+    _serve(c, True)
+    c.join()
+    assert results[1].refresh and lo.read_text().startswith("alpha")
+
+    def boom():
+        raise OSError(f"disk gone for {SECRET}")
+
+    set_api_key(SECRET)
+    c.run("snapshot", boom, "install")
+    c.join()
+    errs = [m for m in c.drain() if m[0] == "error"]
+    assert errs and errs[0][1] == "snapshot" and SECRET not in errs[0][2]

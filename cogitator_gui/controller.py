@@ -28,6 +28,7 @@ class Controller:
         self.q: queue.Queue = queue.Queue()
         self.closing = threading.Event()  # set when the window closes: blocked workers give up
         self._jobs: dict[str, threading.Thread] = {}
+        self._names: dict[str, str] = {}  # group -> name of the job started in it
         self._threads: list[threading.Thread] = []
         self._lock = threading.Lock()
 
@@ -65,8 +66,11 @@ class Controller:
             old = self._jobs.get(group)
             if old is not None and old.is_alive():
                 busy = True
+                running = self._names.get(group, group)
             else:
                 busy = False
+                running = ""
+                self._names[group] = name
 
                 def wrap() -> None:
                     try:
@@ -80,7 +84,7 @@ class Controller:
                 self._threads.append(t)
                 t.start()
         if busy:
-            self.log(f"{name}: wait for the {group} task that is still running.", "yellow")
+            self.log(f"Cannot start '{name}': '{running}' is still running ({group} task). Try again when it has finished.", "yellow")
             return False
         return True
 
