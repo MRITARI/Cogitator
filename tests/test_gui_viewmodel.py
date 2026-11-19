@@ -148,4 +148,4 @@ def test_gui_wording_has_no_terminal_key_hints():
     row = ModRow(folder="a", nexus_id=None, installed=None, latest=None, status=NOT_LINKED, reason="press L to link this mod to its Nexus page")
     assert "press" not in hint_for(m, row, gui=True) and "Press L" not in hint_for(m, None, gui=True)
     assert "Press L" in hint_for(m, row)  # the terminal UI keeps its own wording
-    assert "press I" not in hint_for(None, None, gui=True) and "Press I" in hint_for(None, None)
+    assert "press I" not in hint_for(None, None, gui=True) and "press I" in hint_for(None, None)
