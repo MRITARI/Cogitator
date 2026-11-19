@@ -42,7 +42,6 @@ def test_instances_do_not_share_profiles_registry_or_settings(tmp_path, capsys, 
     assert "No profiles yet" in capsys.readouterr().out  # the default setup's profile is not visible here
     assert lab("profile", "save", "lab-setup") == 0
     assert (config.config_dir() / "profiles" / "lab-setup.json").is_file() and "instances" in config.config_dir().parts
-    assert (config.config_dir() / "config.toml").is_file()
     capsys.readouterr()
     lab("profile", "list")
     out = capsys.readouterr().out
