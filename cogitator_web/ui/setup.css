@@ -1,0 +1,41 @@
+/* The setup wizard: a centred card in the same look as the main window. Tokens come from theme.css only. */
+.setup { height: 100vh; display: flex; flex-direction: column; padding: var(--sp-4); gap: var(--sp-3); }
+.setup .steps { display: flex; gap: var(--sp-2); flex-wrap: wrap; padding: 0 var(--sp-2); min-height: 24px; }
+.setup .steps .step { font-size: 12px; color: var(--muted); padding: 2px var(--sp-3); border-radius: var(--radius-pill); }
+.setup .steps .step[aria-current="step"] { background: var(--secondary); color: var(--fg); font-weight: 500; }
+.setup .steps .step.past { color: var(--ok-text); }
+.setup .card { flex: 1; min-height: 0; overflow: auto; background: var(--card); border-radius: var(--radius-card); padding: var(--sp-6); display: flex; flex-direction: column; gap: var(--sp-3); }
+.setup h1 { margin: 0; font-size: 22px; font-weight: 600; }
+.setup p { margin: 0; color: var(--muted); }
+.setup .notice, .setup .lines { white-space: pre-wrap; overflow-wrap: anywhere; }
+.setup .notice { color: var(--muted); font-size: 13px; }
+.setup .status { white-space: pre-wrap; overflow-wrap: anywhere; }
+.setup .status.bad { color: var(--destructive-text); }
+.setup .lines { list-style: none; margin: 0; padding: var(--sp-3) var(--sp-4); background: var(--tile); border-radius: var(--radius-tile); }
+.setup .grow { flex: 1; }
+.setup .row { display: flex; align-items: center; gap: var(--sp-2); flex-wrap: wrap; }
+.setup .row .input { flex: 1; min-width: 200px; }
+.setup .foot { display: flex; align-items: center; gap: var(--sp-2); padding: 0 var(--sp-2); min-height: 40px; }
+.setup .foot .reason { flex: 1; color: var(--muted); font-size: 13px; overflow-wrap: anywhere; }
+.setup .btn-big { height: 48px; padding: 0 var(--sp-6); font-size: 16px; }
+.setup .btn-link { border-color: transparent; color: var(--muted); text-decoration: underline; }
+.setup .group { background: var(--tile); border-radius: var(--radius-tile); padding: var(--sp-3) var(--sp-4); }
+.setup .s-row { min-height: 52px; padding: var(--sp-2) 0; }
+.setup .review-row .t { font-weight: 500; }
+.setup .review-row .warn { color: var(--attention-text); }
+.setup .choice { display: flex; flex-direction: column; gap: var(--sp-1); margin: var(--sp-2) 0; }
+.setup .choice label { display: flex; gap: var(--sp-2); align-items: center; cursor: pointer; }
+.setup .choice input[type="radio"] { accent-color: var(--primary); }
+.setup .choice input[type="radio"]:focus-visible, .setup .btn:focus-visible, .setup summary:focus-visible { outline: 2px solid var(--ring); outline-offset: 2px; }
+.setup .tasks { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: var(--sp-2); }
+.setup .task { display: flex; gap: var(--sp-3); align-items: baseline; }
+.setup .task .mark { width: 20px; text-align: center; font-weight: 600; color: var(--muted); flex: none; }
+.setup .task.done .mark { color: var(--ok-text); }
+.setup .task.failed .mark, .setup .task.rolled_back .mark { color: var(--destructive-text); }
+.setup .task.running .mark { color: var(--fg); }
+.setup .task .detail { color: var(--muted); font-size: 13px; overflow-wrap: anywhere; }
+.setup progress { width: 100%; height: 8px; border-radius: var(--radius-pill); border: 0; background: var(--input); accent-color: var(--primary); }
+.setup progress::-webkit-progress-bar { background: var(--input); border-radius: var(--radius-pill); }
+.setup progress::-webkit-progress-value { background: var(--primary); border-radius: var(--radius-pill); }
+.setup pre { margin: var(--sp-2) 0 0; max-height: 160px; overflow: auto; white-space: pre-wrap; overflow-wrap: anywhere; background: var(--tile); border-radius: var(--radius-tile); padding: var(--sp-3); font: 12px/1.5 var(--mono, monospace); }
+.setup summary { cursor: pointer; color: var(--muted); }
