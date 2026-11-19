@@ -257,9 +257,9 @@ class WizardSession:
 
     def on_close(self) -> bool:
         """The window's close button. False keeps the window open (a run in progress is asked to stop at a safe boundary instead)."""
+        if self.closing_ok:  # lock-free: destroy() is called while the API thread holds the lock
+            return True
         with self._lock:
-            if self.closing_ok:
-                return True
             if self.ctl.running:
                 self.ctl.cancel()
                 self._emit()
