@@ -46,6 +46,7 @@ cogitator = "cogitator.cli:main"
 cogitator-setup = "cogitator_setup.app:main"
 cogitator-gui = "cogitator_gui.app:main"
 cogitator-web = "cogitator_web.app:main"
+cogitator-setup-web = "cogitator_web.setup_app:main"
 
 [tool.setuptools.packages.find]
 include = ["cogitator*", "cogitator_setup*", "cogitator_gui*", "cogitator_web*"]
