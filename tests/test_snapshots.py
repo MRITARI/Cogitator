@@ -142,3 +142,43 @@ def test_snapshot_failure_never_blocks(game, monkeypatch):
 
 def test_snapshot_keep_setting_default():
     assert config.Settings().snapshot_keep == 20
+
+
+def _oldest_with_folder(game):
+    """A snapshot (with a copied mod folder) that is renamed to be older than anything else, plus 19 newer ones (keep=20)."""
+    p = snapshots.create(game, "old", folders=["demo_hud"])
+    old = p.with_name("20000101-000000-old")
+    p.rename(old)
+    for i in range(19):
+        snapshots.create(game, f"n{i}")
+    assert len(snapshots.list_snapshots()) == 20
+    assert snapshots.list_snapshots()[-1]["name"] == old.name
+    return old.name
+
+
+def test_restore_of_the_oldest_snapshot_survives_pruning(game):
+    name = _oldest_with_folder(game)
+    (game / "mods" / "demo_hud" / "scripts").mkdir(parents=True, exist_ok=True)
+    (game / "mods" / "demo_hud" / "marker.txt").write_text("live")
+    msgs = snapshots.restore(game, name)
+    assert "mod folder restored: demo_hud" in msgs
+    assert (snapshots.snapshots_dir() / name / "manifest.json").is_file()  # the restored snapshot was not pruned away
+    assert not (game / "mods" / "demo_hud" / "marker.txt").exists()
+    assert (game / "mods" / "demo_hud").is_dir()
+
+
+def test_failed_restore_copy_leaves_the_live_folder_untouched(game, monkeypatch):
+    p = snapshots.create(game, "t", folders=["demo_hud"])
+    (game / "mods" / "demo_hud" / "marker.txt").write_text("live")
+    real = snapshots.shutil.copytree
+
+    def boom(src, dst, *a, **k):
+        if "pre-restore" not in str(src) and str(src).startswith(str(p)):
+            raise OSError("disk full")
+        return real(src, dst, *a, **k)
+
+    monkeypatch.setattr(snapshots.shutil, "copytree", boom)
+    with pytest.raises(OSError):
+        snapshots.restore(game, p.name)
+    assert (game / "mods" / "demo_hud" / "marker.txt").read_text() == "live"
+    assert not [x for x in (game / "mods").iterdir() if "restore" in x.name]  # no temp leftovers

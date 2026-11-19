@@ -140,22 +140,42 @@ def load_manifest(name: str) -> dict:
     return json.loads((_dir(name) / "manifest.json").read_text(encoding="utf-8"))
 
 
+def _swap_in(src: Path, dest: Path) -> None:
+    """Replace `dest` with a copy of `src`: copy to a sibling temp dir first, so a failure leaves `dest` as it was."""
+    tmp = dest.with_name(f".{dest.name}.cog-restore-new")
+    old = dest.with_name(f".{dest.name}.cog-restore-old")
+    for p in (tmp, old):
+        shutil.rmtree(p, ignore_errors=True)
+    try:
+        shutil.copytree(src, tmp)
+        if dest.exists() and not is_link(dest):
+            dest.rename(old)
+            try:
+                tmp.rename(dest)
+            except OSError:
+                old.rename(dest)
+                raise
+        else:
+            tmp.rename(dest)
+    finally:
+        shutil.rmtree(tmp, ignore_errors=True)
+    shutil.rmtree(old, ignore_errors=True)
+
+
 def restore(game_dir: Path, name: str, registry=None) -> list[str]:
     """Put the load order (and any copied mod folders) back. The current state is snapshotted first, so a restore can be undone."""
     d = _dir(name)
     m = json.loads((d / "manifest.json").read_text(encoding="utf-8"))
     game_dir = Path(game_dir)
-    create(game_dir, "pre-restore", folders=list(m.get("copied", [])), registry=registry)
+    # No pruning here: it could delete the very snapshot being restored (the oldest one). The next create() prunes.
+    create(game_dir, "pre-restore", folders=list(m.get("copied", [])), registry=registry, keep=1 << 30)
     msgs = []
     lo = load_order_path(game_dir)
     if m.get("has_load_order") and (d / lo.name).is_file():
         atomic_write_bytes(lo, (d / lo.name).read_bytes())
         msgs.append("load order restored")
     for f in m.get("copied", []):
-        dest = mods_dir(game_dir) / f
-        if dest.exists() and not is_link(dest):
-            shutil.rmtree(dest)
-        shutil.copytree(d / "mods" / f, dest)
+        _swap_in(d / "mods" / f, mods_dir(game_dir) / f)
         if registry is not None and f in m.get("registry", {}):
             registry.set_mod(f, **m["registry"][f])
         msgs.append(f"mod folder restored: {f}")
