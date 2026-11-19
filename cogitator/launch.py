@@ -10,8 +10,9 @@ from typing import Callable
 from . import profiles
 from .doctor import FAIL, run_doctor
 from .gamefinder import APPID
-from .patcher import OFF, ON, PatcherError, patch, patch_state, unpatch
+from .patcher import ON, PatcherError, patch, patch_state, unpatch
 from .procs import darktide_running
+from .repair import needs_repair
 
 STEAM_URL = f"steam://rungameid/{APPID}"
 
@@ -56,7 +57,7 @@ def launch(game_dir: Path, registry, *, profile: str | None = None, vanilla: boo
             if patch_state(game_dir) == ON:
                 unpatch(game_dir, registry, is_running=is_running, **kw)
                 res.notes.append("Mods are OFF for this launch. Run 'cogitator toggle' (or press T) to turn them on again.")
-        elif patch_state(game_dir) == OFF and (registry.data.get("patch") or {}).get("last_patch_at"):
+        elif needs_repair(game_dir, registry, state=patch_state(game_dir)):  # not after a deliberate un-patch
             patch(game_dir, registry, is_running=is_running, **kw)
             res.notes.append("Mods were off (game updated?); patched again before launching.")
     except PatcherError as e:

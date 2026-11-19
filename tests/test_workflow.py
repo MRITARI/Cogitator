@@ -354,3 +354,16 @@ def test_launch_cli(game, monkeypatch, capsys):
 
     monkeypatch.setattr("cogitator.launch.launch", boom)
     assert run(game, "launch") == 2
+
+
+def test_launch_does_not_repatch_after_a_deliberate_unpatch(game, monkeypatch):
+    calls = []
+    monkeypatch.setattr(launch, "patch_state", lambda g: "OFF")
+    monkeypatch.setattr(launch, "patch", lambda *a, **k: calls.append("patch"))
+    reg = Registry.load()
+    reg.data["patch"] = {"last_patch_at": 1.0, "last_unpatch_at": 2.0}  # the user turned mods off after patching
+    r, _ = fake_launch(game, reg)
+    assert calls == [] and r.started
+    reg.data["patch"] = {"last_patch_at": 3.0, "last_unpatch_at": 2.0}  # patched later, now OFF again: a game update
+    fake_launch(game, reg)
+    assert calls == ["patch"]

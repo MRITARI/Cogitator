@@ -9,8 +9,8 @@ from .patcher import OFF, patch_state
 MODES = ("off", "ask", "auto")
 
 
-def needs_repair(game_dir: Path, registry) -> bool:
-    if patch_state(game_dir) != OFF:
+def needs_repair(game_dir: Path, registry, state: str | None = None) -> bool:
+    if (state or patch_state(game_dir)) != OFF:
         return False
     rec = registry.data.get("patch") or {}
     patched, unpatched = rec.get("last_patch_at"), rec.get("last_unpatch_at") or 0
