@@ -28,8 +28,10 @@ def needs_repatch(plan: Plan, game_dir: Path) -> bool:
 
 def install_framework_plan(plan: Plan, game_dir: Path, registry: Registry | None = None, *,
                            runner: Runner = default_runner, is_running: Callable[[], bool] = darktide_running,
-                           max_bytes: int = 500 * 1024 * 1024, max_files: int = 20000) -> FrameworkInstall:
-    """Install `plan`; if it is DML and mods are ON, un-patch first and re-patch afterwards."""
+                           max_bytes: int = 500 * 1024 * 1024, max_files: int = 20000,
+                           on_installed: Callable[[InstallResult], None] | None = None) -> FrameworkInstall:
+    """Install `plan`; if it is DML and mods are ON, un-patch first and re-patch afterwards.
+    `on_installed` is called with the result as soon as the files are written, i.e. before a re-patch that may still raise."""
     game_dir = Path(game_dir)
     was_on = needs_repatch(plan, game_dir)
     if was_on:
@@ -44,6 +46,8 @@ def install_framework_plan(plan: Plan, game_dir: Path, registry: Registry | None
                 log.error("could not restore the patch after a failed DML install: %s", e)
         raise
     out = FrameworkInstall(res)
+    if on_installed:
+        on_installed(res)
     if was_on:
         try:
             patch(game_dir, registry, runner=runner, is_running=is_running)

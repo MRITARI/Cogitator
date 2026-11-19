@@ -288,12 +288,13 @@ def run_setup(plan: SetupPlan, progress: Callable[[ProgressEvent], None] | None 
                 raise SetupError("You chose not to install a download that does not match the official release.",
                                  "Unreleased code can behave differently from the version other players use.",
                                  "Download the zip from Nexus Mods and choose \"I'll download it myself\".")
+        def register(r) -> None:  # called as soon as files are written, so a later re-patch failure is still rolled back
+            keep_dirs.append(r.backup_dir)
+            res.rollback_dirs.append(r.backup_dir)
+            undo.append((opt.component, lambda d=r.backup_dir: Transaction.from_journal(d).rollback()))
+
         fi = install_framework_plan(fp, game, reg, runner=deps.patch_runner, is_running=deps.is_running,
-                                    max_bytes=plan.max_bytes, max_files=plan.max_files)
-        d = fi.result.backup_dir
-        keep_dirs.append(d)
-        res.rollback_dirs.append(d)
-        undo.append((opt.component, lambda d=d: Transaction.from_journal(d).rollback()))
+                                    max_bytes=plan.max_bytes, max_files=plan.max_files, on_installed=register)
         res.installed[opt.component] = (fp.source.description if fp.source.verified is not None
                                         else f"{fp.source.version or 'unknown version'} ({fp.source.kind})")
         return f"{opt.component.upper()} {fp.source.version or ''} from {fp.source.kind}, {fi.result.written} files"

@@ -396,3 +396,16 @@ def test_mismatching_pinned_dmf_installs_as_unreleased_when_confirmed(world, tmp
     rec = Registry.load().framework("dmf")
     assert rec["unreleased"] is True and rec["version"] == pin.sha  # recorded by commit, never passed off as a release
     assert (g / "mods" / "dmf" / "scripts" / "mods" / "dmf" / "dmf_loader.lua").read_bytes() == b"-- drifted"
+
+
+def test_repatch_failure_after_a_dml_update_still_rolls_the_installed_files_back(world, tmp_path):
+    g, dml, dmf = world
+    plan, deps, tool = make(world, tmp_path)
+    assert run_setup(plan, deps=deps).ok
+    newer = mkzip(tmp_path / "zips" / "Darktide Mod Loader 19 26.07.01 2026-07-01T00-00Z c.zip", {**DML_FILES, "binaries/mod_loader": b"NEWER"})
+    plan2, deps2, _ = make((g, newer, dmf), tmp_path, tool=tool)
+    plan2.components = plan2.components[:1]
+    tool.fail_patch = True  # the re-patch after the loader update fails, AFTER its files were written
+    r = run_setup(plan2, deps=deps2)
+    assert not r.ok and r.failed_step == "dml" and r.rolled_back
+    assert (g / "binaries" / "mod_loader").read_bytes() == DML_FILES["binaries/mod_loader"]
