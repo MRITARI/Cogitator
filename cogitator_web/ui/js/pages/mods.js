@@ -34,11 +34,18 @@ export function mount(container, ctx) {
     showMenu(r.left, r.bottom + 4, [{ label: "Update all (Ctrl+U)", id: "update_all", enabled: true }, { label: "Link all mods to Nexus (M)", id: "link_all", enabled: true },
       { label: "Update Mod Loader / Framework (F)", id: "framework_update", enabled: true }], (id) => call(id));
   } });
+  async function bulkMenu() {
+    const r = await call("bulk_menu");
+    if (!r.ok) return;
+    const b = bulkBtn.getBoundingClientRect();
+    showMenu(b.left, b.bottom + 4, r.items, (id) => call("bulk", id));
+  }
+  const bulkBtn = button({ label: "Bulk", kind: "secondary", title: "Actions on the marked mods (B). Mark mods with X.", onClick: bulkMenu });
   const upBtn = button({ label: "Move up", icon: "up", iconOnly: true, kind: "secondary", title: "Move up (Ctrl+Up)", onClick: () => api.move(-1), disabled: true });
   const downBtn = button({ label: "Move down", icon: "down", iconOnly: true, kind: "secondary", title: "Move down (Ctrl+Down)", onClick: () => api.move(1), disabled: true });
   const filter = h("input", { class: "input", type: "search", placeholder: "Filter mods", "aria-label": "Filter mods", autocomplete: "off", spellcheck: "false" });
   const search = h("div", { class: "search" }, icon("search"), filter);
-  const toolbar = h("div", { class: "toolbar", role: "toolbar", "aria-label": "Mods" }, check, importBtn, launchBtn, globalBtn, moreBtn, upBtn, downBtn, h("span", { class: "grow" }), search);
+  const toolbar = h("div", { class: "toolbar", role: "toolbar", "aria-label": "Mods" }, check, importBtn, launchBtn, globalBtn, moreBtn, bulkBtn, upBtn, downBtn, h("span", { class: "grow" }), search);
   let ftimer = null;
   filter.value = state.filter;
   filter.addEventListener("input", () => { clearTimeout(ftimer); ftimer = setTimeout(() => call("set_filter", filter.value), 120); });
@@ -195,6 +202,7 @@ export function mount(container, ctx) {
     selected: () => state.selected,
     toggle() { if (state.selected) call("toggle", state.selected); },
     move(d) { if (state.selected) call("move", state.selected, d); },
+    bulk: bulkMenu,
     mark() { if (state.selected) call("mark", state.selected); },
     fav() { if (state.selected) call("fav", state.selected); },
     note() { if (state.selected) call("edit_note", state.selected); },

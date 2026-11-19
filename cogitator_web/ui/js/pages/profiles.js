@@ -12,7 +12,7 @@ export function mount(container, ctx) {
   const msg = h("div", { class: "msg tone-bad", role: "alert", hidden: true });
   const list = h("section", { class: "s-group", "aria-label": "Profiles" });
   const report = (r) => { msg.hidden = !!r.ok; msg.textContent = r.ok ? "" : r.error || "That did not work."; return r; };
-  let timer = null;
+  let alive = true, timer = null;
 
   async function load() {
     const r = await call("profiles_list");
