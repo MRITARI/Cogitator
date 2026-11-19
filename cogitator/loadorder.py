@@ -168,3 +168,14 @@ class LoadOrder:
             self.lines[slot].text = text
         for i in reversed(slots[len(want):]):
             del self.lines[i]
+
+
+def folder_index(folders) -> dict[str, str]:
+    """casefolded name -> on-disk folder name. Load-order lines match folders case-insensitively (as LoadOrder does);
+    the on-disk spelling is what gets displayed and used for file operations. Nothing is ever renamed."""
+    return {n.casefold(): n for n in sorted(folders, reverse=True)}  # exact-case twins: the alphabetically first wins
+
+
+def resolve_folder(name: str, folders, index: dict[str, str]) -> str | None:
+    """The on-disk folder a load-order line refers to, or None. An exact match always wins."""
+    return name if name in folders else index.get(name.casefold())

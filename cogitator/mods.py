@@ -5,7 +5,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from .fsutil import is_link, make_dir_link, unlink_link
-from .loadorder import LOAD_ORDER_NAME, LoadOrder
+from .loadorder import LOAD_ORDER_NAME, LoadOrder, folder_index, resolve_folder
 
 # Folders owned by the Mod Loader (mods/base) and the Mod Framework (mods/dmf); never treated as user mods.
 INTERNAL_FOLDERS: frozenset[str] = frozenset({"base", "dmf"})
@@ -53,16 +53,18 @@ def scan_mods(game_dir: Path, internal: frozenset[str] | set[str] | None = None)
     folders = {p.name for p in md.iterdir() if p.is_dir()} if md.is_dir() else set()
     folders -= set(internal)
     lo = LoadOrder.load(load_order_path(game_dir))
+    idx = folder_index(folders)
     out: list[Mod] = []
     seen: set[str] = set()
     for i, (name, enabled) in enumerate(lo.entries()):
-        if name in internal or name in seen:
+        disk = resolve_folder(name, folders, idx)
+        shown = disk or name
+        if name in internal or shown.casefold() in seen:
             continue
-        seen.add(name)
-        present = name in folders
-        out.append(Mod(name, ENABLED if enabled else DISABLED, present,
-                       present and (md / name / f"{name}.mod").is_file(), i))
-    for name in sorted(folders - seen, key=str.casefold):
+        seen.add(shown.casefold())
+        out.append(Mod(shown, ENABLED if enabled else DISABLED, disk is not None,
+                       disk is not None and (md / shown / f"{shown}.mod").is_file(), i))
+    for name in sorted((f for f in folders if f.casefold() not in seen), key=str.casefold):
         out.append(Mod(name, UNLISTED, True, (md / name / f"{name}.mod").is_file()))
     return out
 

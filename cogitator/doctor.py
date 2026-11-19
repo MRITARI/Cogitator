@@ -18,7 +18,7 @@ from . import gamefinder
 from .config import Settings, cache_dir, config_dir, get_api_key, log_path, redact
 from .frameworks import detect_framework
 from .gamefinder import APPID, validate_game_dir
-from .loadorder import LoadOrder
+from .loadorder import LoadOrder, folder_index, resolve_folder
 from .loader import GITHUB_API, make_client
 from .mods import INTERNAL_FOLDERS, load_order_path, mods_dir
 from .nexus import InvalidKey, NexusClient, NexusError, RateLimited
@@ -175,7 +175,8 @@ def _load_order(game: Path) -> list[Check]:
     folders = {d.name for d in mods_dir(game).iterdir() if d.is_dir()} if mods_dir(game).is_dir() else set()
     out: list[Check] = []
     wrong = sorted({n for n, _ in entries if n in INTERNAL_FOLDERS})
-    missing = [n for n, _ in entries if n not in folders and n not in INTERNAL_FOLDERS]
+    idx = folder_index(folders)
+    missing = [n for n, _ in entries if resolve_folder(n, folders, idx) is None and n not in INTERNAL_FOLDERS]
     seen, dups = set(), set()
     for n, _ in entries:
         (dups if n in seen else seen).add(n)
@@ -191,7 +192,8 @@ def _load_order(game: Path) -> list[Check]:
         out.append(Check("load_order_dups", "Load order: duplicates", WARN, f"listed more than once: {', '.join(sorted(dups))}",
                          "Keep one line per mod."))
     if not (wrong or missing or dups):
-        unlisted = sorted(folders - {n for n, _ in entries} - set(INTERNAL_FOLDERS))
+        listed = {n.casefold() for n, _ in entries}
+        unlisted = sorted(f for f in folders - set(INTERNAL_FOLDERS) if f.casefold() not in listed)
         extra = f"; {len(unlisted)} folder(s) not listed ({', '.join(unlisted[:5])}{'...' if len(unlisted) > 5 else ''})" if unlisted else ""
         out.append(Check("load_order", "mod_load_order.txt", OK, f"{len(entries)} entr{'y' if len(entries) == 1 else 'ies'}, no problems{extra}"))
     return out

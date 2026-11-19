@@ -228,3 +228,13 @@ def test_spaced_folder_is_listed_once_toggled_moved_and_removed(game, tmp_path):
 def test_names_that_cannot_be_written_to_the_load_order_are_refused(game, bad):
     with pytest.raises(ModError):
         set_mod_enabled(game, bad, True)
+
+
+def test_scan_mods_matches_load_order_names_case_insensitively(tmp_path):
+    g = tmp_path / "Warhammer 40,000 DARKTIDE"
+    (g / "mods" / "FooBar").mkdir(parents=True)
+    (g / "mods" / "FooBar" / "FooBar.mod").write_text("return {}")
+    (g / "mods" / "mod_load_order.txt").write_bytes(b"foobar\r\n")
+    rows = scan_mods(g)
+    assert [(m.folder, m.state, m.present) for m in rows] == [("FooBar", ENABLED, True)]  # on-disk spelling, one row
+    assert rows[0].has_mod_file

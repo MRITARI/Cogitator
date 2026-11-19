@@ -357,3 +357,11 @@ def test_paths_check_flags_microsoft_store_python_redirection(monkeypatch):
     monkeypatch.setattr(doctor.sys, "_base_executable", r"C:\Python312\python.exe", raising=False)
     monkeypatch.setattr(doctor.sys, "base_prefix", r"C:\Python312")
     assert "Microsoft Store" not in doctor._paths().detail
+
+
+def test_load_order_entry_matches_its_folder_case_insensitively(game, steam):
+    (game / "mods" / "Gamma").mkdir()
+    (game / "mods" / "mod_load_order.txt").write_bytes(b"alpha\r\ngamma\r\n--beta\r\n")
+    c = by_id(doctor_run(game, steam))
+    assert "load_order_missing" not in c and c["load_order"].level == OK
+    assert "Gamma" not in c["load_order"].detail  # and it is not reported as an unlisted folder either
