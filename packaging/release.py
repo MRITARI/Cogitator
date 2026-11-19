@@ -58,14 +58,14 @@ def build(version: str, app_dir: Path, out: Path, key_path: Path, installer: boo
 
     if not re.fullmatch(r"\d+\.\d+\.\d+(-[0-9A-Za-z.-]+)?", version):
         raise SystemExit("version must look like 1.2.3 (or 1.2.3-beta.1)")
-    if not (app_dir / "cogitator.exe").is_file():
-        raise SystemExit(f"{app_dir} does not contain cogitator.exe; build it first (packaging\\build_exe.ps1)")
+    if not all((app_dir / n).is_file() for n in ("cogitator.exe", "cogitator-web.exe")):
+        raise SystemExit(f"{app_dir} is missing cogitator.exe or cogitator-web.exe; build it first (packaging\\build_exe.ps1)")
     key = serialization.load_pem_private_key(key_path.read_bytes(), None)
     if not isinstance(key, Ed25519PrivateKey):
         raise SystemExit("the signing key is not an Ed25519 key")
     out.mkdir(parents=True, exist_ok=True)
     # Sign the programs BEFORE they are zipped or packed into the installer, so the hashes and the Ed25519 signatures cover signed files.
-    sign_files([app_dir / n for n in ("cogitator.exe", "cogitator-updater.exe", "cogitator-nxm.exe")]
+    sign_files([app_dir / n for n in ("cogitator.exe", "cogitator-web.exe", "cogitator-updater.exe", "cogitator-nxm.exe")]
                + [app_dir.parent / "Cogitator Setup" / "Cogitator Setup.exe"])
     name = f"Cogitator-{version}-win-x64.zip"
     zpath = out / name
