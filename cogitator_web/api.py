@@ -225,6 +225,10 @@ class Api:
         self._s.doctor()
 
     @_call
+    def cogitator_update(self):
+        self._s.cogitator_update()
+
+    @_call
     def bisect(self):
         self._s.bisect()
 

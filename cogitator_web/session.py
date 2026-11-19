@@ -111,6 +111,7 @@ class Session:
         self._nxm_busy = False
         self._last_patch_state: str | None = None
         self._ticker: threading.Thread | None = None
+        self.selfupdater = None  # SelfUpdater, created once the registry is loaded; tests inject their own
 
     # ================================================================== helpers
     def say(self, text: str, style: str = "") -> None:
@@ -169,7 +170,8 @@ class Session:
                         "update": (u.latest or "") if u is not None and u.status == UPDATE else ""}
         banner = patch_banner(self.game_dir)
         return {"game_dir": str(self.game_dir), "frameworks": fw, "mods": state, "banner": gui_words(banner) if banner else "",
-                "nexus": self.nexus_payload(), "checking": self.checking}
+                "nexus": self.nexus_payload(), "checking": self.checking, "update_banner": self.update_banner(),
+                "update_version": self.update_version()}
 
     def nexus_payload(self) -> dict:
         premium = self.registry.data["updates"].get("premium") if self.registry else None
@@ -302,6 +304,87 @@ class Session:
         self._offer_bootstrap()
         if self.check_on_start and self.settings.check_updates_on_start:
             self.ctl.ui(self.start_check)
+            self.start_selfupdate_check()
+
+    # ================================================================== Cogitator's own updates
+    def _selfupdater(self):
+        if self.selfupdater is None and self.registry is not None:
+            from cogitator.selfupdate import SelfUpdater
+
+            self.selfupdater = SelfUpdater(self.registry, self.settings)
+        return self.selfupdater
+
+    def update_ready(self):
+        u = self.selfupdater
+        return u.ready() if u and u.layout.in_place else None
+
+    def _update_offer(self):
+        u = self.selfupdater
+        return u.announcement() if u and u.layout.in_place and u.settings.update_mode != "off" else None
+
+    def update_version(self) -> str:
+        """The version the banner announces ("" when there is no banner)."""
+        u = self.selfupdater
+        a = u.announcement() if u and u.settings.update_mode != "off" else None
+        return str(a.version) if a else ""
+
+    def update_banner(self) -> str:
+        text = actions_setup.update_banner_text(self.selfupdater, self.update_ready(), gui=True)
+        return text.replace("Use Help > Update Cogitator", "Use the Update button on the Tools page")
+
+    def start_selfupdate_check(self) -> None:
+        if not (self.check_on_start and self.settings.check_updates_on_start) or self.settings.update_mode == "off":
+            return
+        if self._selfupdater() is not None:
+            self.job("cogitator update check", "selfupdate", self._job_selfupdate)
+
+    def _job_selfupdate(self) -> None:
+        u = self.selfupdater
+        with self.lock:
+            last = u.absorb_result()
+            res = u.run_automatic()
+        if last:
+            for text, style in actions_setup.update_result_lines(last):
+                self.say(text, style)
+        self.emit_header()
+        if res.status == "available" and res.latest:
+            self.say(f"Cogitator v{res.latest.version} is available.", "bold")
+        if u.should_apply_automatically() and actions_setup.apply_update(u, self.ui):
+            self.quit()
+
+    def cogitator_update(self) -> None:
+        """Tools > Update Cogitator: offer a download, or (when one is staged) install / remind / skip. All on a worker."""
+        ctx, ui = self.ctx(), self.ui
+        self.job("cogitator update", "selfupdate", lambda: self._job_cogitator_update(ctx, ui))
+
+    def _job_cogitator_update(self, ctx, ui) -> None:
+        u = self.selfupdater
+        if u is None:
+            self.say("Cogitator's update check has not run.", "yellow")
+            return
+        rd = self.update_ready()
+        if not rd:
+            offer = self._update_offer()
+            if not offer:
+                self.say("No Cogitator update is waiting.", "dim")
+                return
+            if ui.choose(actions_setup.offer_question(offer), actions_setup.OFFER_CHOICES, 0) != 0:
+                return  # nothing is downloaded unasked
+            if not actions_setup.download_update(ctx, ui, u, offer):
+                return
+            self.emit_header()
+            rd = self.update_ready()
+            if not rd:
+                return
+        i = ui.choose(actions_setup.ready_question(u, rd), actions_setup.READY_CHOICES, 0)
+        if i is None or i > actions_setup.SKIP:
+            return
+        if i == actions_setup.INSTALL:
+            if actions_setup.apply_update(u, ui):
+                self.quit()
+        else:
+            actions_setup.remember_choice(ctx, u, i, rd.version)
+            self.emit_header()
 
     # ================================================================== background ticks
     def _start_ticker(self) -> None:

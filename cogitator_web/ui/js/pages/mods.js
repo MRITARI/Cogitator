@@ -23,6 +23,7 @@ export function mount(container, ctx) {
   const bDml = badge({ key: "DML", value: "" }), bDmf = badge({ key: "DMF", value: "" }), bMods = badge({ key: "Mods", value: "" }), bNexus = badge({ key: "Nexus", value: "" });
   const badges = h("div", { class: "badges", role: "group", "aria-label": "Status" }, bDml, bDmf, bMods, bNexus);
   const banner = h("div", { class: "banner", role: "status", hidden: true });
+  const updBanner = h("div", { class: "banner", role: "status", hidden: true });
 
   // ---- toolbar
   const check = button({ label: "Check updates", icon: "sync", kind: "primary", title: "Check Nexus for updates (R, F5)", onClick: () => call("check_updates") });
@@ -67,7 +68,7 @@ export function mount(container, ctx) {
     h("thead", {}, headRow), tbody);
   const empty = h("div", { class: "empty", hidden: true });
   const wrap = h("div", { class: "table-wrap" }, table, empty);
-  container.append(badges, banner, toolbar, wrap);
+  container.append(badges, banner, updBanner, toolbar, wrap);
 
   // ---- header
   const fwBadge = (el, key, f) => {
@@ -86,6 +87,8 @@ export function mount(container, ctx) {
     else setBadge(bNexus, { tone: nx.premium === null ? "" : "ok", key: "Nexus", value: nx.premium === null ? "key set" : (nx.premium ? "premium" : "free") + (nx.quota ? `, quota ${nx.quota}` : "") });
     banner.hidden = !hd.banner;
     banner.textContent = hd.banner || "";
+    updBanner.hidden = !hd.update_banner;
+    updBanner.textContent = hd.update_banner || "";
     globalBtn.lastChild.textContent = hd.mods === "ON" ? "Turn mods off" : "Turn mods on";
     check.classList.toggle("busy", !!hd.checking);
     check.disabled = !!hd.checking;
