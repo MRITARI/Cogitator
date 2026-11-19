@@ -7,6 +7,7 @@ The key and expiry come from the website and let a FREE account download that on
 from __future__ import annotations
 
 import json
+import os
 import logging
 import re
 import subprocess
@@ -269,8 +270,21 @@ def default_command() -> str:
     return f'"{exe}" -m cogitator nxm handle "%1"'
 
 
+def _exe_of(command: str) -> str:
+    command = command.strip()
+    if command.startswith('"'):
+        exe = command[1:].split('"', 1)[0]
+    else:
+        exe = command.split(None, 1)[0] if command else ""
+    return os.path.normcase(os.path.normpath(exe)) if exe else ""
+
+
 def is_ours(command: str | None) -> bool:
-    return bool(command) and "cogitator" in command.casefold()  # type: ignore[union-attr]
+    """True when the registered command launches this Cogitator install (compares the executable path, not a name fragment)."""
+    if not command:
+        return False
+    exe = _exe_of(command)
+    return bool(exe) and exe == _exe_of(default_command())
 
 
 def _previous_path() -> Path:

@@ -163,15 +163,15 @@ def reg(monkeypatch):
 
 
 def test_register_and_unregister_clean(reg):
-    assert "now handles" in nxm.register('"C:\\Cogitator\\cogitator-nxm.exe" "%1"')
+    assert "now handles" in nxm.register(nxm.default_command())
     assert nxm.status() == "Cogitator handles nxm:// links."
     assert "no longer" in nxm.unregister() and reg["cmd"] is None
 
 
 def test_register_remembers_and_restores_the_previous_handler(reg):
     reg["cmd"] = '"C:\\Vortex\\Vortex.exe" -d "%1"'
-    assert "previous handler is remembered" in nxm.register('"C:\\Cogitator\\cogitator-nxm.exe" "%1"')
-    assert "Cogitator" in reg["cmd"]
+    assert "previous handler is remembered" in nxm.register(nxm.default_command())
+    assert nxm.is_ours(reg["cmd"])
     assert "restored" in nxm.unregister() and reg["cmd"] == '"C:\\Vortex\\Vortex.exe" -d "%1"'
 
 
@@ -184,8 +184,8 @@ def test_unregister_never_touches_another_programs_handler(reg):
 
 def test_reregistering_does_not_overwrite_the_remembered_handler(reg):
     reg["cmd"] = '"C:\\Vortex\\Vortex.exe" "%1"'
-    nxm.register('"C:\\Cogitator\\cogitator-nxm.exe" "%1"')
-    nxm.register('"C:\\Cogitator2\\cogitator-nxm.exe" "%1"')  # already ours: the saved previous one stays
+    nxm.register(nxm.default_command())
+    nxm.register(nxm.default_command())  # already ours: the saved previous one stays
     nxm.unregister()
     assert "Vortex" in reg["cmd"]
 
@@ -217,7 +217,7 @@ def test_real_registry_roundtrip_in_a_scratch_key(monkeypatch):
         pytest.skip("Windows only")
     import winreg
 
-    cmd = r'"C:\x\cogitator-nxm.exe" "%1"'
+    cmd = nxm.default_command()
     monkeypatch.setattr(nxm, "HKCU_KEY", r"Software\CogitatorTest\nxm")
     try:
         assert nxm.read_handler() is None
@@ -235,3 +235,9 @@ def test_real_registry_roundtrip_in_a_scratch_key(monkeypatch):
             pass
 
 
+
+
+def test_is_ours_compares_the_executable_path_not_a_name_fragment():
+    assert nxm.is_ours(nxm.default_command().upper())
+    assert not nxm.is_ours('"C:\Tools\cogitator-fan\Vortex.exe" -d "%1"')
+    assert not nxm.is_ours(None) and not nxm.is_ours("")
