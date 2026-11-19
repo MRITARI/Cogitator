@@ -543,6 +543,9 @@ def cmd_snapshot(args) -> int:
             print("\n".join(snapshots.restore(res.game_dir, args.name, reg)) or "Nothing to restore.")
         elif args.action == "prune":
             keep = args.keep if args.keep is not None else max(1, Settings.load().snapshot_keep)
+            if keep < 1:
+                print("--keep must be an integer of at least 1.", file=sys.stderr)
+                return 2
             print(f"Removed {snapshots.prune(keep)} old snapshot(s); keeping the newest {keep}.")
     except ModError as e:
         print(str(e), file=sys.stderr)

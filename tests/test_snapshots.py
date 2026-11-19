@@ -182,3 +182,8 @@ def test_failed_restore_copy_leaves_the_live_folder_untouched(game, monkeypatch)
         snapshots.restore(game, p.name)
     assert (game / "mods" / "demo_hud" / "marker.txt").read_text() == "live"
     assert not [x for x in (game / "mods").iterdir() if "restore" in x.name]  # no temp leftovers
+
+
+def test_prune_rejects_keep_below_one(game):
+    assert run(game, "snapshot", "prune", "--keep", "0") == 2
+    assert run(game, "snapshot", "prune", "--keep", "-3") == 2
