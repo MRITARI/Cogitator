@@ -15,6 +15,7 @@ from cogitator_setup import platform_gate
 from cogitator_setup.app import TITLE, USAGE, choose_mode, parse_flags, setup_services, uninstall_services
 
 from .app import BACKGROUND, UI_DIR, notify, webview2_available
+from . import winicon
 from .bridge import Bridge
 from .setup_session import SetupApi, WizardSession
 from .uninstall_session import TITLE as UNINSTALL_TITLE, UninstallApi, UninstallSession
@@ -57,8 +58,10 @@ def run_web_setup(argv: list[str], flags, *, webview2_check: Callable[[], bool] 
         w = holder["window"]
         bridge.attach(w)
         w.show()
+        winicon.set_window_icon(w)
 
     api = SetupApi(session, on_ready=on_ready)
+    winicon.set_app_id()
     title = f"{TITLE} {session.model.version}" + (" (repair)" if repair else "") + (" - DRY RUN (nothing will be changed)" if flags.dry_run else "")
     window = webview.create_window(title, url=str(UI_DIR / "setup.html"), js_api=api, hidden=True, width=SIZE[0], height=SIZE[1],
                                    resizable=False, background_color=BACKGROUND, text_select=True)
@@ -114,8 +117,10 @@ def run_web_uninstall(argv: list[str], flags, start: str, *, webview2_check: Cal
         w = holder["window"]
         bridge.attach(w)
         w.show()
+        winicon.set_window_icon(w)
 
     api = UninstallApi(session, on_ready=on_ready)
+    winicon.set_app_id()
     title = f"{UNINSTALL_TITLE} {session.model.version}" + (" - DRY RUN (nothing will be changed)" if flags.dry_run else "")
     window = webview.create_window(title, url=str(UI_DIR / "uninstall.html"), js_api=api, hidden=True, width=SIZE[0], height=SIZE[1],
                                    resizable=False, background_color=BACKGROUND, text_select=True)

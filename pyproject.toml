@@ -54,7 +54,7 @@ include = ["cogitator*", "cogitator_setup*", "cogitator_gui*", "cogitator_web*"]
 
 [tool.setuptools.package-data]
 cogitator = ["locales/*.json"]
-cogitator_web = ["ui/*", "ui/js/*", "ui/js/*/*"]
+cogitator_web = ["ui/*", "ui/js/*", "ui/js/*/*", "ui/img/*", "assets/*"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

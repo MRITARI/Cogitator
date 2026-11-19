@@ -8,7 +8,7 @@ const NAV = [["mods", "Mods", "mods", true], ["profiles", "Profiles", "profiles"
 export function buildSidebar(onNav, version) {
   const items = new Map();
   const nav = h("nav", { class: "sidebar", "aria-label": "Main" },
-    h("div", { class: "brand" }, h("span", { class: "mark", "aria-hidden": "true", text: "C" }), h("span", { text: "Cogitator" })));
+    h("div", { class: "brand" }, h("img", { class: "mark", src: "img/logo.png", alt: "", width: "28", height: "28" }), h("span", { text: "Cogitator" })));
   for (const [id, label, ic, enabled] of NAV) {
     const b = h("button", { type: "button", class: "nav-item", data: { page: id } }, icon(ic), h("span", { text: label }),
       enabled ? null : h("span", { class: "soon", text: "Coming soon" }));

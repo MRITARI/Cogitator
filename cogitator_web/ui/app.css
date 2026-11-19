@@ -21,7 +21,7 @@ html.icons-text .icon { font-family: var(--font); font-weight: 600; }
 .app { display: grid; grid-template-columns: 240px minmax(0, 1fr); height: 100vh; }
 .sidebar { background: var(--sidebar); border-right: 1px solid var(--divider); display: flex; flex-direction: column; padding: var(--sp-5) var(--sp-3); gap: var(--sp-1); user-select: none; }
 .brand { display: flex; align-items: center; gap: var(--sp-3); padding: var(--sp-1) var(--sp-3) var(--sp-5); font-weight: 600; font-size: 16px; letter-spacing: -0.02em; }
-.brand .mark { width: 28px; height: 28px; border-radius: var(--radius-pill); background: var(--primary); color: var(--primary-fg); display: grid; place-items: center; font-weight: 700; font-size: 13px; }
+.brand .mark { width: 28px; height: 28px; object-fit: contain; }
 .nav-item {
   display: flex; align-items: center; gap: var(--sp-3); width: 100%; height: 36px; padding: 0 var(--sp-4);
   border: 0; border-radius: var(--radius-pill); background: transparent; color: var(--muted); text-align: left; cursor: pointer; font-weight: 500;

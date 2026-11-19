@@ -11,7 +11,7 @@ from typing import Callable
 from cogitator import __version__
 from cogitator.config import log_path, redact
 
-from . import winstate
+from . import winicon, winstate
 from .api import Api
 from .bridge import Bridge
 from .session import Session
@@ -116,8 +116,10 @@ def run_web(argv: list[str], game_override: str | None = None, check_updates: bo
         w = page["window"]
         bridge.attach(w)
         w.show()  # the page has painted: no flash of an empty window
+        winicon.set_window_icon(w)
 
     api = Api(session, on_ready=on_ready)
+    winicon.set_app_id()
     window = webview.create_window(f"{TITLE} {__version__}", url=str(UI_DIR / "index.html"), js_api=api, hidden=True,
                                    min_size=winstate.MIN_SIZE, background_color=BACKGROUND, text_select=True, **geo)
     page["window"] = window

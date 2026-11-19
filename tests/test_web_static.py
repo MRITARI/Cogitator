@@ -21,7 +21,20 @@ def test_there_are_assets():
 
 
 def test_no_binary_assets():
-    assert not [rel(p) for p in ASSETS if p.suffix.lower() in (".png", ".jpg", ".jpeg", ".gif", ".svg", ".ico", ".woff", ".woff2", ".ttf", ".otf")]
+    binary = (".png", ".jpg", ".jpeg", ".gif", ".svg", ".ico", ".woff", ".woff2", ".ttf", ".otf")
+    assert [rel(p) for p in ASSETS if p.suffix.lower() in binary] == ["img/logo.png"]
+    assert (UI / "img" / "logo.png").stat().st_size < 60 * 1024
+
+
+def test_local_image_references_exist():
+    pat = re.compile(r"""\bsrc\s*[=:]\s*["']([^"']+)["']""")
+    for p in TEXT:
+        if p.suffix == ".css":
+            continue
+        for ref in pat.findall(p.read_text(encoding="utf-8")):
+            if not ref.endswith((".png", ".ico", ".svg", ".jpg")):
+                continue
+            assert (UI / ref).is_file(), f"{rel(p)} -> {ref}"
 
 
 FORBIDDEN = ["innerHTML", "outerHTML", "insertAdjacentHTML", "document.write", "eval(", "new Function", "setAttribute(\"style\"", "javascript:",

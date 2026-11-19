@@ -14,6 +14,7 @@ from cogitator import __version__
 
 log = logging.getLogger("cogitator.web.selfcheck")
 PAGES = ("index.html", "setup.html", "uninstall.html")
+ASSET_FILES = ("img/logo.png",)
 STYLES = ("theme.css", "app.css", "setup.css", "uninstall.css")
 _REF = re.compile(r"""(?:src|href)\s*=\s*["']([^"']+\.(?:js|css))["']""")
 _IMPORT = re.compile(r"""(?:^|\n)\s*(?:import|export)\b[^\n;]*?from\s*["'](\.[^"']+)["']|import\s*\(\s*["'](\.[^"']+)["']""")
@@ -23,7 +24,7 @@ def ui_problems(ui_dir: Path) -> list[str]:
     """Missing UI files: the pages, the stylesheets, and every script reachable from the pages (page tags and relative imports)."""
     missing: list[str] = []
     todo: list[Path] = []
-    for name in (*PAGES, *STYLES):
+    for name in (*PAGES, *STYLES, *ASSET_FILES):
         p = ui_dir / name
         if not p.is_file():
             missing.append(name)
@@ -75,7 +76,11 @@ def run(expect_version: str | None = None, *, ui_dir: Path | None = None, webvie
         return __version__
 
     def ui():
+        from . import winicon
+
         missing = ui_problems(ui_dir)
+        if not winicon.ICON_PATH.is_file():
+            missing.append("assets/cogitator.ico")
         if missing:
             raise FileNotFoundError("missing in " + str(ui_dir) + ": " + ", ".join(sorted(missing)))
         return f"{ui_dir}"
