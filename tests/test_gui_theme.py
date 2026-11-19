@@ -88,3 +88,20 @@ def test_badges_keep_the_text_and_use_palette_colours():
     assert [s for _, s in out] == ["bold", "badge_bad", "", "badge_warn", "badge_ok"]
     o = style_options("badge_warn", PALETTES["dark"])
     assert o["foreground"] == PALETTES["dark"]["warn_fg"] and o["background"] == PALETTES["dark"]["warn_bg"]
+
+
+# ---------------------------------------------------------------- the console window behind the GUI
+def test_own_console_is_hidden_but_a_terminal_is_left_alone():
+    from cogitator_gui.app import hide_own_console
+
+    calls = []
+    assert hide_own_console(platform="win32", process_count=lambda: 1, hide=lambda: calls.append(1)) is True and calls == [1]
+    assert hide_own_console(platform="win32", process_count=lambda: 2, hide=lambda: calls.append(2)) is False  # started from a terminal
+    assert hide_own_console(platform="win32", process_count=lambda: 0, hide=lambda: calls.append(3)) is False  # no console
+    assert hide_own_console(platform="linux", process_count=lambda: 1, hide=lambda: calls.append(4)) is False
+    assert calls == [1]
+
+    def boom():
+        raise OSError
+
+    assert hide_own_console(platform="win32", process_count=boom) is False

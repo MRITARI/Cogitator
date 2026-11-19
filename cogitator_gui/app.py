@@ -1164,6 +1164,37 @@ def _make_dpi_aware() -> None:
         pass
 
 
+def hide_own_console(*, platform: str | None = None, process_count: Callable[[], int] | None = None, hide: Callable[[], None] | None = None) -> bool:
+    """The console exe shows a console window when it is started from a shortcut or Explorer; the GUI should not leave it behind
+    the window. Only a console that belongs to this process alone is hidden: started from a terminal (more than one process
+    on the console) nothing happens. True if the console was hidden. Never raises."""
+    if (platform or sys.platform) != "win32":
+        return False
+    try:
+        if process_count is None:
+            import ctypes
+
+            def process_count() -> int:
+                ids = (ctypes.c_uint * 4)()
+                return int(ctypes.windll.kernel32.GetConsoleProcessList(ids, 4))
+
+        if process_count() != 1:  # 0 = no console at all; 2+ = started from a terminal that stays open
+            return False
+        if hide is None:
+            import ctypes
+
+            def hide() -> None:
+                hwnd = ctypes.windll.kernel32.GetConsoleWindow()
+                if hwnd:
+                    ctypes.windll.user32.ShowWindow(hwnd, 0)  # SW_HIDE
+                ctypes.windll.kernel32.FreeConsole()
+
+        hide()
+        return True
+    except Exception:
+        return False
+
+
 def run_gui(game_override: str | None = None, check_updates: bool = True, game_dir: str | None = None) -> int:
     from cogitator.config import SchemaTooNew
     from cogitator.registry import check_data_versions
@@ -1178,6 +1209,7 @@ def run_gui(game_override: str | None = None, check_updates: bool = True, game_d
         root = tk.Tk()
     except tk.TclError as e:
         raise GuiUnavailable(str(e)) from e
+    hide_own_console()  # the window is up: a console that only this program owns is not needed any more
     app = CogitatorGui(root, game_dir=Path(game_dir) if game_dir else None, game_override=game_override, check_updates=check_updates)
     return app.mainloop()
 
