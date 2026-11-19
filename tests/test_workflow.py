@@ -379,3 +379,10 @@ def test_crashlog_handles_mod_folders_with_spaces_and_dots(tmp_path):
     rep = crashlog.analyze(p)
     assert dict(rep.suspects) == {"My Cool Mod": 1, "my.mod.v2": 1, "quoted": 1, "bracket": 1}
     assert rep.loaded == ["My Cool Mod"]
+
+
+def test_bisect_reset_does_not_claim_a_restore_when_nothing_was_restored(game, monkeypatch):
+    bisect.start(game)
+    monkeypatch.setattr(bisect.snapshots, "restore", lambda *a, **k: [])
+    msgs = bisect.reset(game)
+    assert msgs and "load order restored" not in " ".join(msgs) and "nothing" in msgs[0].lower()

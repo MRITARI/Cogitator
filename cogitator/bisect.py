@@ -99,4 +99,4 @@ def reset(game_dir: Path, registry=None) -> list[str]:
         raise ModError("No bisect session is running.")
     msgs = snapshots.restore(game_dir, s["snapshot"], registry)
     state_path().unlink(missing_ok=True)
-    return msgs or ["load order restored"]
+    return msgs or ["Nothing to restore: the snapshot held no load order or mod folders."]
