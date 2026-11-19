@@ -325,3 +325,21 @@ def test_unknown_game_asks_for_a_folder_and_cancelling_exits(root, tmp_path):
     app.start()  # no saved game, no Steam in tests: the folder picker is offered, returns nothing -> window closes
     assert app.exiting
     assert Path(tmp_path).exists()
+
+
+def test_theme_switch_menus_and_real_menu_entries(root, game):
+    app = make(root, game)
+    assert app.settings.gui_theme == "light" and app.theme_name == "light"
+    app.log_line("a coloured line", "bold green")
+    app.apply_theme("dark", save=True)
+    assert app.theme_name == "dark" and Settings.load().gui_theme == "dark" and Settings.load().theme == "tokyo-night"
+    assert str(app.hdr.text.cget("bg")).lower() == "#1b1b1f" and str(app.logbox.text.cget("bg")).lower() == "#15151a"
+    app.apply_theme("light", save=True)
+    assert Settings.load().gui_theme == "light" and str(app.hdr.text.cget("bg")).lower() == "#ffffff"
+    assert {"View", "Tools", "Nexus", "Help"} <= set(app.menus)
+    app.registry.set_mod("alpha", nexus_id=7)
+    app.refresh_all()
+    items = {aid: (label, enabled) for it in app.row_menu_items("alpha") if it for label, aid, enabled in [it]}
+    assert items["changelog"][1] and "later release" not in " ".join(l for l, _ in items.values())
+    assert items["link"][0] == "Set installed version..." or items["open_page"][1]
+    app.quit()

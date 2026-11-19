@@ -191,6 +191,61 @@ class Dialogs:
         top._cog_fonts = (bold,)  # type: ignore[attr-defined]
         self._show(top, b)
 
+    def pick_action(self, title: str, heading: str, rows: list[str], buttons: list[tuple[str, str, bool]],
+                    selected: int = 0) -> tuple[str, int | None] | None:
+        """A list with action buttons. `buttons` is (id, label, needs a selected row). Returns (button id, selected row or None)
+        when a button is pressed, None when the window is closed. The caller acts and, if it wants the window back, calls again."""
+        top = self._top(title)
+        res: list[tuple[str, int | None] | None] = [None]
+        row = self._heading(top, heading)
+        frame = ttk.Frame(top)
+        frame.grid(row=row, column=0, sticky="nsew", padx=12)
+        frame.columnconfigure(0, weight=1)
+        top.rowconfigure(row, weight=1)
+        lb = tk.Listbox(frame, height=min(14, max(6, len(rows))), width=min(110, max(60, max((len(r) for r in rows), default=60) + 2)),
+                        exportselection=False, activestyle="dotbox")
+        sb = ttk.Scrollbar(frame, command=lb.yview)
+        lb.configure(yscrollcommand=sb.set)
+        for r in rows:
+            lb.insert("end", r)
+        if rows:
+            sel = min(max(selected, 0), len(rows) - 1)
+            lb.selection_set(sel)
+            lb.see(sel)
+            lb.activate(sel)
+        lb.grid(row=0, column=0, sticky="nsew")
+        sb.grid(row=0, column=1, sticky="ns")
+
+        def press(bid: str, needs_row: bool) -> None:
+            cur = lb.curselection()
+            if needs_row and not cur:
+                return
+            res[0] = (bid, int(cur[0]) if cur else None)
+            top.destroy()
+
+        items: list[tuple[str, object]] = [(label, lambda b=bid, n=needs: press(b, n)) for bid, label, needs in buttons]
+        items.append(("Close", top.destroy))
+        self._buttons(top, row + 1, items, default=len(items) - 1)
+        top.bind("<Escape>", lambda e: top.destroy())
+        self._show(top, lb)
+        return res[0]
+
+    def show_code(self, title: str, code: str, note: str = "") -> None:
+        """A selectable text (a share code) with a Copy button."""
+        top = self._top(title)
+        row = self._heading(top, title, note)
+        box = tk.Text(top, height=6, width=72, wrap="char")
+        box.insert("1.0", code)
+        box.grid(row=row, column=0, sticky="nsew", padx=12)
+
+        def copy() -> None:
+            self.root.clipboard_clear()
+            self.root.clipboard_append(code)
+
+        self._buttons(top, row + 1, [("Copy to clipboard", copy), ("Close", top.destroy)], default=1)
+        top.bind("<Escape>", lambda e: top.destroy())
+        self._show(top, box)
+
     def error(self, title: str, body: str) -> None:
         messagebox.showerror(title, body, parent=self.root)
 

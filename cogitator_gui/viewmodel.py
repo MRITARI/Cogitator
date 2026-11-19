@@ -186,3 +186,37 @@ def style_options(style: str, palette: dict[str, str]) -> dict[str, object]:
 
 def style_tag(style: str) -> str:
     return "s_" + style.replace(" ", "_") if style else ""
+
+
+# ---------------------------------------------------------------- theme
+
+THEMES = ("light", "dark")
+
+
+def normalize_theme(value: object) -> str:
+    """Whatever the settings file holds -> a theme we have (light is the default)."""
+    return value if isinstance(value, str) and value in PALETTES else "light"
+
+
+def ttk_styles(palette: dict[str, str]) -> dict[str, dict[str, str]]:
+    """ttk style options for one palette (applied with Style.configure). Widget-free so it can be tested."""
+    p = palette
+    return {
+        ".": {"background": p["bg"], "foreground": p["fg"], "fieldbackground": p["bg"]},
+        "TFrame": {"background": p["bg"]},
+        "TLabel": {"background": p["bg"], "foreground": p["fg"]},
+        "Hint.TLabel": {"background": p["bg"], "foreground": p["dim"]},
+        "TButton": {"background": p["stripe"], "foreground": p["fg"]},
+        "TEntry": {"fieldbackground": p["log_bg"], "foreground": p["fg"], "insertcolor": p["fg"]},
+        "Treeview": {"background": p["bg"], "fieldbackground": p["bg"], "foreground": p["fg"]},
+        "Treeview.Heading": {"background": p["stripe"], "foreground": p["fg"]},
+        "TScrollbar": {"background": p["stripe"], "troughcolor": p["bg"]},
+        "TPanedwindow": {"background": p["bg"]},
+    }
+
+
+def ttk_state_maps(palette: dict[str, str]) -> dict[str, dict[str, list]]:
+    """Style.map options: selection and hover colours that the base theme would otherwise keep."""
+    sel = "#2d5a8c" if palette is PALETTES["dark"] else "#cce4ff"
+    return {"Treeview": {"background": [("selected", sel)], "foreground": [("selected", palette["fg"])]},
+            "TButton": {"background": [("active", palette["stripe"])]}}

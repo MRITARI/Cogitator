@@ -34,6 +34,7 @@ from cogitator.viewtext import gui_words, NOTICE_BODY, NOTICE_TITLE, fw_segments
 
 from .controller import CHOICE, CONFIRM, TEXT, Controller, GuiUi
 from .dialogs import Dialogs
+from .tools import WATCH_MS, ToolFlows
 from .workflows import ModFlows
 from .viewmodel import COLUMNS, PALETTES, STRIPES, TAG_BAD, TAG_DIM, TAG_OK, TAG_WARN, ModListModel, move_steps, style_options, style_tag
 
@@ -56,6 +57,7 @@ HELP_BODY = (
     "U   update the selected mod        Ctrl+U   update all mods\n"
     "L   link to Nexus                  M   link all        F   update Mod Loader / Framework\n"
     "F3  search Nexus Mods\n"
+    "B   bulk actions on marked mods    P   profiles    C   crash-log leads\n"
     "O   sort                Q or Ctrl+Q   quit\n"
     "\n"
     "Log file: {log}\n"
@@ -74,6 +76,7 @@ class StyledText(ttk.Frame):
         self.columnconfigure(0, weight=1)
         self.rowconfigure(0, weight=1)
         self.pal = palette
+        self.mono = mono
         base = tkfont.nametofont("TkFixedFont" if mono else "TkDefaultFont")
         self.font, self.bold = base, base.copy()
         self.bold.configure(weight="bold")
@@ -84,22 +87,30 @@ class StyledText(ttk.Frame):
             sb = ttk.Scrollbar(self, command=self.text.yview)
             self.text.configure(yscrollcommand=sb.set)
             sb.grid(row=0, column=1, sticky="ns")
-        self._styles: set[str] = set()
+        self._styles: dict[str, str] = {}
 
     def _tag(self, style: str) -> str:
         tag = style_tag(style)
         if tag and tag not in self._styles:
-            opts = style_options(style, self.pal)
-            kw: dict = {}
-            if "foreground" in opts:
-                kw["foreground"] = opts["foreground"]
-            if "background" in opts:
-                kw["background"] = opts["background"]
-            if opts.get("bold"):
-                kw["font"] = self.bold
-            self.text.tag_configure(tag, **kw)
-            self._styles.add(tag)
+            self._configure_tag(tag, style)
+            self._styles[tag] = style
         return tag
+
+    def _configure_tag(self, tag: str, style: str) -> None:
+        opts = style_options(style, self.pal)
+        kw: dict = {"foreground": self.pal["fg"] if "foreground" not in opts else opts["foreground"]}
+        if "background" in opts:
+            kw["background"] = opts["background"]
+        if opts.get("bold"):
+            kw["font"] = self.bold
+        self.text.tag_configure(tag, **kw)
+
+    def restyle(self, palette: dict[str, str]) -> None:
+        """Theme switch: new colours for the area and for every run already in it."""
+        self.pal = palette
+        self.text.configure(bg=palette["log_bg"] if self.mono else palette["bg"], fg=palette["fg"])
+        for tag, style in self._styles.items():
+            self._configure_tag(tag, style)
 
     def set(self, segments: list[tuple[str, str]]) -> None:
         self.clear()
@@ -123,7 +134,7 @@ class StyledText(ttk.Frame):
         return self.text.get("1.0", "end-1c")
 
 
-class CogitatorGui(ModFlows):
+class CogitatorGui(ModFlows, ToolFlows):
     def __init__(self, root: tk.Tk | None = None, *, game_dir: Path | None = None, game_override: str | None = None,
                  check_updates: bool = True, dialogs: Dialogs | None = None, controller: Controller | None = None,
                  settings: Settings | None = None, show_notice: bool = True):
@@ -155,6 +166,10 @@ class CogitatorGui(ModFlows):
         self._pending_asks: deque = deque()
         self._modal = 0
         self._nxm_busy = False
+        self._last_patch_state: str | None = None
+        self.selfupdater = None  # SelfUpdater; created once the registry is loaded. Tests inject their own.
+        self.selfupdate_on_start = True
+        self.theme_name = "light"
         self._drag: dict | None = None
         # seams for tests
         self.game_running: Callable[[], bool] = darktide_running
@@ -169,6 +184,7 @@ class CogitatorGui(ModFlows):
         self.root.report_callback_exception = self._tk_error
         self.root.after(POLL_MS, self._poll)
         self.root.after(NXM_MS, self._nxm_loop)
+        self.root.after(WATCH_MS, self._watch_loop)
         self.root.after(0, self.start)
 
     # ================================================================== layout
@@ -183,11 +199,13 @@ class CogitatorGui(ModFlows):
             set_window_icon(r)
         except Exception:
             log.debug("no window icon", exc_info=True)
+        self._base_theme = "clam"
         style = ttk.Style(r)
         for theme in ("vista", "xpnative", "winnative", "clam"):
             if theme in style.theme_names():
                 try:
                     style.theme_use(theme)
+                    self._base_theme = theme
                     break
                 except tk.TclError:
                     continue
@@ -208,6 +226,9 @@ class CogitatorGui(ModFlows):
         self.banner = ttk.Label(head, text="", style="Banner.TLabel", wraplength=900, justify="left")
         self.banner.grid(row=1, column=0, sticky="ew", pady=(4, 0))
         self.banner.grid_remove()
+        self.update_label = ttk.Label(head, text="", style="Update.TLabel", wraplength=900, justify="left")
+        self.update_label.grid(row=2, column=0, sticky="ew", pady=(4, 0))
+        self.update_label.grid_remove()
 
         # toolbar + filter
         bar = ttk.Frame(r, padding=(8, 6))
@@ -258,6 +279,7 @@ class CogitatorGui(ModFlows):
         st.bind("<Configure>", lambda e: self.hint.configure(wraplength=max(200, e.width - 240)))
 
         self._bind_events()
+        self.apply_theme(self.settings.gui_theme)
 
     def _configure_tree_tags(self) -> None:
         p = self.palette
@@ -295,13 +317,22 @@ class CogitatorGui(ModFlows):
                       None, ("Mark for bulk actions", self.toggle_mark, "X", "mark"), ("Favourite", self.toggle_fav, "*", "fav"),
                       ("Tags and note...", self.edit_note, "N", "note"), ("Pin version", self.toggle_pin, "", "pin"),
                       None, ("Filter...", self.focus_filter, "Ctrl+F", None), ("Sort (cycle)", self.cycle_sort, "O", None),
+                      ("Bulk actions on marked mods...", self.bulk_actions, "B", "bulk"),
                       None, ("Mods on / off (game patch)", self.toggle_global, "Ctrl+T", "global")])
         menu("Nexus", [("Check for updates", self.recheck, "F5", "recheck"), ("Update all mods", self.update_all, "Ctrl+U", "update_all"),
                        ("Update Mod Loader / Framework", self.framework_update, "", "framework"), None,
                        ("Link all mods to Nexus...", self.link_all_mods, "", "link_all"), ("Search Nexus Mods...", self.search_nexus, "F3", "search"),
                        None, ("Nexus API key...", self.set_key, "Ctrl+K", None)])
-        menu("Tools", [("Doctor (diagnose problems)", self.doctor, "Ctrl+D", "doctor"), ("Launch Darktide", self.launch, "Ctrl+G", "launch")])
-        menu("Help", [("Help", self.show_help, "F1", None)])
+        menu("Tools", [("Doctor (diagnose problems)", self.doctor, "Ctrl+D", "doctor"), ("Launch Darktide", self.launch, "Ctrl+G", "launch"),
+                       None, ("Profiles...", self.profiles_window, "P", "profiles"), ("Snapshots...", self.snapshots_window, "", "snapshots"),
+                       None, ("Find a crashing mod (bisect)...", self.bisect_wizard, "", "bisect"), ("Crash-log leads...", self.crashlog_window, "C", "crashlog")])
+        view = tk.Menu(m, tearoff=False)
+        self.theme_var = tk.StringVar(value="light")
+        for label, val in (("Light theme", "light"), ("Dark theme", "dark")):
+            view.add_radiobutton(label=label, value=val, variable=self.theme_var, command=lambda v=val: self.apply_theme(v, save=True))
+        m.add_cascade(label="View", menu=view)
+        self.menus["View"] = view
+        menu("Help", [("Help", self.show_help, "F1", None), ("Update Cogitator...", self.apply_update, "", "selfupdate")])
         self.root.configure(menu=m)
 
     def _bind_events(self) -> None:
@@ -326,7 +357,8 @@ class CogitatorGui(ModFlows):
         for keys, fn in ((("r", "R"), self.recheck), (("i", "I"), self.import_archives), (("g", "G"), self.launch),
                          (("d", "D"), self.doctor), (("t", "T"), self.toggle_global), (("k", "K"), self.set_key),
                          (("u", "U"), self.update_selected), (("l", "L"), self.link_selected), (("m", "M"), self.link_all_mods),
-                         (("f", "F"), self.framework_update), (("x", "X"), self.toggle_mark), (("n", "N"), self.edit_note), (("asterisk",), self.toggle_fav),
+                         (("f", "F"), self.framework_update), (("x", "X"), self.toggle_mark), (("b", "B"), self.bulk_actions), (("p", "P"), self.profiles_window),
+                         (("c", "C"), self.crashlog_window), (("n", "N"), self.edit_note), (("asterisk",), self.toggle_fav),
                          (("slash",), self.focus_filter), (("o", "O"), self.cycle_sort), (("q", "Q"), self.quit)):
             for k in keys:
                 t.bind(f"<Key-{k}>", lambda e, f=fn: self._plain_key(e, f))
@@ -337,6 +369,17 @@ class CogitatorGui(ModFlows):
             return None
         fn()
         return "break"
+
+    def _watch_loop(self) -> None:
+        try:
+            self.watch_tick()
+        except Exception:
+            log.exception("game-update watcher failed")
+        if not self.exiting:
+            try:
+                self.root.after(WATCH_MS, self._watch_loop)
+            except tk.TclError:
+                pass
 
     def _nxm_loop(self) -> None:
         try:
@@ -436,6 +479,12 @@ class CogitatorGui(ModFlows):
             self.banner.grid()
         else:
             self.banner.grid_remove()
+        ann = self.update_banner()
+        if ann:
+            self.update_label.configure(text=ann)
+            self.update_label.grid()
+        else:
+            self.update_label.grid_remove()
         if self.checking:
             self.progress.start(14)
         else:
@@ -513,6 +562,7 @@ class CogitatorGui(ModFlows):
 
     def _after_notice(self) -> None:
         self._offer_bootstrap()
+        self.start_selfupdate_check()
         if self.check_on_start and self.settings.check_updates_on_start:
             self.start_check()
 
