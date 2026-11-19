@@ -136,3 +136,16 @@ def test_note_parsing_shared_with_the_tui():
     assert actions.parse_note("#UI #hud  needs   dmf") == (["ui", "hud"], "needs dmf")
     assert actions.parse_note("# alone") == ([], "# alone")
     assert actions.parse_note("") == ([], "")
+
+
+def test_gui_wording_has_no_terminal_key_hints():
+    from cogitator.viewtext import gui_words, hint_for
+    from cogitator.mods import Mod
+    from cogitator.updates import NOT_LINKED, ModRow
+
+    assert "press" not in gui_words("press L to link this mod; Game updated - press T to enable mods.")
+    m = Mod(folder="a", state="enabled", present=True, has_mod_file=True)
+    row = ModRow(folder="a", nexus_id=None, installed=None, latest=None, status=NOT_LINKED, reason="press L to link this mod to its Nexus page")
+    assert "press" not in hint_for(m, row, gui=True) and "Press L" not in hint_for(m, None, gui=True)
+    assert "Press L" in hint_for(m, row)  # the terminal UI keeps its own wording
+    assert "press I" not in hint_for(None, None, gui=True) and "Press I" in hint_for(None, None)

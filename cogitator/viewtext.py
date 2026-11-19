@@ -54,31 +54,50 @@ def installed_label(row: ModRow | None, mtime: float | None) -> Segment:
     return (time.strftime("%Y-%m-%d", time.localtime(mtime)) if mtime else "-"), "dim"
 
 
-def status_label(row: ModRow | None, arrow: str, mod: Mod | None = None) -> Segment:
+def status_label(row: ModRow | None, arrow: str, mod: Mod | None = None, gui: bool = False) -> Segment:
     if mod is not None and not mod.present:
         return "folder missing", "red"
     if row is None:
         return "not linked", "dim"
     label = row.status
     if row.status == UNKNOWN and row.baseline_unknown:
-        label = BASELINE_UNKNOWN_LABEL
+        label = GUI_BASELINE_UNKNOWN_LABEL if gui else BASELINE_UNKNOWN_LABEL
     elif row.status in (UPDATE, PROBABLY_OUTDATED):
         label = f"{row.status} ({row.installed or '?'} {arrow} {row.latest or '?'})"
     return label, STATUS_STYLE.get(row.status, "")
 
 
-def hint_for(mod: Mod | None, row: ModRow | None) -> str:
+GUI_EMPTY_STATE = ("No mods installed yet. Download mods from nexusmods.com/warhammer40kdarktide, then use File > Import zip(s) "
+                   "(or Ctrl+I). Press F1 for help.")
+GUI_BASELINE_UNKNOWN_LABEL = "version unknown - right-click > Link to Nexus to set it"
+
+
+_GUI_KEYS = (("press L", "right-click > Link to Nexus"), ("press T", "use Mods > Mods on / off (Ctrl+T)"),
+             ("press K", "use Nexus > Nexus API key"), ("press I", "use File > Import zip(s)"))
+
+
+def gui_words(text: str) -> str:
+    """Terminal-UI key hints ("press L to ...") in engine texts, reworded for the window's menus."""
+    for old, new in _GUI_KEYS:
+        text = text.replace(old, new)
+    return text
+
+
+def hint_for(mod: Mod | None, row: ModRow | None, gui: bool = False) -> str:
+    """One line about the selected mod. `gui` swaps the key names of the terminal UI for the window's menus."""
     if mod is None:
-        return EMPTY_STATE
+        return GUI_EMPTY_STATE if gui else EMPTY_STATE
     if not mod.present:
         return f"'{mod.folder}' is listed in mod_load_order.txt but its folder is missing."
     if not mod.has_mod_file:
         return f"Warning: {mod.folder}/{mod.folder}.mod is missing - the archive may have been extracted badly."
     if mod.state == UNLISTED:
-        return "Not in mod_load_order.txt. Press Space to add it to the load order (enabled)."
+        return ("Not in mod_load_order.txt. Turn it on (Space) to add it to the load order." if gui
+                else "Not in mod_load_order.txt. Press Space to add it to the load order (enabled).")
     if row is None or row.status == NOT_LINKED:
-        return "Not linked to Nexus. Press L to link it so updates can be detected."
-    return f"{row.status}: {row.reason}"
+        return ("Not linked to Nexus. Right-click > Link to Nexus so updates can be detected." if gui
+                else "Not linked to Nexus. Press L to link it so updates can be detected.")
+    return f"{row.status}: {gui_words(row.reason) if gui else row.reason}"
 
 
 def fw_segments(game_dir: Path | None, registry: Registry | None, fw: list[FrameworkUpdate], badge: str) -> list[Segment]:
@@ -101,10 +120,10 @@ def fw_segments(game_dir: Path | None, registry: Registry | None, fw: list[Frame
     return out
 
 
-def nexus_segments(key_set: bool, premium: bool | None, quota: str | None, checking: str = "") -> list[Segment]:
+def nexus_segments(key_set: bool, premium: bool | None, quota: str | None, checking: str = "", gui: bool = False) -> list[Segment]:
     out: list[Segment] = [("Nexus: ", "")]
     if not key_set:
-        out.append(("no API key - press K", "bold yellow"))
+        out.append(("no API key - Nexus > Nexus API key..." if gui else "no API key - press K", "bold yellow"))
         return out
     acct = "account unknown" if premium is None else ("premium" if premium else "free")
     out.append((f"key {'ok' if premium is not None else 'set'} ({acct})", "green"))

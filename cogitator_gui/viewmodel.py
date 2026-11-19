@@ -94,7 +94,7 @@ class ModListModel:
         r = self.urows.get(m.folder)
         mt = None if r is not None and r.installed else self.mtime(m.folder)
         en = ON_TEXT if m.state == ENABLED else (OFF_TEXT if m.state == DISABLED else UNLISTED_TEXT)
-        return (en, self.name_cell(m), installed_label(r, mt)[0], (r.latest if r else None) or "-", status_label(r, ARROW, m)[0])
+        return (en, self.name_cell(m), installed_label(r, mt)[0], (r.latest if r else None) or "-", status_label(r, ARROW, m, gui=True)[0])
 
     def status_tag(self, m: Mod) -> str:
         r = self.urows.get(m.folder)
@@ -126,8 +126,8 @@ class ModListModel:
         from cogitator.viewtext import hint_for
 
         if not folder:
-            return hint_for(None, None)
-        return hint_for(self.mod(folder), self.urows.get(folder)) + actions.meta_hint(self.meta(folder))
+            return hint_for(None, None, gui=True)
+        return hint_for(self.mod(folder), self.urows.get(folder), gui=True) + actions.meta_hint(self.meta(folder))
 
     def summary(self) -> str:
         shown = sum(1 for m in self.mods if self.visible(m))

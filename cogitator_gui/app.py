@@ -30,7 +30,7 @@ from cogitator.patcher import toggle as toggle_mods
 from cogitator.procs import darktide_running
 from cogitator.registry import Registry
 from cogitator.updates import UPDATE, CheckBundle, FrameworkUpdate, ModRow, cached_frameworks, cached_rows, quota_text, run_checks
-from cogitator.viewtext import NOTICE_BODY, NOTICE_TITLE, fw_segments, nexus_segments, report_segments
+from cogitator.viewtext import gui_words, NOTICE_BODY, NOTICE_TITLE, fw_segments, nexus_segments, report_segments
 
 from .controller import CHOICE, CONFIRM, TEXT, Controller, GuiUi
 from .dialogs import Dialogs
@@ -404,11 +404,11 @@ class CogitatorGui:
         segs: list[tuple[str, str]] = [("Game: ", "bold"), (str(self.game_dir) + "\n", "")]
         segs += fw_segments(self.game_dir, self.registry, fw, state) + [("\n", "")]
         spin = "checking for updates..." if self.checking else ""
-        segs += nexus_segments(bool(get_api_key()), self.registry.data["updates"].get("premium"), quota_text(self.registry), spin)
+        segs += nexus_segments(bool(get_api_key()), self.registry.data["updates"].get("premium"), quota_text(self.registry), spin, gui=True)
         self.hdr.set(segs)
         b = patch_banner(self.game_dir)
         if b:
-            self.banner.configure(text=b)
+            self.banner.configure(text=gui_words(b))
             self.banner.grid()
         else:
             self.banner.grid_remove()
