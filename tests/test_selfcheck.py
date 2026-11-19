@@ -32,3 +32,12 @@ def test_expect_version_must_match_the_build(capsys):
     capsys.readouterr()
     assert cli.main(["--self-check", "--expect-version", "99.0.0"]) == 1
     assert "expected 99.0.0" in capsys.readouterr().err
+
+
+def test_build_script_bundles_the_gui_and_its_theme_and_selfcheck_covers_it(capsys):
+    from pathlib import Path
+
+    build = (Path(__file__).parents[1] / "packaging" / "build_exe.ps1").read_text(encoding="utf-8")
+    assert "--collect-submodules cogitator_gui" in build and "--collect-data sv_ttk" in build
+    assert selfcheck.run() == 0
+    assert "ok    GUI" in capsys.readouterr().out

@@ -26,6 +26,7 @@ function Check($exe) {
     --collect-submodules textual --collect-data textual `
     --collect-submodules rich._unicode_data `
     --collect-submodules keyring --collect-submodules cogitator --collect-data cogitator `
+    --collect-submodules cogitator_gui --collect-data sv_ttk --hidden-import sv_ttk `
     --hidden-import tkinter --hidden-import tkinter.filedialog `
     packaging\entry.py
 if ($LASTEXITCODE -ne 0) { throw "PyInstaller failed" }
