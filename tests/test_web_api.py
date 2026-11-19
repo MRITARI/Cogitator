@@ -387,3 +387,103 @@ def test_installed_pywebview_has_the_parameters_app_uses():
     for name in ("hidden", "js_api", "min_size", "background_color", "text_select", "width", "height", "x", "y"):
         assert name in params, name
     assert "gui" in inspect.signature(webview.start).parameters and hasattr(webview.FileDialog, "FOLDER")
+
+
+# ---------------------------------------------------------------- link / update / framework / changelog (W2)
+def _row(folder, status="up to date", nid=7, **kw):
+    from cogitator.updates import ModRow
+
+    return ModRow(folder, nid, status, kw.get("installed", "1.0"), kw.get("latest", "2.0"), "newer file", baseline="chosen")
+
+
+def _set_rows(s, *rows):
+    with s._mlock:
+        s.model.set_rows(rows)
+
+
+def _calls(monkeypatch, **fakes):
+    from cogitator_web import session as sess
+
+    seen: list[tuple] = []
+    for name, ret in fakes.items():
+        monkeypatch.setattr(sess.actions_nexus, name, lambda *a, _n=name, _r=ret, **k: (seen.append((_n, a[2:])), _r)[1])
+    return seen
+
+
+def test_row_menu_enables_by_state(web):
+    from cogitator.updates import UPDATE
+
+    _, s, api, _ = web
+    items = {i["id"]: i for i in api.row_menu("alpha")["items"] if i}
+    assert items["link"]["enabled"] and not items["update"]["enabled"] and "changelog" not in items
+    _set_rows(s, _row("alpha", UPDATE))
+    items = {i["id"]: i for i in api.row_menu("alpha")["items"] if i}
+    assert items["update"]["enabled"] and items["changelog"]["enabled"] and items["open_page"]["enabled"]
+    assert not any("coming soon" in i["label"] for i in items.values())
+    json.dumps(items)
+
+
+def test_new_api_methods_validate_and_serialise(web, monkeypatch):
+    _, s, api, _ = web
+    _calls(monkeypatch, link_all=None)
+    for call in (api.update_all, api.link_all, api.framework_update):
+        r = call()
+        assert r["ok"] is True
+        json.dumps(r)
+    for bad in ("nope", None, 5, "../x"):
+        assert api.row_action(bad, "link")["ok"] is False and api.row_action(bad, "update")["ok"] is False
+        assert api.row_action(bad, "changelog")["ok"] is False
+    s.ctl.join(5)
+
+
+def test_link_parses_the_reference_and_links(web, monkeypatch):
+    win, s, api, _ = web
+    seen = _calls(monkeypatch, link_one_mod=None)
+    assert api.row_action("alpha", "link") == {"ok": True}
+    q = wait(lambda: asks(win))[0]
+    assert q["kind"] == "text"
+    api.answer(q["id"], "https://www.nexusmods.com/warhammer40kdarktide/mods/1234")
+    wait(lambda: seen)
+    assert seen[0] == ("link_one_mod", ("alpha", 1234))
+
+
+def test_link_refuses_an_internal_folder(web, monkeypatch):
+    win, s, api, _ = web
+    seen = _calls(monkeypatch, link_one_mod=None)
+    s.link("dmf")
+    assert not seen and not asks(win)
+    assert any("belongs to the loader" in p["text"] for p in wait(lambda: win.of("log")))
+
+
+def test_update_with_free_account_never_calls_premium(web, monkeypatch):
+    from cogitator.updates import UPDATE
+
+    _, s, api, _ = web
+    _set_rows(s, _row("alpha", UPDATE))
+    seen = _calls(monkeypatch, is_premium=False, manual_update=None, premium_update=actions.Outcome(), free_update_all_help=None)
+    api.row_action("alpha", "update")
+    wait(lambda: any(n == "manual_update" for n, _ in seen))
+    api.update_all()
+    wait(lambda: any(n == "free_update_all_help" for n, _ in seen))
+    assert not any(n == "premium_update" for n, _ in seen)
+
+
+def test_update_with_nothing_to_do_just_logs(web, monkeypatch):
+    win, s, api, _ = web
+    seen = _calls(monkeypatch, premium_update=actions.Outcome())
+    api.row_action("alpha", "update")
+    api.update_all()
+    assert not seen and not asks(win)
+    assert any("nothing to update" in p["text"] for p in wait(lambda: win.of("log")))
+
+
+def test_changelog_is_shown_as_a_notice(web, monkeypatch):
+    from cogitator.actions_nexus import Changelog
+
+    win, s, api, _ = web
+    _set_rows(s, _row("alpha"))
+    _calls(monkeypatch, changelog_for=Changelog(True, [("2.0  fixed things", ""), ("1.0  first", "")]))
+    api.row_action("alpha", "changelog")
+    q = wait(lambda: asks(win))[0]
+    assert q["kind"] == "notice" and q["title"] == "alpha changelog" and q["body"] == "2.0  fixed things\n1.0  first"
+    json.dumps(q)
