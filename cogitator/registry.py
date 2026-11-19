@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import logging
+import threading
 import time
 from pathlib import Path
 
@@ -37,6 +38,7 @@ class Registry:
     def __init__(self, path: Path | None = None):
         self.path = Path(path) if path else config_dir() / "registry.json"
         self.data = empty()
+        self._lock = threading.RLock()  # UI thread and workers share one Registry: serialise mutation + save
 
     @classmethod
     def load(cls, path: Path | None = None) -> "Registry":
@@ -60,6 +62,10 @@ class Registry:
         return r
 
     def save(self) -> None:
+        with self._lock:
+            self._save_locked()
+
+    def _save_locked(self) -> None:
         for attempt in range(5):
             try:
                 text = json.dumps(self.data, indent=2, sort_keys=True)
@@ -108,15 +114,17 @@ class Registry:
 
     def set_mod(self, folder: str, save: bool = True, **fields) -> dict:
         """Merge `fields` into the record for `folder` (creating it)."""
-        rec = self.data["mods"].setdefault(folder, {})
-        rec.update(fields)
-        if save:
-            self.save()
-        return rec
+        with self._lock:
+            rec = self.data["mods"].setdefault(folder, {})
+            rec.update(fields)
+            if save:
+                self.save()
+            return rec
 
     def forget_mod(self, folder: str) -> None:
-        if self.data["mods"].pop(folder, None) is not None:
-            self.save()
+        with self._lock:
+            if self.data["mods"].pop(folder, None) is not None:
+                self.save()
 
 
 def check_data_versions() -> None:

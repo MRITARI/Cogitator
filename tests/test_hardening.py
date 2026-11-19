@@ -259,3 +259,35 @@ def test_replace_dir_refuses_a_destination_that_is_not_a_child_of_mods(tmp_path)
         with pytest.raises(ValueError):
             tx.replace_dir(src, bad)
     assert (tmp_path / "mods" / "keep.txt").read_text() == "k"
+
+
+def test_registry_set_mod_is_safe_from_two_threads(tmp_path, monkeypatch):
+    import json
+    import threading
+    import time
+
+    from cogitator import registry as regmod
+    from cogitator.registry import Registry
+
+    writing, overlaps, written = [], [], []
+
+    def slow_write(path, text, *a, **k):  # stands in for the disk: two writers at once, or a stale snapshot landing last, is a bug
+        writing.append(1)
+        if len(writing) > 1:
+            overlaps.append(1)
+        time.sleep(0.0005)
+        written.append(text)
+        writing.pop()
+
+    monkeypatch.setattr(regmod, "atomic_write_text", slow_write)
+    reg = Registry(tmp_path / "registry.json")
+
+    def hammer(prefix):
+        for i in range(60):
+            reg.set_mod(f"{prefix}{i}", note=str(i))
+
+    ts = [threading.Thread(target=hammer, args=(p,)) for p in ("a", "b")]
+    [t.start() for t in ts]
+    [t.join() for t in ts]
+    assert not overlaps
+    assert len(json.loads(written[-1])["mods"]) == 120 == len(reg.data["mods"])  # the last save holds every update

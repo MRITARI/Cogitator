@@ -193,7 +193,8 @@ class CogitatorApp(SelfUpdateMixin, TableMixin, FrameworkMixin, ProfileMixin, Wo
         self.fw_updates: list[FrameworkUpdate] = []
         self.checking = False
         self.last_bundle: CheckBundle | None = None
-        self._lock = threading.RLock()  # serialises registry mutation between workers; the UI thread never takes it
+        self._lock = threading.RLock()  # serialises multi-step registry work between workers (the UI thread never takes it); single set_mod/save calls are
+        # also safe from any thread because Registry has its own lock
         self._instance_lock: InstanceLock | None = None
         self._exiting = False
         self._spin = 0
