@@ -220,20 +220,24 @@ def watch_download(ctx: Ctx, ui: Ui, mod_id: int, latest: dict, label: str) -> P
 
 
 def manual_update(ctx: Ctx, ui: Ui, folder: str, after: Callable[[Outcome], None]) -> None:
+    """Free account: open the mod's files page and return. The page's Mod Manager Download button sends an nxm link that
+    Cogitator picks up and installs, so nothing waits for a download here."""
     rec = ctx.registry.mod(folder) or {}
-    latest = rec.get("latest") or {}
-    if not rec.get("nexus_id") or not latest:
+    if not rec.get("nexus_id") or not rec.get("latest"):
         ui.log(f"{folder}: not linked or not checked yet.", WARN)
         return
-    found = watch_download(ctx, ui, rec["nexus_id"], latest, folder)
-    if found and ui.confirm(f"Import {found.name}?", f"Update {folder} from the file you just downloaded."):
-        import_file(ctx, ui, str(found), rec["nexus_id"], after)
+    ui.log(f"Opened {_open(ctx, rec['nexus_id'])} for {folder}. Press Mod Manager Download there; Cogitator installs it.", INFO)
 
 
-def free_update_all_help(ui: Ui, urows: dict[str, ModRow], targets: list[str]) -> None:
-    ui.log("Free account: download each file from its page, then import it.", WARN)
-    for f in targets:
-        ui.log(f"  {f}: {mod_page_url(urows[f].nexus_id)}")
+def free_update_all_help(ctx: Ctx, ui: Ui, urows: dict[str, ModRow], targets: list[str]) -> None:
+    """Free account: open every outdated mod's files page (one after another, without waiting for the downloads)."""
+    ui.log(f"Free account: opening {len(targets)} page(s). Press Mod Manager Download on each; Cogitator installs them as they arrive.", INFO)
+    for i, f in enumerate(targets):
+        if ctx.cancelled():
+            break
+        if i:
+            time.sleep(0.7)
+        ui.log(f"  {f}: {_open(ctx, urows[f].nexus_id)}")
 
 
 # ---------------------------------------------------------------- frameworks
