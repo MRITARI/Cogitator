@@ -219,6 +219,22 @@ def watch_download(ctx: Ctx, ui: Ui, mod_id: int, latest: dict, label: str) -> P
     return found
 
 
+def _nxm_ready(ui: Ui) -> bool:
+    """True when Cogitator is the nxm:// handler; otherwise offer to make it one (the old handler is remembered)."""
+    try:
+        if nxm.is_ours(nxm.read_handler()):
+            return True
+        if ui.confirm("Let Cogitator install Mod Manager Download links?",
+                      "Cogitator is not set as the handler for Nexus 'Mod Manager Download' buttons, so those buttons would not reach it.\n"
+                      "Choosing OK makes Cogitator the handler (your previous one, e.g. Vortex, is remembered and can be restored).",
+                      default_yes=True):
+            ui.log(nxm.register(), OK)
+            return True
+    except OSError as e:
+        ui.log(f"Could not set the link handler: {e}", WARN)
+    return False
+
+
 def manual_update(ctx: Ctx, ui: Ui, folder: str, after: Callable[[Outcome], None]) -> None:
     """Free account: open the mod's files page and return. The page's Mod Manager Download button sends an nxm link that
     Cogitator picks up and installs, so nothing waits for a download here."""
@@ -226,12 +242,17 @@ def manual_update(ctx: Ctx, ui: Ui, folder: str, after: Callable[[Outcome], None
     if not rec.get("nexus_id") or not rec.get("latest"):
         ui.log(f"{folder}: not linked or not checked yet.", WARN)
         return
-    ui.log(f"Opened {_open(ctx, rec['nexus_id'])} for {folder}. Press Mod Manager Download there; Cogitator installs it.", INFO)
+    ready = _nxm_ready(ui)
+    ui.log(f"Opened {_open(ctx, rec['nexus_id'])} for {folder}. " + (
+        "Press Mod Manager Download there; Cogitator installs it." if ready else "Download the file, then use Import to install it."), INFO)
 
 
 def free_update_all_help(ctx: Ctx, ui: Ui, urows: dict[str, ModRow], targets: list[str]) -> None:
     """Free account: open every outdated mod's files page (one after another, without waiting for the downloads)."""
-    ui.log(f"Free account: opening {len(targets)} page(s). Press Mod Manager Download on each; Cogitator installs them as they arrive.", INFO)
+    ready = _nxm_ready(ui)
+    ui.log(f"Free account: opening {len(targets)} page(s). " + (
+        "Press Mod Manager Download on each; Cogitator installs them as they arrive." if ready else
+        "Download each file, then use Import to install it."), INFO)
     for i, f in enumerate(targets):
         if ctx.cancelled():
             break
@@ -310,18 +331,13 @@ def nxm_install(ctx: Ctx, ui: Ui, path, link, after: Callable[[Outcome], None]) 
             except NexusError as e:
                 ui.log(f"Nexus link: {e}", ERR)
                 return
-            what = f"{name}\n{f.file_name or f.name} (v{f.version})" if f else f"{name} (file {link.file_id})"
-            if not ui.confirm("Install from Nexus?", what + "\n\nThis came from the website's Mod Manager Download button. "
-                              "Only install mods you trust.", default_yes=False):
-                ui.log("Nexus link cancelled.", WARN)
-                return
-            ui.log(f"Downloading {name}...", DIM)
+            ui.log(f"Mod Manager Download: installing {name}" + (f" (v{f.version})" if f else "") + "...", DIM)
             try:
                 zp, _ = nxm.download(link, nx, work)
             except (nxm.NxmError, NexusError, ModImportError, OSError) as e:
                 ui.log(f"Download failed: {e}", ERR)
                 return
-        import_file(ctx, ui, str(zp), link.mod_id, after)
+        import_file(ctx, ui, str(zp), link.mod_id, after, quiet=True)
     finally:
         nxm.done(path)
         shutil.rmtree(work, ignore_errors=True)

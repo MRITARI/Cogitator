@@ -141,6 +141,8 @@ def test_manual_update_opens_the_page_and_does_not_wait(tmp_path, nx, monkeypatc
     assert "not linked" in ui.text and not opened
     ctx.registry.set_mod("alpha", nexus_id=7, latest={"file_name": "m-2.zip", "file_id": 2, "version": "2.0"})
     monkeypatch.setattr(actions_nexus, "wait_for_download", lambda *a, **k: pytest.fail("must not wait for a download"))
+    monkeypatch.setattr(actions_nexus.nxm, "read_handler", lambda: "ours")
+    monkeypatch.setattr(actions_nexus.nxm, "is_ours", lambda c: True)
     ui = FakeUi()
     actions_nexus.manual_update(ctx, ui, "alpha", lambda o: None)
     assert opened and "mods/7" in opened[0] and "Mod Manager Download" in ui.text
@@ -151,6 +153,8 @@ def test_free_update_all_opens_every_page(tmp_path, nx, monkeypatch):
     opened = []
     ctx = make_ctx(tmp_path, open_url=opened.append)
     monkeypatch.setattr(actions_nexus.time, "sleep", lambda s: None)
+    monkeypatch.setattr(actions_nexus.nxm, "read_handler", lambda: "ours")
+    monkeypatch.setattr(actions_nexus.nxm, "is_ours", lambda c: True)
     rows = {"a": type("R", (), {"nexus_id": 1})(), "b": type("R", (), {"nexus_id": 2})()}
     actions_nexus.free_update_all_help(ctx, FakeUi(), rows, ["a", "b"])
     assert len(opened) == 2 and "mods/1" in opened[0] and "mods/2" in opened[1]
@@ -161,20 +165,21 @@ class Link:
     mod_id, file_id = 7, 2
 
 
-def test_nxm_cancel_still_cleans_up(tmp_path, nx, monkeypatch):
-    cleaned = []
+def test_nxm_installs_without_asking(tmp_path, nx, monkeypatch):
+    cleaned, imported = [], []
     monkeypatch.setattr(actions_nexus.nxm, "done", cleaned.append)
-    monkeypatch.setattr(actions_nexus, "import_file", lambda *a, **k: pytest.fail("declined: nothing may be imported"))
-    ui = FakeUi(confirms=[False])
+    monkeypatch.setattr(actions_nexus.nxm, "download", lambda link, nxc, work: (tmp_path / "x.zip", None))
+    monkeypatch.setattr(actions_nexus, "import_file", lambda c, u, raw, mid, after, **k: imported.append((raw, mid, k)))
+    ui = FakeUi()
     actions_nexus.nxm_install(make_ctx(tmp_path), ui, "q1.json", Link(), lambda o: None)
-    assert cleaned == ["q1.json"] and "cancelled" in ui.text
-    assert ui.asked[0][0] == "confirm" and "Alpha Mod" in ui.asked[0][2]
+    assert cleaned == ["q1.json"] and imported == [(str(tmp_path / "x.zip"), 7, {"quiet": True})]
+    assert not [a for a in ui.asked if a[0] == "confirm"]
 
 
 def test_nxm_download_import_and_error_paths(tmp_path, nx, monkeypatch):
     cleaned, imported = [], []
     monkeypatch.setattr(actions_nexus.nxm, "done", cleaned.append)
-    monkeypatch.setattr(actions_nexus, "import_file", lambda c, u, raw, mid, after: imported.append((raw, mid)))
+    monkeypatch.setattr(actions_nexus, "import_file", lambda c, u, raw, mid, after, **k: imported.append((raw, mid)))
     monkeypatch.setattr(actions_nexus.nxm, "download", lambda link, nxc, work: (tmp_path / "x.zip", None))
     actions_nexus.nxm_install(make_ctx(tmp_path), FakeUi(confirms=[True]), "q2", Link(), lambda o: None)
     assert imported == [(str(tmp_path / "x.zip"), 7)] and cleaned == ["q2"]
@@ -266,3 +271,18 @@ def test_changelog_lists_only_newer_versions(tmp_path, nx):
     nx.raise_on = {"changelogs"}
     assert actions_nexus.changelog_for(ctx.registry, "alpha").lines[0][0].startswith("Changelog:")
     assert not actions_nexus.changelog_for(ctx.registry, "unlinked").ok
+
+
+def test_free_update_offers_to_register_nxm_when_another_handler_owns_it(tmp_path, nx, monkeypatch):
+    ctx = make_ctx(tmp_path, open_url=lambda u: None)
+    ctx.registry.set_mod("alpha", nexus_id=7, latest={"file_name": "m.zip", "file_id": 2})
+    registered = []
+    monkeypatch.setattr(actions_nexus.nxm, "read_handler", lambda: "vortex")
+    monkeypatch.setattr(actions_nexus.nxm, "is_ours", lambda c: False)
+    monkeypatch.setattr(actions_nexus.nxm, "register", lambda: registered.append(1) or "Cogitator now handles nxm:// links.")
+    ui = FakeUi(confirms=[False])
+    actions_nexus.manual_update(ctx, ui, "alpha", lambda o: None)
+    assert not registered and "use Import" in ui.text
+    ui = FakeUi(confirms=[True])
+    actions_nexus.manual_update(ctx, ui, "alpha", lambda o: None)
+    assert registered == [1] and "Mod Manager Download there" in ui.text

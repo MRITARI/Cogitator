@@ -22,6 +22,12 @@ from test_tui import (HDR, B, REAL_NAME, SIZE, dialog_text, fx, game, log_text, 
 
 DML_UPDATE = FrameworkUpdate("dml", 19, UPDATE, "25.12.02", "26.06.24", 5781, "update", REAL_NAME, 156030)
 
+@pytest.fixture(autouse=True)
+def _nxm_handler_is_ours(monkeypatch):
+    """Free-account updates ask to register as the nxm handler; never touch the real registry or wait on that question."""
+    monkeypatch.setattr(actions_nexus, "_nxm_ready", lambda ui: True)
+
+
 
 @pytest.fixture(autouse=True)
 def accepted(tmp_path):

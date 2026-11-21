@@ -33,6 +33,12 @@ HDR = {"x-rl-daily-remaining": "19990", "x-rl-hourly-remaining": "1990"}
 SIZE = (140, 45)
 REAL_NAME = "Darktide Mod Loader 19 26.06.24 2026-06-24T06-07Z ndQ1md9gG.zip"
 
+@pytest.fixture(autouse=True)
+def _nxm_handler_is_ours(monkeypatch):
+    """Free-account updates ask to register as the nxm handler; never touch the real registry or wait on that question."""
+    monkeypatch.setattr(actions_nexus, "_nxm_ready", lambda ui: True)
+
+
 
 def fx(n):
     return json.loads((FX / n).read_text(encoding="utf-8"))
