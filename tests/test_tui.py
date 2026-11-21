@@ -588,25 +588,14 @@ async def test_import_missing_file_is_a_log_line(game):
         assert "No such file" in log_text(app)
 
 
-async def test_U_on_free_account_opens_page_and_offers_import(game, tmp_path, monkeypatch):
+async def test_U_on_free_account_opens_page_and_does_not_wait(game, monkeypatch):
     seed_links(game, cached=True)
     reg = Registry.load()
     reg.data["updates"]["premium"] = False
     reg.save()
     opened = []
-    dl = tmp_path / "Downloads"
-    dl.mkdir()
-    settings = Settings.load()
-    settings.downloads_dir = str(dl)
-    settings.save()
-
-    def fake_open(mod_id):
-        opened.append(mod_id)
-        mod_zip(dl / REAL_NAME, "alpha", "v2")  # the "browser download" lands
-        return f"https://www.nexusmods.com/{GAME}/mods/{mod_id}?tab=files"
-
-    monkeypatch.setattr(actions_nexus, "open_files_page", fake_open)
-    monkeypatch.setattr(actions_nexus, "wait_for_download", lambda *a, **k: dl / REAL_NAME)
+    monkeypatch.setattr(actions_nexus, "open_files_page", lambda mod_id: opened.append(mod_id) or "url")
+    monkeypatch.setattr(actions_nexus, "wait_for_download", lambda *a, **k: pytest.fail("must not wait for a download"))
     app = make_app(game)
     async with app.run_test(size=SIZE) as pilot:
         await settle(app, pilot)
@@ -615,17 +604,9 @@ async def test_U_on_free_account_opens_page_and_offers_import(game, tmp_path, mo
         await pilot.press("u")
         for _ in range(60):
             await pilot.pause(0.05)
-            if isinstance(app.screen, ConfirmScreen):
+            if opened:
                 break
-        assert opened == [19] and isinstance(app.screen, ConfirmScreen)
-        await pilot.press("y")  # import the downloaded file
-        for _ in range(60):
-            await pilot.pause(0.05)
-            if isinstance(app.screen, ConfirmScreen):
-                break
-        await pilot.press("y")  # install confirmation
-        await settle(app, pilot)
-        assert (game / "mods" / "alpha" / "alpha.lua").read_text() == "v2"
+        assert opened == [19] and not isinstance(app.screen, ConfirmScreen)
 
 
 async def test_U_nothing_to_update_and_ctrl_U_free_lists_links(game):
