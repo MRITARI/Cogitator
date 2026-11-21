@@ -181,6 +181,27 @@ def test_move_swaps_neighbours_and_keeps_comments_blank_lines_endings_and_intern
     assert _lo(tmp_path).read_bytes() == b"dmf\r\n-- my list\r\na\r\n\r\n--b extra\r\nc"  # dmf never moved
 
 
+def test_move_to_drops_a_mod_before_or_after_another_and_keeps_the_rest_in_place(tmp_path):
+    from cogitator.mods import move_mod_to
+
+    (tmp_path / "mods").mkdir()
+    _lo(tmp_path).write_bytes(b"dmf\r\n-- my list\r\na\r\n\r\nb\r\nc\r\nd")
+    order = lambda: [ln for ln in _lo(tmp_path).read_bytes().decode().split("\r\n") if ln and ln in "abcd"]
+    move_mod_to(tmp_path, "a", "c")  # a before c
+    assert order() == ["b", "a", "c", "d"]
+    move_mod_to(tmp_path, "a", "d", after=True)
+    assert order() == ["b", "c", "d", "a"]
+    move_mod_to(tmp_path, "d", "b")  # up past others
+    assert order() == ["d", "b", "c", "a"]
+    move_mod_to(tmp_path, "b", "b")
+    raw = _lo(tmp_path).read_bytes()
+    assert raw.startswith(b"dmf\r\n-- my list\r\n") and b"\r\n\r\n" in raw
+    with pytest.raises(ModError):
+        move_mod_to(tmp_path, "zzz", "a")
+    with pytest.raises(ModError):
+        move_mod_to(tmp_path, "a", "dmf")
+
+
 def test_move_at_the_ends_and_unlisted_mods(tmp_path):
     from cogitator.mods import move_mod
 

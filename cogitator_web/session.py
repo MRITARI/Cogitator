@@ -25,7 +25,7 @@ from cogitator.linking import folder_mtime
 from cogitator.loader import NEXUS_PAGES
 from cogitator.modinstall import open_files_page
 from cogitator.nexus import parse_nexus_ref
-from cogitator.mods import DISABLED, ENABLED, UNLISTED, ModError, mods_dir, move_mod, scan_mods, toggle_mod
+from cogitator.mods import DISABLED, ENABLED, UNLISTED, ModError, mods_dir, move_mod, move_mod_to, scan_mods, toggle_mod
 from cogitator.patcher import ON, PatcherError, banner as patch_banner, default_runner, patch_state
 from cogitator.patcher import toggle as toggle_mods
 from cogitator.procs import darktide_running
@@ -564,6 +564,22 @@ class Session:
             self.say(f"Could not write mod_load_order.txt: {e}", "bold red")
         with self._mlock:
             if self.model.sort_col is not None:  # the table shows the load order again, so the move is visible
+                self.model.set_sort(None)
+        self.refresh_all(keep=folder)
+
+    def move_to(self, folder: str, target: str, after: bool) -> None:
+        """Drag and drop: put `folder` before/after `target` in the load order."""
+        if not self.ready():
+            return
+        snapshots.auto(self.game_dir, "reorder", once=True, registry=self.registry)
+        try:
+            self.say(move_mod_to(self.game_dir, folder, target, after), "green")
+        except ModError as e:
+            self.say(str(e), "bold red")
+        except OSError as e:
+            self.say(f"Could not write mod_load_order.txt: {e}", "bold red")
+        with self._mlock:
+            if self.model.sort_col is not None:
                 self.model.set_sort(None)
         self.refresh_all(keep=folder)
 
