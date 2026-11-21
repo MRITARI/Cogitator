@@ -188,7 +188,7 @@ def fake_nexus(monkeypatch):
     monkeypatch.setattr("cogitator.actions_nexus.NexusClient", FakeNexus)
 
 
-async def test_a_queued_link_asks_then_downloads_and_imports(game, fake_nexus, monkeypatch, tmp_path):
+async def test_a_queued_link_downloads_and_imports_without_asking(game, fake_nexus, monkeypatch, tmp_path):
     got = {}
 
     def fake_download(link, nx, dest, client=None):
@@ -202,37 +202,20 @@ async def test_a_queued_link_asks_then_downloads_and_imports(game, fake_nexus, m
     app = make_app(game)
     imported = []
     async with app.run_test(size=SIZE) as pilot:
-        monkeypatch.setattr("cogitator.actions_nexus.import_file", lambda ctx, ui, raw, mod_id, after: imported.append((Path(raw).name, mod_id)))
+        monkeypatch.setattr("cogitator.actions_nexus.import_file",
+                            lambda ctx, ui, raw, mod_id, after, **k: imported.append((Path(raw).name, mod_id, k)))
         await settle(app, pilot)
         path = nxm.enqueue(URL)
         app._nxm_tick()
-        for _ in range(30):
+        for _ in range(60):
             await pilot.pause()
-            if isinstance(app.screen, ConfirmScreen):
+            if imported:
                 break
-        assert isinstance(app.screen, ConfirmScreen) and "Cool Mod" in dialog_text(app) and "Only install mods you trust" in dialog_text(app)
-        await pilot.press("y")
         await settle(app, pilot)
-        assert imported == [("Cool.zip", 19)] and got["link"].key == "k1"
+        assert not isinstance(app.screen, ConfirmScreen)
+        assert imported == [("Cool.zip", 19, {"quiet": True})] and got["link"].key == "k1"
         assert not path.exists() and app._nxm_busy is False  # the queue item is consumed, the work folder cleaned
         assert "k1" not in log_text(app)  # the key is never shown
-
-
-async def test_declining_a_link_downloads_nothing(game, fake_nexus, monkeypatch):
-    called = []
-    monkeypatch.setattr(nxm, "download", lambda *a, **k: called.append(1))
-    app = make_app(game)
-    async with app.run_test(size=SIZE) as pilot:
-        await settle(app, pilot)
-        path = nxm.enqueue(URL)
-        app._nxm_tick()
-        for _ in range(30):
-            await pilot.pause()
-            if isinstance(app.screen, ConfirmScreen):
-                break
-        await pilot.press("n")
-        await settle(app, pilot)
-        assert called == [] and not path.exists() and "cancelled" in log_text(app)
 
 
 async def test_a_link_without_an_api_key_explains(game, monkeypatch):
