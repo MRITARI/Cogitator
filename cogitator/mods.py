@@ -125,6 +125,33 @@ def move_mod(game_dir: Path, folder: str, delta: int, internal: frozenset[str] |
     return f"{folder}: moved {'down, after' if delta > 0 else 'up, before'} {neighbour}."
 
 
+def move_mod_to(game_dir: Path, folder: str, target: str, after: bool = False,
+                internal: frozenset[str] | set[str] | None = None) -> str:
+    """Drag and drop: put a listed mod right before (or, with after=True, right after) another listed mod. Only the mod
+    entries change places; comments, blank lines and the Mod Loader/Framework entries stay where they are. Raises ModError."""
+    internal = INTERNAL_FOLDERS if internal is None else internal
+    path = load_order_path(game_dir)
+    lo = LoadOrder.load(path)
+    seq = [i for i, ln in enumerate(lo.lines) if ln.name and ln.name not in internal]
+    mine = next((k for k, i in enumerate(seq) if lo.lines[i].name == folder), None)
+    dest = next((k for k, i in enumerate(seq) if lo.lines[i].name == target), None)
+    if mine is None or dest is None:
+        raise ModError(f"{folder if mine is None else target} is not in the load order yet. Turn it on first.")
+    if folder == target:
+        return f"{folder}: stays where it is."
+    texts = [lo.lines[i].text for i in seq]
+    moved = texts.pop(mine)
+    if mine < dest:
+        dest -= 1  # the list shrank in front of the target
+    texts.insert(dest + (1 if after else 0), moved)
+    if texts == [lo.lines[i].text for i in seq]:
+        return f"{folder}: already there."
+    for i, t in zip(seq, texts):
+        lo.lines[i].text = t
+    lo.save(path)
+    return f"{folder}: moved {'after' if after else 'before'} {target}."
+
+
 def link_dev_mod(game_dir: Path, source: Path, name: str | None = None) -> str:
     """Make <game>/mods/<name> a link to a folder you develop in, and enable it. Returns the mod folder name."""
     source = Path(source).resolve()

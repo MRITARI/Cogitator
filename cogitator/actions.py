@@ -64,9 +64,10 @@ class Outcome:
 
 # ---------------------------------------------------------------- import (mod zips and DML/DMF zips)
 
-def import_file(ctx: Ctx, ui: Ui, raw: str, mod_id: int | None, after: Callable[[Outcome], None]) -> None:
+def import_file(ctx: Ctx, ui: Ui, raw: str, mod_id: int | None, after: Callable[[Outcome], None], *, quiet: bool = False) -> None:
     """Import one archive (or several, when `raw` holds more than one dropped path); `after` gets each file's Outcome.
-    ModImportError / LoaderError / OSError propagate to the caller (a worker wrapper logs them)."""
+    ModImportError / LoaderError / OSError propagate to the caller (a worker wrapper logs them).
+    quiet: the person already chose this exact file (Mod Manager Download), so no install confirmation and the best file guess is used."""
     raw = raw.strip()
     if not raw:
         p = newest_download(ctx.downloads_dir())
@@ -78,7 +79,7 @@ def import_file(ctx: Ctx, ui: Ui, raw: str, mod_id: int | None, after: Callable[
         found = dropped_paths(raw)
         if len(found) > 1:
             for f in found:
-                import_file(ctx, ui, str(f), None, after)
+                import_file(ctx, ui, str(f), None, after, quiet=quiet)
             return
         p = found[0] if found else Path(raw.strip('"'))
     if not p.is_file():
@@ -119,13 +120,14 @@ def import_file(ctx: Ctx, ui: Ui, raw: str, mod_id: int | None, after: Callable[
             if mod_id is None:
                 ui.log(problem or "Bad reference.", ERR)
                 return
-    if not ui.confirm(f"Install {', '.join(info.folders)}?", f"From {p.name}\nInto {ctx.game_dir / 'mods'}"):
+    if not quiet and not ui.confirm(f"Install {', '.join(info.folders)}?", f"From {p.name}\nInto {ctx.game_dir / 'mods'}"):
         return
+    pick = (lambda q, o: 0 if q.startswith("No exact file name match") else ui.choose(q, o)) if quiet else (lambda q, o: ui.choose(q, o))
     key = get_api_key()
     nx = NexusClient(key) if key else None
     try:
         with ctx.lock:
-            r = import_archive(p, ctx.game_dir, ctx.registry, nx, mod_id=mod_id, choose=lambda q, o: ui.choose(q, o),
+            r = import_archive(p, ctx.game_dir, ctx.registry, nx, mod_id=mod_id, choose=pick,
                                is_running=ctx.game_running, max_bytes=limits[0], max_files=limits[1])
     finally:
         if nx:

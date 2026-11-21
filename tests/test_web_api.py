@@ -126,6 +126,15 @@ def test_state_payload_and_row_updates(web):
     assert wait(lambda: [p for p in win.of("row") if p["row"]["folder"] == "gamma"])[-1]["row"]["en"] == "on"
 
 
+def test_drag_and_drop_move_to(web):
+    win, s, api, _ = web
+    assert api.move_to("alpha", "beta", "yes")["ok"] is False and api.move_to("nope", "beta", True)["ok"] is False
+    n = len(win.of("state"))
+    assert api.move_to("alpha", "beta", True)["ok"] is True
+    st = wait(lambda: win.of("state")[n:])[-1]
+    assert [r["folder"] for r in st["rows"]][:2] == ["beta", "alpha"]
+
+
 def test_move_sort_filter_and_marks(web):
     win, s, api, _ = web
     n = len(win.of("state"))
