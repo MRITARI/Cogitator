@@ -117,8 +117,42 @@ export function mount(container, ctx) {
     const e = { tr, sig: "", sw, name, installed, latest, status };
     tr.addEventListener("click", () => select(row.folder, false));
     tr.addEventListener("dblclick", (ev) => { if (!ev.target.closest(".switch")) call("toggle", row.folder); });
+    wireDrag(tr, row.folder);
     tr.addEventListener("contextmenu", (ev) => { ev.preventDefault(); select(row.folder, true); openMenu(row.folder, ev.clientX, ev.clientY); });
     return e;
+  }
+
+  // ---- drag a mod to a new place in the load order (a listed mod can be dropped before or after another listed mod)
+  let dragging = null;
+  const listed = (f) => { const r = state.rows.get(f); return !!r && r.present && r.en !== "unlisted"; };
+  const clearDrop = () => { for (const { tr } of entries.values()) tr.classList.remove("drop-before", "drop-after", "dragging"); };
+  function wireDrag(tr, folder) {
+    tr.addEventListener("dragstart", (ev) => {
+      if (!listed(folder)) { ev.preventDefault(); return; }
+      dragging = folder;
+      ev.dataTransfer.effectAllowed = "move";
+      ev.dataTransfer.setData("text/plain", folder);
+      tr.classList.add("dragging");
+    });
+    tr.addEventListener("dragend", () => { dragging = null; clearDrop(); });
+    tr.addEventListener("dragover", (ev) => {
+      if (!dragging || dragging === folder || !listed(folder)) return;
+      ev.preventDefault();
+      ev.dataTransfer.dropEffect = "move";
+      const r = tr.getBoundingClientRect(), after = ev.clientY > r.top + r.height / 2;
+      tr.classList.toggle("drop-after", after);
+      tr.classList.toggle("drop-before", !after);
+    });
+    tr.addEventListener("dragleave", () => tr.classList.remove("drop-before", "drop-after"));
+    tr.addEventListener("drop", (ev) => {
+      if (!dragging || dragging === folder || !listed(folder)) return;
+      ev.preventDefault();
+      const r = tr.getBoundingClientRect(), after = ev.clientY > r.top + r.height / 2, f = dragging;
+      dragging = null;
+      clearDrop();
+      select(f, false);
+      call("move_to", f, folder, after);
+    });
   }
 
   function patchRow(e, row) {
@@ -129,6 +163,7 @@ export function mount(container, ctx) {
     setSwitch(e.sw, row.en === "on", `${row.folder}: ${row.en === "on" ? "on" : row.en === "off" ? "off" : "not in load order"}`);
     e.sw.classList.toggle("is-unlisted", row.en === "unlisted");
     e.sw.disabled = !row.present;
+    e.tr.draggable = row.present && row.en !== "unlisted";
     e.name.replaceChildren(h("div", { class: "in" }, h("span", { class: "t", text: row.folder, title: row.folder }), ...chips(row), row.suffix ? h("span", { class: "muted", text: row.suffix }) : null));
     e.installed.textContent = row.installed;
     e.latest.textContent = row.latest;

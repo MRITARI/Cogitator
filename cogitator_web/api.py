@@ -115,6 +115,12 @@ class Api:
         self._s.move(self._mod(folder, present=True), delta)
 
     @_call
+    def move_to(self, folder, target, after):
+        if not isinstance(after, bool):
+            raise _Reject("after must be true or false.")
+        self._s.move_to(self._mod(folder, present=True), self._mod(target, present=True), after)
+
+    @_call
     def mark(self, folder):
         self._s.mark(self._mod(folder))
 
