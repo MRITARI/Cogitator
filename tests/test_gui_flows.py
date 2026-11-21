@@ -133,33 +133,27 @@ def test_premium_update_reports_each_mod_and_continues_after_an_error(tmp_path, 
     assert "alpha: updated to 9." in ui.text and "bad: disk full" in ui.text
 
 
-def test_manual_update_asks_before_importing(tmp_path, nx, monkeypatch):
+def test_manual_update_opens_the_page_and_does_not_wait(tmp_path, nx, monkeypatch):
     opened = []
     ctx = make_ctx(tmp_path, open_url=opened.append)
+    ui = FakeUi()
+    actions_nexus.manual_update(ctx, ui, "alpha", lambda o: None)
+    assert "not linked" in ui.text and not opened
     ctx.registry.set_mod("alpha", nexus_id=7, latest={"file_name": "m-2.zip", "file_id": 2, "version": "2.0"})
-    zp = tmp_path / "m-2.zip"
-    zp.write_bytes(b"x")
-    imported = []
-    monkeypatch.setattr(actions_nexus, "wait_for_download", lambda *a, **k: zp)
-    monkeypatch.setattr(actions_nexus, "import_file", lambda c, u, raw, mid, after: imported.append((raw, mid)))
-    actions_nexus.manual_update(ctx, FakeUi(confirms=[False]), "alpha", lambda o: None)
-    assert imported == [] and opened and "mods/7" in opened[0]
-    actions_nexus.manual_update(ctx, FakeUi(confirms=[True]), "alpha", lambda o: None)
-    assert imported == [(str(zp), 7)]
-
-
-def test_manual_update_gives_up_quietly_when_nothing_arrives_or_not_linked(tmp_path, nx, monkeypatch):
-    ctx = make_ctx(tmp_path, open_url=lambda u: None)
+    monkeypatch.setattr(actions_nexus, "wait_for_download", lambda *a, **k: pytest.fail("must not wait for a download"))
     ui = FakeUi()
     actions_nexus.manual_update(ctx, ui, "alpha", lambda o: None)
-    assert "not linked" in ui.text
-    ctx.registry.set_mod("alpha", nexus_id=7, latest={"file_name": "m.zip", "file_id": 2})
-    seen = {}
-    monkeypatch.setattr(actions_nexus, "wait_for_download", lambda *a, **k: seen.update(k))
-    ui = FakeUi()
-    actions_nexus.manual_update(ctx, ui, "alpha", lambda o: None)
-    assert "No matching download" in ui.text and seen["cancelled"] is ctx.cancelled
+    assert opened and "mods/7" in opened[0] and "Mod Manager Download" in ui.text
     assert not [a for a in ui.asked if a[0] == "confirm"]
+
+
+def test_free_update_all_opens_every_page(tmp_path, nx, monkeypatch):
+    opened = []
+    ctx = make_ctx(tmp_path, open_url=opened.append)
+    monkeypatch.setattr(actions_nexus.time, "sleep", lambda s: None)
+    rows = {"a": type("R", (), {"nexus_id": 1})(), "b": type("R", (), {"nexus_id": 2})()}
+    actions_nexus.free_update_all_help(ctx, FakeUi(), rows, ["a", "b"])
+    assert len(opened) == 2 and "mods/1" in opened[0] and "mods/2" in opened[1]
 
 
 # ---------------------------------------------------------------- nxm

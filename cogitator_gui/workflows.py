@@ -85,7 +85,8 @@ class ModFlows:
             if self._modal_call(self.dlg.confirm, f"Download and install {len(targets)} update(s)?", "\n".join(targets)):
                 self._start_premium("update all", targets)
         else:
-            actions_nexus.free_update_all_help(self.ui, self.model.urows, targets)
+            ctx, ui = self.ctx(), self.ui
+            self.run_job("update all", "download", lambda: actions_nexus.free_update_all_help(ctx, ui, dict(self.model.urows), targets))
 
     def update_marked(self) -> None:
         """Bulk 'update them (Premium)' for the marked mods."""

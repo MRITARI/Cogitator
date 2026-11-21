@@ -742,7 +742,7 @@ class Session:
 
         def work() -> None:
             if not actions_nexus.is_premium(ctx):
-                actions_nexus.free_update_all_help(ui, urows, targets)
+                actions_nexus.free_update_all_help(ctx, ui, urows, targets)
             elif ui.confirm(f"Download and install {len(targets)} update(s)?", "\n".join(targets)):
                 self._premium_update(ctx, targets)
 
@@ -913,7 +913,10 @@ class Session:
 
         def work() -> None:
             if not actions_nexus.is_premium(ctx):
-                self.say("Free account: updates need a download for each mod. Right-click one and choose Update.", "yellow")
+                if todo:
+                    actions_nexus.free_update_all_help(ctx, ui, urows, todo)
+                else:
+                    self.say("None of the marked mods has an update available.", "yellow")
             elif not todo:
                 self.say("None of the marked mods has an update available.", "yellow")
             else:
