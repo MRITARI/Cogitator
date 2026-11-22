@@ -164,6 +164,11 @@ def test_text_contrast_on_every_surface(which):
     for bg in SURFACES:
         assert ratio(t["ring"], t[bg]) >= 3, f"{which}: focus ring on {bg}"
     assert ratio(t["knob-on"], t["primary"]) >= 3  # switch knob on its track (not text)
+    for bg in SURFACES:
+        assert ratio(t["accent"], t[bg]) >= 3, f"{which}: switch ON track on {bg}"
+        assert ratio(t["control-line"], t[bg]) >= 3, f"{which}: switch OFF outline on {bg}"
+        assert ratio(t["muted"], t[bg]) >= 3, f"{which}: switch OFF knob on {bg}"
+    assert ratio(t["accent-fg"], t["accent"]) >= 3  # switch ON knob on its track
 
 
 def test_light_variants_are_identical_and_complete():
@@ -293,3 +298,11 @@ def test_selection_hooks_and_no_row_selection():
     assert "draggable" in mods and "grip" in mods
     for gone in ('call("bulk_menu")', 'call("mark"', "Bulk"):
         assert gone not in mods
+
+
+def test_switch_shape():
+    css = (UI / "app.css").read_text(encoding="utf-8")
+    assert re.search(r"\.switch \{[^}]*width: 40px; height: 28px", css)
+    assert re.search(r"\.switch::before \{[^}]*width: 32px; height: 16px", css)
+    assert re.search(r"\.switch::after \{[^}]*width: 10px; height: 10px", css)
+    assert re.search(r'\.switch\[aria-checked="true"\]::after \{[^}]*translateX\(16px\)', css)

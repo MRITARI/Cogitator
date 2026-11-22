@@ -14,6 +14,7 @@
   --muted: #a3a3a3;
   --primary: #e5e5e5;     /* primary button, switch track on (measured) */
   --primary-fg: #0a0a0a;
+  --control-line: #8a8a8a; /* switch outline when off: >= 3:1 on every surface (--border is a hairline, too faint) */
   --knob: #d4d4d4;
   --knob-on: #0a0a0a;
   --destructive: #ef4444; /* fills and dots */
@@ -70,6 +71,7 @@
     --muted: #626262;
     --primary: #171717;
     --primary-fg: #fafafa;
+    --control-line: #767676;
     --knob: #8a8a8a;
     --knob-on: #fafafa;
     --destructive: #b91c1c;
@@ -107,6 +109,7 @@
   --muted: #626262;
   --primary: #171717;
   --primary-fg: #fafafa;
+  --control-line: #767676;
   --knob: #8a8a8a;
   --knob-on: #fafafa;
   --destructive: #b91c1c;
