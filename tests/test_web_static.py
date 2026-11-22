@@ -243,7 +243,7 @@ def test_no_rounded_corners_anywhere():
     for name in ("app.css", "setup.css", "uninstall.css"):
         css = (UI / name).read_text(encoding="utf-8")
         for v in re.findall(r"border-radius:\s*([^;}]+)", css):
-            assert v.strip() in ("0", "var(--radius-pill)", "var(--radius-card)", "var(--radius-tile)", "var(--radius-menu)"), f"{name}: {v}"
+            assert v.strip() in ("0", "var(--radius-pill)", "var(--radius-card)", "var(--radius-tile)", "var(--radius-menu)", "var(--radius-round)"), f"{name}: {v}"
     assert "border-radius" not in "".join(p.read_text(encoding="utf-8") for p in JS) and "borderRadius" not in "".join(p.read_text(encoding="utf-8") for p in JS)
 
 

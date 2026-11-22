@@ -118,10 +118,10 @@ select.input option { background: var(--card); color: var(--fg); }
 .search .icon { position: absolute; left: 14px; top: 10px; color: var(--muted); pointer-events: none; }
 .search .input { padding-left: 38px; }
 
-/* ---------- switch: 40x28 click target, 32x16 square track (::before), 10px square knob (::after) */
+/* ---------- switch: 40x28 click target, 32x16 round track (::before), 10px round knob (::after) */
 .switch { position: relative; width: 40px; height: 28px; flex: none; border: 0; background: none; cursor: pointer; padding: 0; }
-.switch::before { content: ""; position: absolute; left: 4px; top: 6px; width: 32px; height: 16px; box-sizing: border-box; border: 1px solid var(--control-line); background: transparent; transition: background var(--t-med), border-color var(--t-med); }
-.switch::after { content: ""; position: absolute; left: 7px; top: 9px; width: 10px; height: 10px; background: var(--muted); transition: transform var(--t-med), background var(--t-med); }
+.switch::before { content: ""; position: absolute; left: 4px; top: 6px; width: 32px; height: 16px; box-sizing: border-box; border: 1px solid var(--control-line); border-radius: var(--radius-round); background: transparent; transition: background var(--t-med), border-color var(--t-med); }
+.switch::after { content: ""; position: absolute; left: 7px; top: 9px; width: 10px; height: 10px; border-radius: var(--radius-round); background: var(--muted); transition: transform var(--t-med), background var(--t-med); }
 .switch[aria-checked="true"]::before { background: var(--accent); border-color: var(--accent); }
 .switch[aria-checked="true"]::after { transform: translateX(16px); background: var(--accent-fg); }
 .switch:disabled { opacity: 0.5; cursor: not-allowed; }

@@ -41,6 +41,7 @@
   --radius-card: 0;
   --radius-tile: 0;
   --radius-menu: 0;
+  --radius-round: 999px;  /* switches only; everything else stays square */
   --sp-1: 4px;
   --sp-2: 8px;
   --sp-3: 12px;
