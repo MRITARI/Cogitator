@@ -1,4 +1,4 @@
-"""The main window's table rules, with no display: filter, sort, marks, row text and colours, drag steps, style mapping."""
+"""The main window's table rules, with no display: filter, sort, row text and colours, drag steps, style mapping."""
 from cogitator import actions
 from cogitator.mods import DISABLED, ENABLED, UNLISTED, Mod
 from cogitator.updates import FAILED, NOT_LINKED, PROBABLY_OUTDATED, UNKNOWN, UP_TO_DATE, UPDATE, ModRow
@@ -74,14 +74,9 @@ def test_filter_matches_name_tags_note_fav_pinned_like_the_tui():
     assert folders(m, keep="gamma") == ["gamma"]  # the selected row survives a filter that hides it
 
 
-def test_marks_favourites_and_pins_show_in_the_name_cell():
+def test_favourites_and_pins_show_in_the_name_cell():
     m = model({"alpha": {"fav": True, "pinned_version": "1.0"}})
-    assert m.toggle_mark("alpha") is True
-    assert m.rows()[0].cells[1] == "+ * alpha  [pinned 1.0]"
-    assert m.toggle_mark("alpha") is False
-    m.toggle_mark("Beta")
-    m.set_mods([Mod("alpha", ENABLED)])  # a removed mod loses its mark
-    assert m.marked == set()
+    assert m.rows()[0].cells[1] == "* alpha  [pinned 1.0]"
 
 
 def test_sort_by_header_toggles_direction_and_cycle_matches_the_tui():
@@ -109,9 +104,8 @@ def test_hint_and_summary():
     assert m.hint("alpha").endswith("pinned to 1  |  tags: ui  |  note: n")
     assert "folder is missing" in m.hint("ghost")
     m.set_rows([row("alpha", UPDATE, "1", "2")])
-    m.toggle_mark("alpha")
     m.filter_text = "alpha"
-    assert m.summary() == "5 mod(s), 1 shown, 1 update(s), 1 marked"
+    assert m.summary() == "5 mod(s), 1 shown, 1 update(s)"
 
 
 def test_drag_steps_count_load_order_positions():

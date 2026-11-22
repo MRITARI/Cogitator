@@ -26,14 +26,13 @@ class RowView:
 
 
 class ModListModel:
-    """The mod table: scanned mods, cached update rows, marks, filter and sort. `meta` returns a mod's registry record."""
+    """The mod table: scanned mods, cached update rows, filter and sort. `meta` returns a mod's registry record."""
 
     def __init__(self, meta: Callable[[str], dict] = lambda f: {}, mtime: Callable[[str], float | None] = lambda f: None):
         self.meta = meta
         self.mtime = mtime  # folder -> last-modified time, for the "Installed" column of mods Cogitator knows nothing about
         self.mods: list[Mod] = []
         self.urows: dict[str, ModRow] = {}
-        self.marked: set[str] = set()
         self.filter_text = ""
         self.sort_col: str | None = None  # None = load order
         self.sort_desc = False
@@ -41,8 +40,6 @@ class ModListModel:
     # ---- data in
     def set_mods(self, mods: Iterable[Mod]) -> None:
         self.mods = list(mods)
-        present = {m.folder for m in self.mods}
-        self.marked &= present
 
     def set_rows(self, rows: Iterable[ModRow]) -> None:
         self.urows = {r.folder: r for r in rows}
@@ -53,13 +50,9 @@ class ModListModel:
     def mod(self, folder: str | None) -> Mod | None:
         return next((m for m in self.mods if m.folder == folder), None)
 
-    # ---- filter, marks, sort
+    # ---- filter, sort
     def visible(self, m: Mod) -> bool:
         return actions.mod_visible(m.folder, self.meta(m.folder), self.filter_text)
-
-    def toggle_mark(self, folder: str) -> bool:
-        self.marked.symmetric_difference_update({folder})
-        return folder in self.marked
 
     def set_sort(self, col: str | None) -> None:
         """A header click: the same column again flips the direction; a new column sorts ascending; None = load order."""
@@ -80,7 +73,7 @@ class ModListModel:
     # ---- row text
     def name_cell(self, m: Mod) -> str:
         meta = self.meta(m.folder)
-        prefix = ("+ " if m.folder in self.marked else "") + ("* " if meta.get("fav") else "")
+        prefix = "* " if meta.get("fav") else ""
         suffix = mod_suffix(m)
         pinned = f"  [pinned {meta['pinned_version']}]" if meta.get("pinned_version") else ""
         return prefix + m.folder + pinned + (suffix[0] if suffix else "")
@@ -132,8 +125,6 @@ class ModListModel:
             bits.append(f"{shown} shown")
         if n_upd:
             bits.append(f"{n_upd} update(s)")
-        if self.marked:
-            bits.append(f"{len(self.marked)} marked")
         return ", ".join(bits)
 
     def listed(self) -> list[str]:

@@ -1,9 +1,9 @@
 """Everything the page can do, without a window: state (game folder, registry, mod table model) and the flows.
 
 It reuses the engine and the shared pieces: `cogitator.actions` (flows), `cogitator.viewtext` (wording), `cogitator_web.viewmodel`
-(filter / sort / marks) and `cogitator_web.controller` (workers, questions). It talks to the page only through `Bridge.emit`.
+(filter / sort) and `cogitator_web.controller` (workers, questions). It talks to the page only through `Bridge.emit`.
 
-Threading: short operations (toggle, move, mark...) run on the calling API thread under `_mlock`. Anything that waits (network,
+Threading: short operations (toggle, move...) run on the calling API thread under `_mlock`. Anything that waits (network,
 zips, questions) runs on a Controller worker. Callbacks scheduled with `ctl.ui` run on the pusher thread and must stay short and
 never take `self.lock` (the flow lock a worker may hold for a long time)."""
 from __future__ import annotations
@@ -49,21 +49,21 @@ GUI_BACKGROUNDS = ("default", "plain", "custom")
 # boolean / choice settings the page may change: name -> allowed values (bool = a switch)
 SETTING_CHOICES = {"gui_theme": GUI_THEMES, "auto_repair": AUTO_REPAIR, "gui_background": GUI_BACKGROUNDS}
 SETTING_BOOLS = ("check_updates_on_start", "update_consent")
-ROW_ACTIONS = ("toggle", "up", "down", "open_page", "open_folder", "mark", "fav", "note", "pin", "rollback", "remove",
+ROW_ACTIONS = ("toggle", "up", "down", "open_page", "open_folder", "fav", "note", "pin", "rollback", "remove",
                "link", "update", "changelog")
 GLOBAL_ACTIONS = ("update_all", "link_all", "framework_update")
-BULK_IDS = ("enable", "disable", "update", "tag", "remove", "clear")
+BULK_IDS = ("enable", "disable", "update", "remove")
 HELP_BODY = (
     "Space or double-click   turn the selected mod on or off\n"
     "Ctrl+Up / Ctrl+Down     move it in the load order\n"
     "Right-click a mod       every action for that mod\n"
+    "Click, Ctrl+click, Shift+click, a dragged box or Ctrl+A select several mods; the bar under the list acts on all of them\n"
     "R or F5                 check Nexus for updates      I or Ctrl+I   import zip(s)\n"
     "G or Ctrl+G             launch Darktide              D or Ctrl+D   doctor (diagnose problems)\n"
     "T or Ctrl+T             all mods on / off (the game patch)\n"
-    "K or Ctrl+K             Nexus API key (Settings)     X   mark a mod\n"
+    "K or Ctrl+K             Nexus API key (Settings)\n"
     "N   tags and note       *   favourite                / or Ctrl+F   filter the list\n"
     "Ctrl+U   update all     M   link all mods to Nexus     F   update Mod Loader / Framework\n"
-    "B   bulk actions on the marked mods\n"
     "F3  search Nexus Mods (the Tools page also has doctor, find a crashing mod, crash-log leads)\n"
     "O   sort (cycle)        F1  this help\n"
     "\n"
@@ -159,7 +159,7 @@ class Session:
                     "present": m.present, "suffix": (suffix[0].strip() if suffix else ""), "installed": installed,
                     "latest": (r.latest if r else None) or "-", "status": status, "tone": TONE.get(self.model.status_tag(m), ""),
                     "kind": status_kind(r, m),
-                    "marked": folder in self.model.marked, "fav": bool(meta.get("fav")), "pinned": meta.get("pinned_version") or "",
+                    "fav": bool(meta.get("fav")), "pinned": meta.get("pinned_version") or "",
                     "note": bool(meta.get("notes")), "rollback": bool((self.registry.mod(folder) or {}).get("previous")) if self.registry else False, "tags": list(meta.get("tags") or []), "linked": bool(r is not None and r.nexus_id),
                     "hint": self.model.hint(folder)}
 
@@ -590,15 +590,6 @@ class Session:
                 self.model.set_sort(None)
         self.refresh_all(keep=folder)
 
-    def mark(self, folder: str) -> None:
-        if not self.ready():
-            return
-        with self._mlock:
-            self.model.toggle_mark(folder)
-            n = len(self.model.marked)
-        self.emit_row(folder)
-        self.say(f"{n} mod(s) marked.", "dim")
-
     def fav(self, folder: str) -> None:
         if self.ready():
             self.say(actions.toggle_fav(self.registry, folder), "green")
@@ -692,7 +683,6 @@ class Session:
         """(label, id, enabled) entries of the right-click menu: the ones the window offers."""
         with self._mlock:
             m, row = self.model.mod(folder), self.model.urows.get(folder)
-            marked = folder in self.model.marked
         if m is None or not self.registry:
             return []
         meta = actions.mod_meta(self.registry, folder)
@@ -711,7 +701,6 @@ class Session:
             item("Open Nexus page" if linked else "Link to Nexus...", "open_page" if linked else "link", m.present if linked else can_link),
             *([item("Set installed version...", "link", can_link and actions_nexus.link_needs_version_only(row))] if linked else []),
             item("Open folder in Explorer" if sys.platform == "win32" else "Open folder", "open_folder", m.present), None,
-            item("Unmark" if marked else "Mark for bulk actions", "mark"),
             item("Remove favourite" if meta.get("fav") else "Favourite", "fav"), item("Tags and note...", "note")]
         if linked:
             items += [item("Show changelog", "changelog", True),
@@ -731,8 +720,6 @@ class Session:
             self.open_page(folder)
         elif aid == "open_folder":
             self.open_folder(folder)
-        elif aid == "mark":
-            self.mark(folder)
         elif aid == "fav":
             self.fav(folder)
         elif aid == "pin":
@@ -944,66 +931,41 @@ class Session:
     def snapshot_prune(self, keep: int) -> None:
         self._lines(actions_setup.prune_snapshots(keep))
 
-    def bulk_menu(self) -> list[dict]:
-        with self._mlock:
-            n = len(self.model.marked)
-        return [{"label": lab, "id": BULK_IDS[i], "enabled": n > 0}
-                for i, lab in enumerate(actions_setup.bulk_options(n))]
-
-    def bulk(self, action: str) -> None:
+    def bulk(self, action: str, folders: list[str]) -> None:
         if not self.ready():
             return
-        with self._mlock:
-            marked = sorted(self.model.marked)
-        marked = [f for f in marked if self.mod_known(f)]
-        if not marked:
-            self.say("Mark mods first (X, or right-click > Mark for bulk actions). Marked mods show a +.", "yellow")
+        folders = [f for f in dict.fromkeys(folders) if self.mod_known(f)]
+        if not folders:
+            self.say("Select some mods first.", "yellow")
             return
         ctx, ui = self.ctx(), self.ui
         if action in ("enable", "disable"):
-            self._job_lines("bulk", "bulk", lambda: actions_setup.bulk_set_enabled(ctx, marked, action == "enable"))
+            self._job_lines("bulk", "bulk", lambda: actions_setup.bulk_set_enabled(ctx, folders, action == "enable"))
         elif action == "update":
-            self.update_marked(marked)
-        elif action == "tag":
-            def tag() -> None:
-                text = ui.ask_text("Tag the marked mods", "tag names separated by spaces")
-                if text:
-                    self._lines(actions_setup.bulk_tag(ctx, marked, text))
-                    self.ctl.ui(self.refresh_all)
-
-            self.job("tag", "bulk", tag)
-        elif action == "remove":
-            def remove() -> None:
-                body = ", ".join(marked) + "\nTheir folders are moved (not deleted) so you can restore them."
-                if ui.confirm(f"Remove {len(marked)} mod(s)?", body, False):
-                    out = actions_setup.remove_many(ctx, ui, marked)
-                    self.ctl.ui(self.model.marked.difference_update, marked)
-                    self._after_outcome_ui(out)
-
-            self.job("remove marked", "install", remove)
+            self.update_many(folders)
         else:
-            with self._mlock:
-                self.model.marked.clear()
-            self.refresh_all()
+            def remove() -> None:
+                body = ", ".join(folders) + "\nTheir folders are moved (not deleted) so you can restore them."
+                if ui.confirm(f"Remove {len(folders)} mod(s)?", body, False):
+                    self._after_outcome_ui(actions_setup.remove_many(ctx, ui, folders))
 
-    def update_marked(self, marked: list[str]) -> None:
+            self.job("remove selected", "install", remove)
+
+    def update_many(self, folders: list[str]) -> None:
         ctx, ui = self.ctx(), self.ui
         with self._mlock:
             urows = dict(self.model.urows)
-        todo = actions_nexus.update_candidates(urows, marked)
+        todo = actions_nexus.update_candidates(urows, folders)
 
         def work() -> None:
-            if not actions_nexus.is_premium(ctx):
-                if todo:
-                    actions_nexus.free_update_all_help(ctx, ui, urows, todo)
-                else:
-                    self.say("None of the marked mods has an update available.", "yellow")
-            elif not todo:
-                self.say("None of the marked mods has an update available.", "yellow")
+            if not todo:
+                self.say("None of the selected mods has an update available.", "yellow")
+            elif not actions_nexus.is_premium(ctx):
+                actions_nexus.free_update_all_help(ctx, ui, urows, todo)
             else:
                 self._premium_update(ctx, todo)
 
-        self.job("update marked", "install", work)
+        self.job("update selected", "install", work)
 
     def changelog(self, folder: str) -> None:
         if not self.ready():

@@ -137,10 +137,6 @@ class Api:
         self._s.move_to(self._mod(folder, present=True), self._mod(target, present=True), after)
 
     @_call
-    def mark(self, folder):
-        self._s.mark(self._mod(folder))
-
-    @_call
     def fav(self, folder):
         self._s.fav(self._mod(folder))
 
@@ -208,14 +204,12 @@ class Api:
         self._s.snapshot_prune(keep)
 
     @_call
-    def bulk_menu(self):
-        return {"ok": True, "items": self._s.bulk_menu()}
-
-    @_call
-    def bulk(self, action):
+    def bulk(self, action, folders):
         if not isinstance(action, str) or action not in BULK_IDS:
             raise _Reject("Unknown action.")
-        self._s.bulk(action)
+        if not isinstance(folders, list) or not folders or len(folders) > 500:
+            raise _Reject("Choose between 1 and 500 mods.")
+        self._s.bulk(action, [self._mod(f) for f in folders])
 
     # ---- global actions
     @_call

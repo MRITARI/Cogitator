@@ -79,7 +79,7 @@ def asks(win):
 @pytest.mark.parametrize("bad", ["nope", "../alpha", "a/b", "a\\b", "..", "", None, 5, ["alpha"], "alpha\0", "C:alpha"])
 def test_unknown_or_hostile_folder_names_are_rejected(web, bad):
     _, _, api, _ = web
-    for call in (lambda: api.toggle(bad), lambda: api.move(bad, 1), lambda: api.mark(bad), lambda: api.fav(bad), lambda: api.edit_note(bad),
+    for call in (lambda: api.toggle(bad), lambda: api.move(bad, 1), lambda: api.fav(bad), lambda: api.edit_note(bad),
                  lambda: api.row_menu(bad), lambda: api.row_action(bad, "toggle")):
         r = call()
         assert r["ok"] is False and "error" in r
@@ -135,7 +135,7 @@ def test_drag_and_drop_move_to(web):
     assert [r["folder"] for r in st["rows"]][:2] == ["beta", "alpha"]
 
 
-def test_move_sort_filter_and_marks(web):
+def test_move_sort_filter_and_favourites(web):
     win, s, api, _ = web
     n = len(win.of("state"))
     api.move("beta", -1)
@@ -147,8 +147,6 @@ def test_move_sort_filter_and_marks(web):
     api.set_filter("")
     api.set_sort("mod")
     wait(lambda: [p for p in win.of("state") if p["sort"]["col"] == "mod"])
-    api.mark("alpha")
-    assert wait(lambda: [p for p in win.of("row") if p["row"]["marked"]])[-1]["row"]["folder"] == "alpha"
     api.fav("beta")
     assert wait(lambda: [p for p in win.of("row") if p["row"]["fav"]])[-1]["row"]["folder"] == "beta"
 
@@ -157,7 +155,7 @@ def test_row_menu_has_the_tk_entries(web):
     _, _, api, _ = web
     items = api.row_menu("alpha")["items"]
     ids = [i["id"] for i in items if i]
-    assert {"toggle", "up", "down", "mark", "fav", "note", "remove"} <= set(ids)
+    assert {"toggle", "up", "down", "fav", "note", "remove"} <= set(ids) and "mark" not in ids
     en = {i["id"]: i["enabled"] for i in items if i}
     assert en["update"] is False and "changelog" not in en  # not linked, nothing to update
     assert en["link"] is True
@@ -168,7 +166,6 @@ def test_every_pushed_payload_is_json_serialisable(web):
     win, s, api, _ = web
     api.toggle("beta")
     api.set_sort("status")
-    api.mark("gamma")
     s.say("hello", "green")
     wait(lambda: win.of("log"))
     for script in win.scripts:
@@ -501,8 +498,7 @@ def test_profiles_and_snapshots_reject_bad_input_and_serialise(web):
     for keep in (0, -1, 1001, "5", True, 2.5, None):
         assert api.snapshot_prune(keep)["ok"] is False
     assert api.snapshot_create("r" * 300)["ok"] is False and api.snapshot_create(7)["ok"] is False
-    assert api.bulk("format")["ok"] is False and api.bulk(3)["ok"] is False
-    for r in (api.profiles_list(), api.snapshots_list(), api.bulk_menu(), api.snapshot_prune(5)):
+    for r in (api.profiles_list(), api.snapshots_list(), api.snapshot_prune(5)):
         assert r["ok"] is True
         json.dumps(r)
 
@@ -533,24 +529,40 @@ def test_snapshot_create_then_listed(web):
     assert items and set(items[0]) == {"name", "label"}
 
 
-def test_bulk_touches_only_existing_marked_mods(web, monkeypatch):
+def test_bulk_rejects_bad_arguments(web):
+    _, _, api, _ = web
+    for action in ("format", "tag", "clear", 3, None):
+        assert api.bulk(action, ["alpha"])["ok"] is False
+    for folders in ("alpha", None, [], ["nope"], ["alpha", "../x"], ["alpha", 5], ["alpha", ["gamma"]], [f"m{i}" for i in range(501)], ["alpha"] * 501):
+        r = api.bulk("enable", folders)
+        assert r["ok"] is False and "error" in r
+        json.dumps(r)
+
+
+def test_bulk_actions_act_on_the_given_folders(web, monkeypatch):
     from cogitator_web import session as sess
 
     win, s, api, _ = web
-    assert api.bulk("enable")["ok"] is True  # nothing marked: only a log line
-    assert not [i for i in api.bulk_menu()["items"] if i["enabled"]]
-    api.mark("alpha")
-    api.mark("gamma")
-    with s._mlock:
-        s.model.marked.add("ghost")
-    assert all(i["enabled"] for i in api.bulk_menu()["items"])
     seen = []
     monkeypatch.setattr(sess.actions_setup, "bulk_set_enabled", lambda ctx, folders, enable: (seen.append((folders, enable)), [])[1])
-    api.bulk("disable")
+    assert api.bulk("disable", ["alpha", "gamma", "alpha"]) == {"ok": True}
     wait(lambda: seen)
     assert seen[0] == (["alpha", "gamma"], False)
-    api.bulk("clear")
-    assert not s.model.marked
+    assert api.bulk("enable", ["beta"]) == {"ok": True}
+    wait(lambda: len(seen) == 2)
+    assert seen[1] == (["beta"], True)
+    updated = []
+    monkeypatch.setattr(s, "update_many", lambda folders: updated.append(folders))
+    assert api.bulk("update", ["alpha", "beta"]) == {"ok": True}
+    assert updated == [["alpha", "beta"]]
+    removed = []
+    monkeypatch.setattr(sess.actions_setup, "remove_many", lambda ctx, ui, folders: (removed.append(folders), actions.Outcome())[1])
+    assert api.bulk("remove", ["alpha", "beta"]) == {"ok": True}
+    q = wait(lambda: asks(win))[0]
+    assert q["kind"] == "confirm" and "2 mod" in q["title"] and "alpha" in q["body"] and not removed
+    api.answer(q["id"], True)
+    wait(lambda: removed)
+    assert removed[0] == ["alpha", "beta"]
 
 
 # ---------------------------------------------------------------- W4: ticks and tools
