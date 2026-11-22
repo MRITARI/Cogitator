@@ -468,10 +468,8 @@ def test_profiles_and_snapshots_reject_bad_input_and_serialise(web):
         assert api.snapshot_restore(bad)["ok"] is False
     assert api.profile_save("x" * 61)["ok"] is False and api.profile_save("../evil")["ok"] is False and api.profile_save(5)["ok"] is False
     assert api.profile_import_code("c" * 50001)["ok"] is False and api.profile_import_code(None)["ok"] is False and api.profile_import_code("  ")["ok"] is False
-    for keep in (0, -1, 1001, "5", True, 2.5, None):
-        assert api.snapshot_prune(keep)["ok"] is False
     assert api.snapshot_create("r" * 300)["ok"] is False and api.snapshot_create(7)["ok"] is False
-    for r in (api.profiles_list(), api.snapshots_list(), api.snapshot_prune(5)):
+    for r in (api.profiles_list(), api.snapshots_list()):
         assert r["ok"] is True
         json.dumps(r)
 

@@ -261,7 +261,7 @@ table.mods { width: 100%; border-collapse: collapse; table-layout: fixed; }
 .modal .body { padding: 0 var(--sp-6) var(--sp-4); overflow: auto; white-space: pre-wrap; overflow-wrap: anywhere; color: var(--muted); }
 .modal .body.mono { font: 12px/1.55 var(--mono); color: var(--fg); }
 .modal .field { padding: 0 var(--sp-6) var(--sp-4); }
-.modal .choices { display: flex; flex-direction: column; gap: var(--sp-2); padding: 0 var(--sp-6) var(--sp-4); }
+.modal .choices { display: flex; flex-direction: column; gap: var(--sp-2); padding: 0 var(--sp-6) var(--sp-4); max-height: 50vh; overflow-y: auto; }
 .modal .choices .btn { justify-content: flex-start; height: auto; min-height: 36px; padding: var(--sp-2) var(--sp-4); white-space: normal; text-align: left; border-radius: var(--radius-tile); }
 .modal .foot { display: flex; justify-content: flex-end; gap: var(--sp-2); padding: var(--sp-3) var(--sp-6) var(--sp-6); }
 

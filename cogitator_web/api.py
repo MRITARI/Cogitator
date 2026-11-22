@@ -179,12 +179,6 @@ class Api:
         self._s.snapshot_restore(name)
 
     @_call
-    def snapshot_prune(self, keep):
-        if not isinstance(keep, int) or isinstance(keep, bool) or not 1 <= keep <= 1000:
-            raise _Reject("Keep must be a whole number from 1 to 1000.")
-        self._s.snapshot_prune(keep)
-
-    @_call
     def bulk(self, action, folders):
         if not isinstance(action, str) or action not in BULK_IDS:
             raise _Reject("Unknown action.")

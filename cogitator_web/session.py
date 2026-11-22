@@ -905,9 +905,6 @@ class Session:
         ctx, ui = self.ctx(), self.ui
         self.job("restore snapshot", "install", lambda: self._after_outcome_ui(actions_setup.restore_snapshot(ctx, ui, name)))
 
-    def snapshot_prune(self, keep: int) -> None:
-        self._lines(actions_setup.prune_snapshots(keep))
-
     def bulk(self, action: str, folders: list[str]) -> None:
         if not self.ready():
             return
