@@ -176,13 +176,14 @@ table.mods { width: 100%; border-collapse: collapse; table-layout: fixed; }
 .mods tbody tr[aria-selected="true"] { background: var(--secondary); }
 .mods tbody tr[aria-selected="true"] td:first-child { box-shadow: inset 3px 0 0 var(--accent); }
 .mods tbody tr:focus-visible { outline: 2px solid var(--ring); outline-offset: -2px; }
-.mods td:first-child, .mods th:first-child { padding-left: var(--sp-4); }
-.mods col.c-en { width: 84px; } .mods col.c-installed, .mods col.c-latest { width: 104px; } .mods col.c-status { width: 190px; }
+.mods td:first-child { padding-left: var(--sp-2); } /* grip gutter: same on every row so nothing shifts on hover */
+.mods th:first-child { padding-left: calc(var(--sp-2) + 26px); } /* header label lines up with the switch */
+.mods col.c-en { width: 100px; } .mods col.c-installed, .mods col.c-latest { width: 104px; } .mods col.c-status { width: 190px; }
 .mods td.ver { color: var(--muted); }
 .mods td.name .in { display: flex; align-items: center; gap: var(--sp-2); min-width: 0; }
 .mods td.name .t { overflow: hidden; text-overflow: ellipsis; }
-.mods .en { display: flex; align-items: center; gap: 2px; }
-.mods .grip { width: 14px; color: var(--muted); opacity: 0; cursor: grab; display: inline-flex; justify-content: center; flex: none; }
+.mods .en { display: flex; align-items: center; gap: 10px; }
+.mods .grip { width: 16px; height: 28px; align-items: center; color: var(--muted); opacity: 0; cursor: grab; display: inline-flex; justify-content: center; flex: none; }
 .mods tr.can-drag:hover .grip, .mods tr.can-drag:focus-within .grip { opacity: 1; }
 .mods .muted { color: var(--muted); }
 .mods tr.is-off td.name .t { color: var(--muted); }

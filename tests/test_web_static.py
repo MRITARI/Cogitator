@@ -306,3 +306,10 @@ def test_switch_shape():
     assert re.search(r"\.switch::before \{[^}]*width: 32px; height: 16px", css)
     assert re.search(r"\.switch::after \{[^}]*width: 10px; height: 10px", css)
     assert re.search(r'\.switch\[aria-checked="true"\]::after \{[^}]*translateX\(16px\)', css)
+
+
+def test_grip_gutter():
+    css = (UI / "app.css").read_text(encoding="utf-8")
+    assert re.search(r"\.mods \.en \{[^}]*gap: 10px", css)
+    assert re.search(r"\.mods \.grip \{[^}]*width: 16px", css)
+    assert re.search(r"\.mods td:first-child \{ padding-left: var\(--sp-2\)", css)  # right of the 3px selected marker, on every row
