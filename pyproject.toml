@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "cogitator"
-version = "0.3.0-beta.3"
+version = "0.3.0-beta.4"
 description = "Mod manager for Warhammer 40,000: Darktide, with a desktop window and a command line"
 readme = "README.md"
 license = "MIT"
