@@ -3,6 +3,7 @@ import { call } from "./api.js";
 import { menuOpen } from "./components/menu.js";
 import { ask, info, initModals, modalOpen, promptText } from "./components/modal.js";
 import { buildDrawer, buildSidebar, buildStatusline, pageHead } from "./components/shell.js";
+import { initToasts, toast } from "./components/toast.js";
 import { h } from "./dom.js";
 import { detectIcons } from "./icons.js";
 import * as modsPage from "./pages/mods.js";
@@ -83,6 +84,12 @@ async function boot() {
   app.append(sidebar.el, h("div", { class: "main" }, head, content, drawer.el, status.el));
   document.addEventListener("keydown", onKey);
   document.addEventListener("contextmenu", (e) => { if (!(e.target.closest && e.target.closest("input, textarea"))) e.preventDefault(); });
+  initToasts(document.getElementById("modal-root"));
+  on("log", (p) => {
+    const st = String(p.style || "");
+    if (/red/.test(st)) { toast(p.text, "bad"); drawer.flagError(); }
+    else if (/(green|yellow|bold)/.test(st)) toast(p.text, /yellow/.test(st) ? "warn" : "ok");
+  });
   on("ask", (p) => ask(p));
   on("report", (p) => info({ title: p.title, segments: p.segments, wide: true }));
   go("mods");

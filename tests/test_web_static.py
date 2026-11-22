@@ -176,3 +176,12 @@ def test_accessibility_hooks_are_in_the_scripts():
 def test_filter_chips_are_pressable_buttons():
     js = (UI / "js" / "pages" / "mods.js").read_text(encoding="utf-8")
     assert "aria-pressed" in js and all(w in js for w in ('"Updates"', '"Not linked"', '"Favourites"', '"Enabled"'))
+
+
+def test_toasts_are_a_polite_live_region_and_wired():
+    toast = (UI / "js" / "components" / "toast.js").read_text(encoding="utf-8")
+    assert '"aria-live": "polite"' in toast and "4000" in toast
+    main = (UI / "js" / "main.js").read_text(encoding="utf-8")
+    assert "components/toast.js" in main and 'on("log"' in main
+    shell = (UI / "js" / "components" / "shell.js").read_text(encoding="utf-8")
+    assert "let collapsed = true" in shell and "dot-bad" in shell

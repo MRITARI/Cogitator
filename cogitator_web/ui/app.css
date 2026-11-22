@@ -50,6 +50,16 @@ html.icons-text .icon { font-family: var(--font); font-weight: 600; }
 .statusline { display: flex; gap: var(--sp-4); align-items: center; height: 28px; padding: 0 var(--sp-5); border-top: 1px solid var(--divider); background: var(--sidebar); color: var(--muted); font-size: 12px; user-select: none; }
 .statusline .grow { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
+.dot-bad { width: 8px; height: 8px; border-radius: 50%; background: var(--destructive); flex: none; }
+.toasts { position: fixed; right: var(--sp-5); bottom: 44px; z-index: 70; display: flex; flex-direction: column; gap: var(--sp-2); width: min(420px, calc(100vw - 40px)); pointer-events: none; }
+.toast { pointer-events: auto; display: flex; align-items: flex-start; gap: var(--sp-3); padding: var(--sp-3) var(--sp-4); border-radius: var(--radius-tile); background: var(--card); border: 1px solid var(--divider); box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4), inset 3px 0 0 var(--neutral); overflow-wrap: anywhere; }
+.toast.ok { box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4), inset 3px 0 0 var(--ok); }
+.toast.warn { box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4), inset 3px 0 0 var(--attention); }
+.toast.bad { box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4), inset 3px 0 0 var(--destructive); }
+.toast .msg { flex: 1; min-width: 0; }
+.toast .x { flex: none; width: 24px; height: 24px; border: 0; border-radius: var(--radius-pill); background: transparent; color: var(--muted); cursor: pointer; }
+.toast .x:hover { background: var(--secondary); color: var(--fg); }
+
 /* ---------- log / style tones (rich style words from the shared flows) */
 .tone-ok { color: var(--ok-text); } .tone-warn { color: var(--attention-text); } .tone-bad { color: var(--destructive-text); }
 .tone-dim { color: var(--muted); } .tone-info { color: var(--fg); } .bold { font-weight: 600; }

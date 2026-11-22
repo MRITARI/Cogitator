@@ -25,10 +25,11 @@ export function buildSidebar(onNav, version) {
 }
 
 export function buildDrawer() {
-  let collapsed = false;
+  let collapsed = true;
   const count = h("span", { text: "" });
   const arrow = h("span", { class: "chev" }, icon("chevronDown"));
-  const toggle = h("button", { type: "button", "aria-expanded": "true", "aria-controls": "log-body" }, icon("log"), h("span", { text: "Log" }), count, arrow);
+  const toggle = h("button", { type: "button", "aria-expanded": "false", "aria-controls": "log-body" }, icon("log"), h("span", { text: "Log" }), count, h("span", { class: "dot-bad", hidden: true, title: "An error was logged" }), arrow);
+  const dot = toggle.querySelector(".dot-bad");
   const body = h("div", { class: "drawer-body", id: "log-body", role: "log", "aria-live": "off", tabindex: "0", "aria-label": "Log" });
   const el = h("div", { class: "drawer" }, h("div", { class: "drawer-bar" }, toggle), body);
   const set = (c) => {
@@ -36,7 +37,9 @@ export function buildDrawer() {
     body.hidden = c;
     toggle.setAttribute("aria-expanded", String(!c));
     arrow.replaceChildren(icon(c ? "chevronUp" : "chevronDown"));
+    if (!c) dot.hidden = true;
   };
+  set(true);
   toggle.addEventListener("click", () => set(!collapsed));
   const add = (l) => {
     const near = body.scrollHeight - body.scrollTop - body.clientHeight < 40;
@@ -47,7 +50,7 @@ export function buildDrawer() {
   };
   for (const l of state.logs) add(l);
   watch((what) => { if (what === "log") add(state.logs[state.logs.length - 1]); });
-  return { el, toggle: () => set(!collapsed) };
+  return { el, toggle: () => set(!collapsed), flagError() { if (collapsed) dot.hidden = false; } };
 }
 
 export function buildStatusline() {
