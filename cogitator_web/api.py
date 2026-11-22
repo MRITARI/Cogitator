@@ -14,6 +14,7 @@ from cogitator import profiles
 from cogitator.config import redact
 from cogitator.mods import ModError
 
+from . import background
 from .bridge import Bridge
 from .session import BULK_IDS, ROW_ACTIONS, Session, valid_folder_name
 
@@ -285,6 +286,24 @@ class Api:
         if err:
             raise _Reject(err)
         return {"ok": True, "settings": self._s.settings_payload()}
+
+    @_call
+    def pick_background(self):
+        """Choose image...: native dialog (png/jpg/webp), validated and copied to the config folder, then made the background."""
+        err = self._s.choose_background()
+        if err:
+            raise _Reject(err)
+        return {"ok": True, "settings": self._s.settings_payload()}
+
+    @_call
+    def reset_background(self):
+        self._s.reset_background()
+        return {"ok": True, "settings": self._s.settings_payload()}
+
+    @_call
+    def get_background(self):
+        """The custom image as a data: URI (None when there is none)."""
+        return {"ok": True, "data": background.data_uri() if self._s.settings.gui_background == "custom" else None}
 
     @_call
     def validate_key(self, key):

@@ -111,6 +111,7 @@ def run_web(argv: list[str], game_override: str | None = None, check_updates: bo
                                    min_size=winstate.MIN_SIZE, background_color=BACKGROUND, text_select=True, **geo)
     page["window"] = window
     session.pick_folder = lambda: _first(window.create_file_dialog(webview.FileDialog.FOLDER))
+    session.pick_image = lambda: _first(window.create_file_dialog(webview.FileDialog.OPEN, file_types=("Images (*.png;*.jpg;*.jpeg;*.webp)",)))
     session.pick_files = lambda start: window.create_file_dialog(
         webview.FileDialog.OPEN, directory=str(start), allow_multiple=True, file_types=("Zip archives (*.zip)", "All files (*.*)"))
     session.on_quit = lambda: window.destroy()
