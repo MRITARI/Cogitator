@@ -106,6 +106,21 @@ class Api:
         self._s.row_action(self._mod(folder, present=action in ("toggle", "up", "down", "open_folder", "link", "update")), action)
 
     @_call
+    def mod_details(self, folder):
+        """Open the details panel for a mod: local info is already in the row; Nexus data arrives later as a "details" push."""
+        self._s.request_details(self._mod(folder))
+        return {"ok": True, "started": True}
+
+    @_call
+    def mod_versions(self, folder):
+        self._s.request_versions(self._mod(folder))
+        return {"ok": True, "started": True}
+
+    @_call
+    def open_nexus_page(self, folder):
+        self._s.open_nexus_page(self._mod(folder))
+
+    @_call
     def toggle(self, folder):
         self._s.toggle(self._mod(folder, present=True))
 

@@ -17,14 +17,14 @@ from pathlib import Path
 from typing import Callable
 
 from cogitator import __version__, actions, actions_nexus, actions_setup, profiles, snapshots
-from cogitator import nxm, repair
+from cogitator import nexus_info, nxm, repair
 from cogitator.config import InstanceLock, LockError, Settings, cache_dir, config_dir, get_api_key, log_path, redact
 from cogitator.frameworks import detect_framework
 from cogitator.gamefinder import resolve_game_dir, validate_game_dir
 from cogitator.linking import folder_mtime
 from cogitator.loader import NEXUS_PAGES
 from cogitator.modinstall import open_files_page
-from cogitator.nexus import parse_nexus_ref
+from cogitator.nexus import GAME, parse_nexus_ref
 from cogitator.mods import DISABLED, ENABLED, UNLISTED, ModError, mods_dir, move_mod, move_mod_to, scan_mods, toggle_mod
 from cogitator.patcher import ON, PatcherError, banner as patch_banner, default_runner, patch_state
 from cogitator.patcher import toggle as toggle_mods
@@ -112,6 +112,9 @@ class Session:
         self.open_path: Callable[[Path], object] = _startfile
         self.download_wait_s = 180.0
         self._nxm_busy = False
+        self._dlock = threading.Lock()  # the details worker: one at a time, the newest request wins
+        self._details_want: str | None = None
+        self._details_busy = False
         self._last_patch_state: str | None = None
         self._ticker: threading.Thread | None = None
         self.selfupdater = None  # SelfUpdater, created once the registry is loaded; tests inject their own
@@ -157,7 +160,7 @@ class Session:
                     "latest": (r.latest if r else None) or "-", "status": status, "tone": TONE.get(self.model.status_tag(m), ""),
                     "kind": status_kind(r, m),
                     "marked": folder in self.model.marked, "fav": bool(meta.get("fav")), "pinned": meta.get("pinned_version") or "",
-                    "note": bool(meta.get("notes")), "tags": list(meta.get("tags") or []), "linked": bool(r is not None and r.nexus_id),
+                    "note": bool(meta.get("notes")), "rollback": bool((self.registry.mod(folder) or {}).get("previous")) if self.registry else False, "tags": list(meta.get("tags") or []), "linked": bool(r is not None and r.nexus_id),
                     "hint": self.model.hint(folder)}
 
     def header_payload(self) -> dict | None:
@@ -626,6 +629,64 @@ class Session:
             r = self.model.urows.get(folder)
         if r is not None and r.nexus_id:
             self.say(f"Opened {open_files_page(r.nexus_id, self.open_url)}", "cyan")
+
+    # ---- details panel (Nexus data; runs on a worker, the answer arrives as a "details" / "versions" push)
+    def nexus_id_of(self, folder: str) -> int | None:
+        rec = (self.registry.mod(folder) or {}) if self.registry else {}
+        v = rec.get("nexus_id")
+        return v if isinstance(v, int) and not isinstance(v, bool) and v > 0 else None
+
+    def _details_push(self, folder: str, res: nexus_info.Result, image: str | None = None) -> None:
+        self.bridge.emit({"type": "details", "folder": folder, "nexus_id": self.nexus_id_of(folder), "status": res.status, "message": res.message,
+                          "stale": res.stale, "at": res.at, "data": res.data, "image": image})
+
+    def request_details(self, folder: str) -> None:
+        if self.nexus_id_of(folder) is None:
+            self._details_push(folder, nexus_info.Result(nexus_info.UNLINKED, None, nexus_info.MESSAGES[nexus_info.UNLINKED]))
+            return
+        with self._dlock:
+            self._details_want = folder
+            if self._details_busy:
+                return  # the running worker takes the newest request when it is done
+            self._details_busy = True
+        self.ctl.run("mod details", self._details_loop, "details")
+
+    def _details_loop(self) -> None:
+        try:
+            while True:
+                with self._dlock:
+                    folder, self._details_want = self._details_want, None
+                    if folder is None:
+                        self._details_busy = False
+                        return
+                try:
+                    res = nexus_info.details_for(self.nexus_id_of(folder), self.registry)
+                    url = (res.data or {}).get("picture_url") or ""
+                    image = nexus_info.cached_image(url) if url else None
+                    if url and image is None and self._details_want is None:  # only fetch while this panel is still the one shown
+                        image = nexus_info.fetch_image(url)
+                    self._details_push(folder, res, image)
+                except Exception:
+                    log.exception("details for %s failed", folder)
+                    self._details_push(folder, nexus_info.Result(nexus_info.ERROR, None, nexus_info.MESSAGES[nexus_info.ERROR]))
+        finally:
+            with self._dlock:
+                self._details_busy = False
+
+    def request_versions(self, folder: str) -> None:
+        mod_id = self.nexus_id_of(folder)
+
+        def work() -> None:
+            res = nexus_info.changes_for(mod_id, self.registry)
+            self.bridge.emit({"type": "versions", "folder": folder, "status": res.status, "message": res.message, "stale": res.stale,
+                              "versions": (res.data or {}).get("versions", [])})
+
+        self.job("mod versions", "versions", work)
+
+    def open_nexus_page(self, folder: str) -> None:
+        mod_id = self.nexus_id_of(folder)
+        if mod_id:
+            self.open_url(f"https://www.nexusmods.com/{GAME}/mods/{mod_id}")
 
     def row_menu(self, folder: str) -> list[dict | None]:
         """(label, id, enabled) entries of the right-click menu: the ones the window offers."""

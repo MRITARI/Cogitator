@@ -698,3 +698,99 @@ def test_a_custom_setting_without_its_file_falls_back_to_default(web):
     _, s, api, _ = web
     s.settings.gui_background = "custom"
     assert api.get_settings()["settings"]["gui_background"] == "default"
+
+
+# ---------------------------------------------------------------- details panel
+def test_details_unlinked_mod_answers_at_once_without_any_network(web, monkeypatch):
+    from cogitator import nexus_info
+
+    win, s, api, _ = web
+    monkeypatch.setattr(nexus_info, "details_for", lambda *a, **k: pytest.fail("no Nexus lookup for an unlinked mod"))
+    assert api.mod_details("alpha") == {"ok": True, "started": True}
+    wait(lambda: win.of("details"))
+    p = win.of("details")[0]
+    assert (p["folder"], p["status"], p["data"], p["image"]) == ("alpha", "unlinked", None, None)
+    assert api.mod_details("../x")["ok"] is False and api.mod_details("nosuchmod")["ok"] is False and api.mod_versions(5)["ok"] is False
+
+
+def test_details_linked_mod_without_key_makes_no_call_and_shows_cache(web, monkeypatch, tmp_path):
+    from cogitator import nexus_info
+
+    win, s, api, _ = web
+    s.registry.set_mod("alpha", nexus_id=77)
+    monkeypatch.setattr(nexus_info, "get_api_key", lambda: None)
+    monkeypatch.setattr(nexus_info, "NexusClient", lambda *a, **k: pytest.fail("no key: no client"))
+    assert api.mod_details("alpha")["ok"]
+    wait(lambda: win.of("details"))
+    p = win.of("details")[-1]
+    assert p["status"] == "no_key" and p["nexus_id"] == 77 and "Settings" in p["message"] and p["data"] is None
+
+
+def test_details_push_carries_data_and_image_only_for_the_open_panel(web, monkeypatch):
+    from cogitator import nexus_info
+
+    win, s, api, _ = web
+    s.registry.set_mod("alpha", nexus_id=77)
+    data = {"name": "Alpha", "picture_url": "https://staticdelivery.nexusmods.com/a.png", "description": "d", "summary": "s", "author": "me",
+            "version": "1", "endorsements": 1, "downloads": 2, "updated": 3}
+    fetched = []
+    monkeypatch.setattr(nexus_info, "details_for", lambda mod_id, reg, **k: nexus_info.Result("ok", data, at=1.0))
+    monkeypatch.setattr(nexus_info, "cached_image", lambda url: None)
+    monkeypatch.setattr(nexus_info, "fetch_image", lambda url, *a: fetched.append(url) or "data:image/png;base64,AAAA")
+    api.mod_details("alpha")
+    wait(lambda: win.of("details"))
+    p = win.of("details")[-1]
+    assert p["status"] == "ok" and p["data"]["name"] == "Alpha" and p["image"].startswith("data:image/png") and fetched == [data["picture_url"]]
+    # a row refresh never fetches anything (thumbnails / scrolling must stay offline)
+    s.refresh_all()
+    assert fetched == [data["picture_url"]]
+
+
+def test_details_burst_keeps_the_newest_request(web, monkeypatch):
+    import threading
+
+    from cogitator import nexus_info
+
+    win, s, api, _ = web
+    s.registry.set_mod("alpha", nexus_id=1)
+    s.registry.set_mod("beta", nexus_id=2)
+    gate, seen = threading.Event(), []
+
+    def slow(mod_id, reg, **k):
+        seen.append(mod_id)
+        gate.wait(3)
+        return nexus_info.Result("ok", {"name": str(mod_id), "picture_url": ""}, at=1.0)
+
+    monkeypatch.setattr(nexus_info, "details_for", slow)
+    api.mod_details("alpha")
+    wait(lambda: seen)
+    api.mod_details("beta")
+    api.mod_details("alpha")
+    api.mod_details("beta")  # the newest wins; older queued ones are dropped
+    gate.set()
+    wait(lambda: [p for p in win.of("details") if p["folder"] == "beta"])
+    assert seen == [1, 2] and not [p for p in win.of("details") if p["status"] == "error"]
+
+
+def test_versions_and_open_page(web, monkeypatch):
+    from cogitator import nexus_info
+
+    win, s, api, _ = web
+    s.registry.set_mod("alpha", nexus_id=77)
+    monkeypatch.setattr(nexus_info, "changes_for", lambda mod_id, reg, **k: nexus_info.Result("ok", {"versions": [{"version": "1", "lines": ["x"]}]}))
+    api.mod_versions("alpha")
+    wait(lambda: win.of("versions"))
+    assert win.of("versions")[0]["versions"][0]["version"] == "1"
+    opened = []
+    s.open_url = opened.append
+    api.open_nexus_page("alpha")
+    assert opened == ["https://www.nexusmods.com/warhammer40kdarktide/mods/77"]
+    api.open_nexus_page("beta")  # unlinked: nothing opens
+    assert len(opened) == 1
+
+
+def test_row_payload_tells_whether_a_rollback_exists(web):
+    _, s, api, _ = web
+    assert s.row_payload("alpha")["rollback"] is False
+    s.registry.set_mod("alpha", previous={"version": "1"})
+    assert s.row_payload("alpha")["rollback"] is True
