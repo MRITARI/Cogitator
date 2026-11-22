@@ -346,3 +346,11 @@ def test_removed_controls_are_gone():
     for col in ('"Installed"', '"Latest"'):
         assert col not in mods
     assert "Version" in mods and "Update all" in mods
+
+
+def test_reordering_is_guarded_while_the_list_is_filtered():
+    mods, main = _js("pages", "mods.js"), _js("main.js")
+    assert "Clear the filter to change the load order" in mods
+    assert re.search(r'canReorder = \(\) => !state\.filter && activeChip === "all"', mods)
+    assert "!canReorder()" in mods and "e.grip.hidden = !canReorder()" in mods
+    assert "hourly" in main and "left" in main

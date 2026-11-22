@@ -1,7 +1,7 @@
 """Everything the page can do, without a window: state (game folder, registry, mod table model) and the flows.
 
 It reuses the engine and the shared pieces: `cogitator.actions` (flows), `cogitator.viewtext` (wording), `cogitator_web.viewmodel`
-(filter / sort) and `cogitator_web.controller` (workers, questions). It talks to the page only through `Bridge.emit`.
+(filter) and `cogitator_web.controller` (workers, questions). It talks to the page only through `Bridge.emit`.
 
 Threading: short operations (toggle, move...) run on the calling API thread under `_mlock`. Anything that waits (network,
 zips, questions) runs on a Controller worker. Callbacks scheduled with `ctl.ui` run on the pusher thread and must stay short and
@@ -193,10 +193,10 @@ class Session:
         """The whole table (order and filter applied). The page reconciles it row by row."""
         with self._mlock:
             order = [rv.folder for rv in self.model.rows(keep)]
-            summary, sort = self.model.summary(), {"col": self.model.sort_col, "desc": self.model.sort_desc}
+            summary = self.model.summary()
             filt = self.model.filter_text
         rows = [p for p in (self.row_payload(f) for f in order) if p is not None]
-        self.bridge.emit({"type": "state", "rows": rows, "summary": summary, "sort": sort, "filter": filt, "keep": keep,
+        self.bridge.emit({"type": "state", "rows": rows, "summary": summary, "filter": filt, "keep": keep,
                           "empty": self.model.hint(None)})
         self.emit_header()
 
@@ -549,8 +549,16 @@ class Session:
             self.say(f"Could not write mod_load_order.txt: {e}", "bold red")
         self._rescan_one(folder)
 
+    def _filtered(self, msg: str) -> bool:
+        """The list order is the load order: reordering is refused while a text filter hides part of it."""
+        with self._mlock:
+            filtered = bool(self.model.filter_text)
+        if filtered:
+            self.say(msg + ".", "yellow")
+        return filtered
+
     def move(self, folder: str, delta: int) -> None:
-        if not self.ready():
+        if not self.ready() or self._filtered("Clear the filter to change the load order"):
             return
         snapshots.auto(self.game_dir, "reorder", once=True, registry=self.registry)
         try:
@@ -559,14 +567,11 @@ class Session:
             self.say(str(e), "bold red")
         except OSError as e:
             self.say(f"Could not write mod_load_order.txt: {e}", "bold red")
-        with self._mlock:
-            if self.model.sort_col is not None:  # the table shows the load order again, so the move is visible
-                self.model.set_sort(None)
         self.refresh_all(keep=folder)
 
     def move_to(self, folder: str, target: str, after: bool) -> None:
         """Drag and drop: put `folder` before/after `target` in the load order."""
-        if not self.ready():
+        if not self.ready() or self._filtered("Clear the filter to change the load order"):
             return
         snapshots.auto(self.game_dir, "reorder", once=True, registry=self.registry)
         try:
@@ -575,9 +580,6 @@ class Session:
             self.say(str(e), "bold red")
         except OSError as e:
             self.say(f"Could not write mod_load_order.txt: {e}", "bold red")
-        with self._mlock:
-            if self.model.sort_col is not None:
-                self.model.set_sort(None)
         self.refresh_all(keep=folder)
 
     def pin(self, folder: str) -> None:

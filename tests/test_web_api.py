@@ -146,6 +146,25 @@ def test_move_and_filter(web):
     api.set_filter("")
 
 
+def test_reordering_is_refused_while_a_filter_is_set(web):
+    win, s, api, _ = web
+    api.set_filter("a")
+    wait(lambda: [p for p in win.of("state") if p["filter"] == "a"])
+    before = [r["folder"] for r in win.of("state")[-1]["rows"]]
+    n = len(win.of("log"))
+    api.move("beta", -1)
+    api.move_to("alpha", "beta", True)
+    logs = wait(lambda: win.of("log")[n:] if len(win.of("log")) >= n + 2 else None)
+    assert all("Clear the filter to change the load order" in p["text"] for p in logs[:2])
+    api.set_filter("")
+    st = wait(lambda: [p for p in win.of("state") if p["filter"] == ""][-1:])[-1]
+    assert [r["folder"] for r in st["rows"]][:2] == ["alpha", "beta"] and before
+    n = len(win.of("state"))
+    api.move("beta", -1)
+    st = wait(lambda: win.of("state")[n:])[-1]
+    assert [r["folder"] for r in st["rows"]][:2] == ["beta", "alpha"]
+
+
 def test_row_menu_has_the_tk_entries(web):
     _, _, api, _ = web
     items = api.row_menu("alpha")["items"]

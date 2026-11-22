@@ -4,6 +4,7 @@ import { call } from "../api.js";
 import { showMenu } from "../components/menu.js";
 import { createDetails } from "../components/details.js";
 import { badge, button, setBadge, setSwitch, toggleSwitch } from "../components/widgets.js";
+import { toast } from "../components/toast.js";
 import { h } from "../dom.js";
 import { icon } from "../icons.js";
 import { state, watch } from "../store.js";
@@ -18,6 +19,7 @@ const TONE = { ok: "ok", warn: "warn", bad: "bad", dim: "", "": "" };
 
 const CHIPS = [["all", "All", () => true], ["enabled", "Enabled", (r) => r.en === "on"], ["updates", "Updates", (r) => r.kind === "update"],
   ["unlinked", "Not linked", (r) => r.kind === "unlinked"]];
+const FILTER_MSG = "Clear the filter to change the load order";
 let activeChip = "all"; // kept across list refreshes (and page switches)
 let panelOpen = false; // the details panel: opened by a click (or ArrowRight on a row), follows the selection, closed by x / Esc / ArrowLeft
 const selSet = new Set(); // every selected folder; state.selected is the cursor (the one the panel and Ctrl+Up/Down follow)
@@ -149,7 +151,7 @@ export function mount(container, ctx) {
   const clearDrop = () => { for (const { tr } of entries.values()) tr.classList.remove("drop-before", "drop-after", "dragging"); };
   function wireDrag(tr, folder, grip) {
     tr.addEventListener("dragstart", (ev) => {
-      if (ev.target !== grip || !listed(folder)) { ev.preventDefault(); return; }
+      if (ev.target !== grip || !listed(folder) || !canReorder()) { ev.preventDefault(); return; }
       ev.dataTransfer.setDragImage(tr, 16, 16);
       dragging = folder;
       ev.dataTransfer.effectAllowed = "move";
@@ -177,16 +179,18 @@ export function mount(container, ctx) {
     });
   }
 
+  const canReorder = () => !state.filter && activeChip === "all"; // the list shows the whole load order
   function patchRow(e, row) {
-    const sig = JSON.stringify(row);
+    const sig = JSON.stringify(row) + canReorder();
     if (sig === e.sig) return;
     e.sig = sig;
     e.tr.classList.toggle("is-off", row.en !== "on");
     setSwitch(e.sw, row.en === "on", `${row.folder}: ${row.en === "on" ? "on" : row.en === "off" ? "off" : "not in load order"}`);
     e.sw.classList.toggle("is-unlisted", row.en === "unlisted");
     e.sw.disabled = !row.present;
-    const can = row.present && row.en !== "unlisted";
-    e.grip.draggable = can; // only the grip starts a drag; the rest of the row is for selecting
+    const can = row.present && row.en !== "unlisted" && canReorder();
+    e.grip.draggable = can;
+    e.grip.hidden = !canReorder(); // only the grip starts a drag; the rest of the row is for selecting
     e.tr.classList.toggle("can-drag", can);
     e.name.replaceChildren(h("div", { class: "in" }, h("span", { class: "t", text: row.folder, title: row.folder }), ...chips(row), row.suffix ? h("span", { class: "muted", text: row.suffix }) : null));
     e.version.textContent = versionText(row);
@@ -387,7 +391,7 @@ export function mount(container, ctx) {
   const api = {
     selected: () => state.selected,
     toggle() { if (state.selected) call("toggle", state.selected); },
-    move(d) { if (state.selected && picked().length <= 1) call("move", state.selected, d); },
+    move(d) { if (!canReorder()) { toast(FILTER_MSG, "warn"); return; } if (state.selected && picked().length <= 1) call("move", state.selected, d); },
     selectAll,
     focusFilter() { filter.focus(); filter.select(); },
     inTable() { return tbody.contains(document.activeElement); },
