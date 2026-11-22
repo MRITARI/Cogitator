@@ -3,7 +3,6 @@ Never an SVG (it can carry script); the format is decided by the file's bytes, n
 from __future__ import annotations
 
 import base64
-import shutil
 from pathlib import Path
 
 from cogitator.config import config_dir
