@@ -12,7 +12,7 @@ import logging
 import threading
 
 from cogitator.config import redact
-from cogitator_gui.controller import CHOICE, CONFIRM, TEXT, Controller
+from cogitator_web.controller import CHOICE, CONFIRM, TEXT, Controller
 
 log = logging.getLogger("cogitator.web")
 

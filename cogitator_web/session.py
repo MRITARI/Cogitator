@@ -1,7 +1,7 @@
 """Everything the page can do, without a window: state (game folder, registry, mod table model) and the flows.
 
-It reuses the engine and the shared pieces: `cogitator.actions` (flows), `cogitator.viewtext` (wording), `cogitator_gui.viewmodel`
-(filter / sort / marks) and `cogitator_gui.controller` (workers, questions). It talks to the page only through `Bridge.emit`.
+It reuses the engine and the shared pieces: `cogitator.actions` (flows), `cogitator.viewtext` (wording), `cogitator_web.viewmodel`
+(filter / sort / marks) and `cogitator_web.controller` (workers, questions). It talks to the page only through `Bridge.emit`.
 
 Threading: short operations (toggle, move, mark...) run on the calling API thread under `_mlock`. Anything that waits (network,
 zips, questions) runs on a Controller worker. Callbacks scheduled with `ctl.ui` run on the pusher thread and must stay short and
@@ -33,8 +33,8 @@ from cogitator.registry import Registry
 from cogitator.updates import (PROBABLY_OUTDATED, UPDATE, CheckBundle, FrameworkUpdate, ModRow, cached_frameworks, cached_rows,
                                quota_text, run_checks)
 from cogitator.viewtext import (NOTICE_BODY, NOTICE_TITLE, gui_words, installed_label, mod_suffix, report_segments, status_label)
-from cogitator_gui.controller import TEXT, GuiUi
-from cogitator_gui.viewmodel import ARROW, TAG_BAD, TAG_DIM, TAG_OK, TAG_WARN, ModListModel
+from cogitator_web.controller import TEXT, GuiUi
+from cogitator_web.viewmodel import ARROW, TAG_BAD, TAG_DIM, TAG_OK, TAG_WARN, ModListModel
 
 from .bridge import Bridge
 

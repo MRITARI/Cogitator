@@ -12,7 +12,7 @@ from typing import Callable
 
 from cogitator.config import log_path, redact
 from cogitator_setup import platform_gate
-from cogitator_setup.app import TITLE, USAGE, choose_mode, parse_flags, setup_services, uninstall_services
+from cogitator_setup.entry_support import TITLE, USAGE, choose_mode, parse_flags, setup_services, uninstall_services
 
 from .app import BACKGROUND, UI_DIR, notify, webview2_available
 from . import winicon
@@ -151,7 +151,7 @@ def main(argv: list[str] | None = None, *, build=_DETECT, show_error: Callable[[
 
         setup_logging()
         return run_setup(parse_expect(argv))
-    from cogitator_setup.app import _default_show_error
+    from cogitator_setup.entry_support import _default_show_error
 
     err = show_error or _default_show_error
     b = platform_gate.windows_build() if build is _DETECT else build
@@ -167,7 +167,7 @@ def main(argv: list[str] | None = None, *, build=_DETECT, show_error: Callable[[
         err(TITLE, str(e))
         return 2
     try:
-        from cogitator_setup.app import _repair_app_folder
+        from cogitator_setup.entry_support import _repair_app_folder
         from cogitator_setup.uninstall_vm import detect
 
         _repair_app_folder()
@@ -179,7 +179,7 @@ def main(argv: list[str] | None = None, *, build=_DETECT, show_error: Callable[[
         if mode == "setup":
             return runner(argv, flags)
         if mode == "silent-uninstall":
-            from cogitator_setup.uninstall_app import run_silent
+            from cogitator_setup.silent import run_silent
 
             return (silent_fn or run_silent)(uninstall_services(flags.game_dir))
         return uninstall_runner(argv, flags, mode)  # "uninstall" | "maintenance"

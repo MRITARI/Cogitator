@@ -1,5 +1,5 @@
 """The web uninstall / maintenance session and API, the entry's routing, and the main web app's in-app self-update. Driven without a
-window or a network: fake folders, fake services, fake updater. Fixtures mirror test_uninstall_gui.py and test_web_setup.py."""
+window or a network: fake folders, fake services, fake updater. Fixtures mirror test_web_setup.py."""
 import json
 import threading
 import time

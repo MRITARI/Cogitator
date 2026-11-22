@@ -1,4 +1,4 @@
-"""Threads and messages between the engine and the Tk window. No widgets here, so it is testable without a display.
+"""Threads and messages between the engine and the window. No widgets here, so it is testable without a display.
 
 Rules: workers never touch widgets. They post tuples to a queue that the window drains with after(). A worker that needs an
 answer (a confirmation, a choice, some text) posts an ("ask", ...) message and blocks only itself until the window answers.

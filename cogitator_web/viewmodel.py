@@ -1,7 +1,6 @@
-"""Widget-free state and rules for the main window: which rows to show, in what order, with which text and colour.
+"""State and rules for the main window: which rows to show, in what order, with which text and colour.
 
-Nothing in here imports tkinter, so every rule is unit-testable without a display. The window (`app`) only copies what
-`ModListModel.rows()` returns into the Treeview."""
+Every rule is unit-testable without a display; the web session sends what `ModListModel.rows()` returns to the page."""
 from __future__ import annotations
 
 from dataclasses import dataclass
@@ -14,10 +13,6 @@ from cogitator.viewtext import SORT_COLUMNS, installed_label, mod_suffix, status
 
 ARROW = "→"  # the Windows UI fonts have it; the terminal UI uses "->" where it cannot be sure
 ON_TEXT, OFF_TEXT, UNLISTED_TEXT = "On", "Off", "-"
-
-# (column id, heading, width in px, stretch, anchor)
-COLUMNS = (("en", "On/Off", 64, False, "center"), ("mod", "Mod", 330, True, "w"), ("installed", "Installed", 110, False, "w"),
-           ("latest", "Latest", 110, False, "w"), ("status", "Status", 300, True, "w"))
 
 TAG_BAD, TAG_WARN, TAG_OK, TAG_DIM = "t_bad", "t_warn", "t_ok", "t_dim"
 STRIPES = ("even", "odd")
@@ -154,94 +149,3 @@ def move_steps(listed: list[str], src: str, dst: str) -> int | None:
     if src not in listed:
         return None
     return (listed.index(dst) if dst in listed else len(listed) - 1) - listed.index(src)
-
-
-# ---------------------------------------------------------------- text styles (rich-style strings from the shared flows)
-
-PALETTES = {
-    "light": {"fg": "#1c1c1c", "bg": "#fafafa", "stripe": "#f1f1f1", "dim": "#616161", "green": "#17713a", "red": "#c62828",
-              "yellow": "#8a5a00", "cyan": "#0b6e99", "black": "#000000", "white": "#ffffff", "log_bg": "#ffffff",
-              "ok_bg": "#dff3e3", "ok_fg": "#0e5a24", "warn_bg": "#fff1c2", "warn_fg": "#6b4600", "bad_bg": "#fde0e2", "bad_fg": "#9b1c24"},
-    "dark": {"fg": "#fafafa", "bg": "#1c1c1c", "stripe": "#252525", "dim": "#9a9a9a", "green": "#4cc26a", "red": "#ff7b7b",
-             "yellow": "#f1c40f", "cyan": "#5ac8e8", "black": "#000000", "white": "#ffffff", "log_bg": "#161616",
-             "ok_bg": "#17381f", "ok_fg": "#8be3a3", "warn_bg": "#44370f", "warn_fg": "#f7d56b", "bad_bg": "#4a1f22", "bad_fg": "#ffa3a3"},
-}
-
-# rich styles of the header's status words -> the badge (chip) look. Text stays the same; the colours come from the palette.
-BADGE_OF_STYLE = {"green": "ok", "bold black on green": "ok", "bold red": "bad", "bold white on red": "bad",
-                  "yellow": "warn", "bold yellow": "warn", "bold black on yellow": "warn"}
-
-
-def badge_style(kind: str) -> str:
-    return f"badge_{kind}"
-
-
-def badgify(segments: list[tuple[str, str]]) -> list[tuple[str, str]]:
-    """Header segments -> the same text, with status words as padded badges (a one-space pad each side where not already there)."""
-    out = []
-    for text, style in segments:
-        kind = BADGE_OF_STYLE.get(style)
-        if kind and text.strip():
-            text = " " + text.strip() + " " if style not in ("bold black on green", "bold white on red", "bold black on yellow") else text
-            style = badge_style(kind)
-        out.append((text, style))
-    return out
-
-
-def style_options(style: str, palette: dict[str, str]) -> dict[str, object]:
-    """rich style ("bold black on green") -> {'foreground', 'background', 'bold'} for a Tk text tag; unknown words are ignored."""
-    out: dict[str, object] = {}
-    words = style.split()
-    on = False
-    for w in words:
-        if w == "on":
-            on = True
-        elif w == "bold":
-            out["bold"] = True
-        elif w.startswith("badge_"):
-            kind = w[6:]
-            out.update(foreground=palette[kind + "_fg"], background=palette[kind + "_bg"], bold=True)
-        elif w == "dim":
-            out["foreground"] = palette["dim"]
-        elif w in palette:
-            out["background" if on else "foreground"] = palette[w]
-            on = False
-    return out
-
-
-def style_tag(style: str) -> str:
-    return "s_" + style.replace(" ", "_") if style else ""
-
-
-# ---------------------------------------------------------------- theme
-
-THEMES = ("light", "dark")
-
-
-def normalize_theme(value: object) -> str:
-    """Whatever the settings file holds -> a theme we have (light is the default)."""
-    return value if isinstance(value, str) and value in PALETTES else "light"
-
-
-def ttk_styles(palette: dict[str, str]) -> dict[str, dict[str, str]]:
-    """ttk style options for one palette (applied with Style.configure). Widget-free so it can be tested."""
-    p = palette
-    return {
-        ".": {"background": p["bg"], "foreground": p["fg"], "fieldbackground": p["bg"]},
-        "TFrame": {"background": p["bg"]},
-        "TLabel": {"background": p["bg"], "foreground": p["fg"]},
-        "Hint.TLabel": {"background": p["bg"], "foreground": p["dim"]},
-        "TButton": {"background": p["stripe"], "foreground": p["fg"]},
-        "TEntry": {"fieldbackground": p["log_bg"], "foreground": p["fg"], "insertcolor": p["fg"]},
-        "Treeview": {"background": p["bg"], "fieldbackground": p["bg"], "foreground": p["fg"]},
-        "Treeview.Heading": {"background": p["stripe"], "foreground": p["fg"]},
-        "TScrollbar": {"background": p["stripe"], "troughcolor": p["bg"]},
-        "TPanedwindow": {"background": p["bg"]},
-    }
-
-
-def ttk_state_maps(palette: dict[str, str]) -> dict[str, dict[str, list]]:
-    """Style.map options: selection and hover colours that the base theme would otherwise keep."""
-    sel = "#2d5a8c" if palette is PALETTES["dark"] else "#cce4ff"
-    return {"Treeview": {"background": [("selected", sel)], "foreground": [("selected", palette["fg"])]},
-            "TButton": {"background": [("active", palette["stripe"])]}}

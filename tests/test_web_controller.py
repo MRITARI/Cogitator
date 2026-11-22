@@ -3,7 +3,7 @@ import threading
 import time
 
 from cogitator.config import set_api_key
-from cogitator_gui.controller import CHOICE, CONFIRM, TEXT, Controller, GuiUi
+from cogitator_web.controller import CHOICE, CONFIRM, TEXT, Controller, GuiUi
 
 SECRET = "ControllerSecretKey-0123456789abcdef"
 

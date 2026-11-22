@@ -1,4 +1,4 @@
-"""The web setup wizard's session and page-facing API, driven without a window. Fakes mirror tests/test_setup_gui.py."""
+"""The web setup wizard's session and page-facing API, driven without a window. Fakes are local to this file."""
 import functools
 import json
 import threading

@@ -2,8 +2,7 @@
 from cogitator import actions
 from cogitator.mods import DISABLED, ENABLED, UNLISTED, Mod
 from cogitator.updates import FAILED, NOT_LINKED, PROBABLY_OUTDATED, UNKNOWN, UP_TO_DATE, UPDATE, ModRow
-from cogitator_gui.viewmodel import (COLUMNS, PALETTES, TAG_BAD, TAG_DIM, TAG_OK, TAG_WARN, ModListModel, move_steps,
-                                     style_options, style_tag)
+from cogitator_web.viewmodel import (TAG_BAD, TAG_DIM, TAG_OK, TAG_WARN, ModListModel, move_steps)
 
 
 def mods():
@@ -25,9 +24,6 @@ def model(meta=None):
 def folders(m, keep=None):
     return [r.folder for r in m.rows(keep)]
 
-
-def test_columns_match_the_terminal_ui():
-    assert [c[1] for c in COLUMNS] == ["On/Off", "Mod", "Installed", "Latest", "Status"]
 
 
 def test_rows_in_load_order_have_text_and_stripes():
@@ -123,13 +119,6 @@ def test_drag_steps_count_load_order_positions():
     assert model().listed() == ["alpha", "Beta", "ghost", "nomod"]
 
 
-def test_style_strings_map_to_tag_options():
-    p = PALETTES["light"]
-    assert style_options("bold green", p) == {"bold": True, "foreground": p["green"]}
-    assert style_options("bold black on yellow", p) == {"bold": True, "foreground": p["black"], "background": p["yellow"]}
-    assert style_options("dim", p) == {"foreground": p["dim"]}
-    assert style_options("", p) == {} and style_options("underline sparkle", p) == {}
-    assert style_tag("bold red") == "s_bold_red" and style_tag("") == ""
 
 
 def test_note_parsing_shared_with_the_tui():
