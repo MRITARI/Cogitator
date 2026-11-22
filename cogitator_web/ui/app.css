@@ -131,7 +131,8 @@ table.mods { width: 100%; border-collapse: collapse; table-layout: fixed; }
 .mods tbody tr[aria-selected="true"] { background: var(--secondary); }
 .mods tbody tr:focus-visible { outline: 2px solid var(--ring); outline-offset: -2px; }
 .mods td:first-child, .mods th:first-child { padding-left: var(--sp-4); }
-.mods col.c-en { width: 84px; } .mods col.c-installed, .mods col.c-latest { width: 120px; } .mods col.c-status { width: 31%; }
+.mods col.c-en { width: 84px; } .mods col.c-installed, .mods col.c-latest { width: 104px; } .mods col.c-status { width: 190px; }
+.mods td.ver { color: var(--muted); }
 .mods td.name .in { display: flex; align-items: center; gap: var(--sp-2); min-width: 0; }
 .mods td.name .t { overflow: hidden; text-overflow: ellipsis; }
 .mods .muted { color: var(--muted); }

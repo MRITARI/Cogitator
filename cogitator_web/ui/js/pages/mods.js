@@ -111,7 +111,7 @@ export function mount(container, ctx) {
   function createRow(row) {
     const sw = toggleSwitch({ label: row.folder, checked: false, tabindex: "-1", onChange: () => { select(row.folder, false); call("toggle", row.folder); } });
     const name = h("td", { class: "name" });
-    const installed = h("td"), latest = h("td"), statusCell = h("td");
+    const installed = h("td", { class: "ver" }), latest = h("td", { class: "ver" }), statusCell = h("td");
     const status = badge({ value: "" });
     statusCell.append(status);
     const tr = h("tr", { tabindex: "-1", "aria-selected": "false", data: { folder: row.folder } }, h("td", {}, sw), name, installed, latest, statusCell);
@@ -167,9 +167,7 @@ export function mount(container, ctx) {
     e.tr.draggable = row.present && row.en !== "unlisted";
     e.name.replaceChildren(h("div", { class: "in" }, h("span", { class: "t", text: row.folder, title: row.folder }), ...chips(row), row.suffix ? h("span", { class: "muted", text: row.suffix }) : null));
     e.installed.textContent = row.installed;
-    e.latest.textContent = row.latest;
-    e.installed.className = row.installed === "-" ? "muted" : "";
-    e.latest.className = row.latest === "-" ? "muted" : "";
+    e.latest.textContent = row.latest === "-" ? "—" : row.latest;
     if (row.kind === "ok") {
       e.status.className = "ok-mark";
       e.status.title = row.status;
