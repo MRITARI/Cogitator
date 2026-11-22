@@ -72,8 +72,8 @@ html.icons-text .icon { font-family: var(--font); font-weight: 600; }
 }
 .btn:hover:not(:disabled) { background: var(--secondary); }
 .btn:disabled { opacity: 0.5; cursor: not-allowed; }
-.btn-primary { background: var(--primary); color: var(--primary-fg); border-color: transparent; }
-.btn-primary:hover:not(:disabled) { background: var(--primary); opacity: 0.88; }
+.btn-primary { background: var(--accent); color: var(--accent-fg); border-color: transparent; }
+.btn-primary:hover:not(:disabled) { background: var(--accent); opacity: 0.88; }
 .btn-secondary { background: var(--secondary); border-color: transparent; }
 .btn-secondary:hover:not(:disabled) { background: var(--tile); }
 .btn-ghost { border-color: transparent; }
@@ -147,6 +147,7 @@ table.mods { width: 100%; border-collapse: collapse; table-layout: fixed; }
 .mods tbody tr { transition: background var(--t-fast); cursor: default; }
 .mods tbody tr:hover { background: var(--tile); }
 .mods tbody tr[aria-selected="true"] { background: var(--secondary); }
+.mods tbody tr[aria-selected="true"] td:first-child { box-shadow: inset 3px 0 0 var(--accent); }
 .mods tbody tr:focus-visible { outline: 2px solid var(--ring); outline-offset: -2px; }
 .mods td:first-child, .mods th:first-child { padding-left: var(--sp-4); }
 .mods col.c-en { width: 84px; } .mods col.c-installed, .mods col.c-latest { width: 104px; } .mods col.c-status { width: 190px; }

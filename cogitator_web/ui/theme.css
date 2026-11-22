@@ -23,7 +23,9 @@
   --ok-text: #4ade80;
   --attention-text: #fbbf24;
   --neutral: #71717a;
-  --ring: #a3a3a3;
+  --accent: #b8892e;      /* brass: primary button, selected-row marker, focus ring */
+  --accent-fg: #0a0a0a;
+  --ring: #b8892e;
   --scrim: rgba(0, 0, 0, 0.6);
 
   --radius-pill: 999px;
@@ -69,7 +71,9 @@
     --ok-text: #166534;
     --attention-text: #8f4106;
     --neutral: #a3a3a3;
-    --ring: #626262;
+    --accent: #8a6420;
+    --accent-fg: #ffffff;
+    --ring: #8a6420;
     --scrim: rgba(0, 0, 0, 0.4);
     color-scheme: light;
   }
@@ -97,7 +101,9 @@
   --ok-text: #166534;
   --attention-text: #8f4106;
   --neutral: #a3a3a3;
-  --ring: #626262;
+  --accent: #8a6420;
+  --accent-fg: #ffffff;
+  --ring: #8a6420;
   --scrim: rgba(0, 0, 0, 0.4);
   color-scheme: light;
 }

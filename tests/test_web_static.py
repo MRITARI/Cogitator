@@ -134,7 +134,7 @@ def test_the_spec_colours_are_there():
     _, d, _, _ = _themes()
     for k, v in {"bg": "#0a0a0a", "card": "#171717", "tile": "#1e1e1e", "input": "#282828", "secondary": "#262626", "border": "#2f2f2f",
                  "primary": "#e5e5e5", "fg": "#fafafa", "muted": "#a3a3a3", "destructive": "#ef4444", "ok": "#4ade80", "attention": "#fbbf24",
-                 "neutral": "#71717a", "ring": "#a3a3a3"}.items():
+                 "neutral": "#71717a", "accent": "#b8892e"}.items():
         assert d[k].lower() == v, k
     assert (d["radius-pill"], d["radius-card"], d["radius-tile"]) == ("999px", "24px", "16px")
 
@@ -147,6 +147,9 @@ def test_text_contrast_on_every_surface(which):
         for bg in SURFACES:
             assert ratio(t[fg], t[bg]) >= 4.5, f"{which}: {fg} {t[fg]} on {bg} {t[bg]} = {ratio(t[fg], t[bg]):.2f}"
     assert ratio(t["primary-fg"], t["primary"]) >= 4.5  # the primary button
+    assert ratio(t["accent-fg"], t["accent"]) >= 4.5  # the accent (Launch) button
+    for bg in SURFACES:
+        assert ratio(t["ring"], t[bg]) >= 3, f"{which}: focus ring on {bg}"
     assert ratio(t["knob-on"], t["primary"]) >= 3  # switch knob on its track (not text)
 
 
