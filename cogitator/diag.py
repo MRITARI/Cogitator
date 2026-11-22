@@ -38,7 +38,7 @@ def _versions() -> str:
 
     lines = [f"cogitator {__version__}", f"python {sys.version.split()[0]} ({platform.platform()})",
              f"frozen {bool(getattr(sys, 'frozen', False))}"]
-    for pkg in ("textual", "httpx", "keyring", "cryptography"):
+    for pkg in ("webview", "httpx", "keyring", "cryptography"):
         try:
             lines.append(f"{pkg} {md.version(pkg)}")
         except md.PackageNotFoundError:

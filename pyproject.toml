@@ -19,7 +19,6 @@ classifiers = [
   "Topic :: Games/Entertainment",
 ]
 dependencies = [
-  "textual>=0.80",
   "httpx>=0.27",
   "platformdirs>=4",
   "vdf>=3.4",

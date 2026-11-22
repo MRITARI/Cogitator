@@ -9,12 +9,8 @@ import pytest
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 
-from cogitator import i18n, nxm
+from cogitator import i18n
 from cogitator.config import Settings
-from cogitator.registry import Registry
-from cogitator.tui.screens import ConfirmScreen
-from test_tui import SIZE, fx, game, log_text, make_app, settle  # noqa: F401  (fixtures)
-from test_tui_keys import dialog_text
 
 spec = importlib.util.spec_from_file_location("release_sign", Path(__file__).parents[1] / "packaging" / "release.py")
 release = importlib.util.module_from_spec(spec)
@@ -111,7 +107,6 @@ def test_language_detection(monkeypatch):
 
 def test_every_ui_key_is_collected_and_unique_in_meaning():
     keys = i18n.collect()
-    assert {"notice.title", "notice.body", "help.body", "empty.state", "menu.help", "menu.quit"} <= set(keys)
     assert all(isinstance(v, str) and v for v in keys.values())
 
 
@@ -125,28 +120,6 @@ def test_check_reports_unknown_keys_and_placeholder_changes(tmp_path):
     problems = "\n".join(i18n.check(bad, keys))
     assert "placeholders differ" in problems and "unknown key: nope" in problems and "must be text" in problems
     assert i18n.check(tmp_path / "missing.json", keys)[0].startswith("cannot read")
-
-
-def test_help_screen_is_translated_in_the_interface(game, tmp_path):
-    s = Settings.load()
-    s.notice_accepted = True
-    s.language = "xx"
-    s.save()
-    keys = i18n.collect()
-    body = keys["help.body"].replace("T  mods on/off (the game patch)", "XX-HELP-LINE")
-    write_catalog(tmp_path, "xx", {"help.body": body})
-
-    async def go():
-        app = make_app(game)
-        async with app.run_test(size=SIZE) as pilot:
-            await settle(app, pilot)
-            await pilot.press("question_mark")
-            await pilot.pause()
-            assert "XX-HELP-LINE" in dialog_text(app)
-
-    import asyncio
-
-    asyncio.run(go())
 
 
 def test_shipped_catalogs_are_valid():
@@ -186,59 +159,6 @@ class FakeNexus:
 def fake_nexus(monkeypatch):
     monkeypatch.setenv("COGITATOR_NEXUS_KEY", "k")
     monkeypatch.setattr("cogitator.actions_nexus.NexusClient", FakeNexus)
-
-
-async def test_a_queued_link_downloads_and_imports_without_asking(game, fake_nexus, monkeypatch, tmp_path):
-    got = {}
-
-    def fake_download(link, nx, dest, client=None):
-        dest.mkdir(parents=True, exist_ok=True)
-        z = dest / "Cool.zip"
-        z.write_bytes(make_zip())
-        got["link"] = link
-        return z, None
-
-    monkeypatch.setattr(nxm, "download", fake_download)
-    app = make_app(game)
-    imported = []
-    async with app.run_test(size=SIZE) as pilot:
-        monkeypatch.setattr("cogitator.actions_nexus.import_file",
-                            lambda ctx, ui, raw, mod_id, after, **k: imported.append((Path(raw).name, mod_id, k)))
-        await settle(app, pilot)
-        path = nxm.enqueue(URL)
-        app._nxm_tick()
-        for _ in range(60):
-            await pilot.pause()
-            if imported:
-                break
-        await settle(app, pilot)
-        assert not isinstance(app.screen, ConfirmScreen)
-        assert imported == [("Cool.zip", 19, {"quiet": True})] and got["link"].key == "k1"
-        assert not path.exists() and app._nxm_busy is False  # the queue item is consumed, the work folder cleaned
-        assert "k1" not in log_text(app)  # the key is never shown
-
-
-async def test_a_link_without_an_api_key_explains(game, monkeypatch):
-    monkeypatch.delenv("COGITATOR_NEXUS_KEY", raising=False)
-    monkeypatch.setattr("cogitator.actions_nexus.get_api_key", lambda: None)
-    app = make_app(game)
-    async with app.run_test(size=SIZE) as pilot:
-        await settle(app, pilot)
-        nxm.enqueue(URL)
-        app._nxm_tick()
-        await settle(app, pilot)
-        assert "no API key is set" in log_text(app) and nxm.pending() == []
-
-
-async def test_links_wait_while_a_dialog_is_open(game):
-    app = make_app(game)
-    async with app.run_test(size=SIZE) as pilot:
-        await settle(app, pilot)
-        nxm.enqueue(URL)
-        await pilot.press("p")
-        await pilot.pause()
-        app._nxm_tick()
-        assert app._nxm_busy is False and len(nxm.pending()) == 1
 
 
 def test_i18n_detect_always_returns_a_two_letter_code(monkeypatch):

@@ -92,8 +92,7 @@ def test_every_entry_point_refuses_cleanly_instead_of_crashing(capsys):
     assert cli.main(["status"]) == 2
     err = capsys.readouterr().err
     assert "newer Cogitator" in err and "Traceback" not in err
-    from cogitator.tui.app import run_tui
-    assert run_tui() == 2 and "newer Cogitator" in capsys.readouterr().err
+    assert cli.main([]) == 2 and "newer Cogitator" in capsys.readouterr().err
     from cogitator_setup.app import main as setup_main
     shown = []
     assert setup_main([], build=22000, show_error=lambda t, b: shown.append(b)) == 2 and "newer Cogitator" in shown[0]
