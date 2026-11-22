@@ -101,7 +101,10 @@ def test_sort_by_header_toggles_direction_and_cycle_matches_the_tui():
 
 def test_hint_and_summary():
     m = model({"alpha": {"tags": ["ui"], "notes": "n", "pinned_version": "1"}})
-    assert m.hint(None).startswith("No mods installed")
+    empty = model()
+    empty.set_mods([])
+    assert empty.hint(None).startswith("No mods installed")
+    assert m.mods and not m.hint(None).startswith("No mods installed") and "File >" not in m.hint(None)
     assert "Not linked to Nexus" in m.hint("Beta") and "Not in mod_load_order" in m.hint("gamma")
     assert m.hint("alpha").endswith("pinned to 1  |  tags: ui  |  note: n")
     assert "folder is missing" in m.hint("ghost")
@@ -137,4 +140,6 @@ def test_gui_wording_has_no_terminal_key_hints():
     row = ModRow(folder="a", nexus_id=None, installed=None, latest=None, status=NOT_LINKED, reason="press L to link this mod to its Nexus page")
     assert "press" not in hint_for(m, row, gui=True) and "Press L" not in hint_for(m, None, gui=True)
     assert "Press L" in hint_for(m, row)  # the terminal UI keeps its own wording
-    assert "press I" not in hint_for(None, None, gui=True) and "press I" in hint_for(None, None)
+    assert "press I to" not in hint_for(None, None, gui=True) and "press I" in hint_for(None, None)
+    assert "File >" not in hint_for(None, None, gui=True) and "Import zip (Ctrl+I)" in hint_for(None, None, gui=True)
+

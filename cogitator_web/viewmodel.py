@@ -118,10 +118,10 @@ class ModListModel:
 
     # ---- texts
     def hint(self, folder: str | None) -> str:
-        from cogitator.viewtext import hint_for
+        from cogitator.viewtext import GUI_SELECT_TIP, hint_for
 
         if not folder:
-            return hint_for(None, None, gui=True)
+            return GUI_SELECT_TIP if self.mods else hint_for(None, None, gui=True)
         return hint_for(self.mod(folder), self.urows.get(folder), gui=True) + actions.meta_hint(self.meta(folder))
 
     def summary(self) -> str:

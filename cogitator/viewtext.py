@@ -66,8 +66,9 @@ def status_label(row: ModRow | None, arrow: str, mod: Mod | None = None, gui: bo
     return label, STATUS_STYLE.get(row.status, "")
 
 
-GUI_EMPTY_STATE = ("No mods installed yet. Download mods from nexusmods.com/warhammer40kdarktide, then use File > Import zip(s) "
-                   "(or Ctrl+I). Press F1 for help.")
+GUI_EMPTY_STATE = ("No mods installed yet. Download mods from nexusmods.com/warhammer40kdarktide, then press Import zip (Ctrl+I). "
+                   "Press F1 for help.")
+GUI_SELECT_TIP = "Select a mod to see its details. Right-click a mod for more actions."
 GUI_BASELINE_UNKNOWN_LABEL = "version unknown - right-click > Link to Nexus to set it"
 
 
