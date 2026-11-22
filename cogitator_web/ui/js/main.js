@@ -54,6 +54,12 @@ function onKey(e) {
   if (k === "F1") return run(showHelp);
   if (k === "F5") return run(() => call("check_updates"));
   if (k === "F3") return run(searchNexus);
+  if (ctrl && (k === "a" || k === "A")) { // never select page text; in the table it selects every visible mod
+    if (typing) return;
+    e.preventDefault();
+    if (mods && mods.inTable()) mods.selectAll();
+    return;
+  }
   if (ctrl && !e.shiftKey && !e.altKey) {
     const map = { i: () => call("import_zips"), g: () => call("launch"), d: () => call("doctor"), t: () => call("toggle_global"), u: () => call("update_all"), q: () => call("quit"),
       k: () => { go("settings", true); }, f: () => { if (state.page !== "mods") go("mods"); if (modsApi.current) modsApi.current.focusFilter(); } };
@@ -65,7 +71,7 @@ function onKey(e) {
   // plain letters act only while the table has focus (typing in a field must not trigger anything)
   const letters = { r: () => call("check_updates"), i: () => call("import_zips"), g: () => call("launch"), d: () => call("doctor"), t: () => call("toggle_global"),
     m: () => call("link_all"), f: () => call("framework_update"),
-    k: () => go("settings", true), x: () => mods.mark(), b: () => mods.bulk(), n: () => mods.note(), o: () => mods.cycleSort(), "*": () => mods.fav(), "/": () => mods.focusFilter() };
+    k: () => go("settings", true), n: () => mods.note(), o: () => mods.cycleSort(), "*": () => mods.fav(), "/": () => mods.focusFilter() };
   const fn = letters[k.length === 1 ? k.toLowerCase() : k];
   if (fn) run(fn);
 }

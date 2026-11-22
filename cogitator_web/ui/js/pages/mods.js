@@ -17,6 +17,8 @@ const CHIPS = [["all", "All", () => true], ["enabled", "Enabled", (r) => r.en ==
   ["unlinked", "Not linked", (r) => r.kind === "unlinked"], ["fav", "Favourites", (r) => r.fav]];
 let activeChip = "all"; // kept across list refreshes (and page switches)
 let panelOpen = false; // the details panel: opened by a click (or ArrowRight on a row), follows the selection, closed by x / Esc / ArrowLeft
+const selSet = new Set(); // every selected folder; state.selected is the cursor (the one the panel and Ctrl+Up/Down follow)
+let anchor = null; // where a Shift+click range starts
 const chipTest = (id) => (CHIPS.find((c) => c[0] === id) || CHIPS[0])[2];
 
 export const title = "Mods";
@@ -42,18 +44,11 @@ export function mount(container, ctx) {
     showMenu(r.left, r.bottom + 4, [{ label: "Update all (Ctrl+U)", id: "update_all", enabled: true }, { label: "Link all mods to Nexus (M)", id: "link_all", enabled: true },
       { label: "Update Mod Loader / Framework (F)", id: "framework_update", enabled: true }], (id) => call(id));
   } });
-  async function bulkMenu() {
-    const r = await call("bulk_menu");
-    if (!r.ok) return;
-    const b = bulkBtn.getBoundingClientRect();
-    showMenu(b.left, b.bottom + 4, r.items, (id) => call("bulk", id));
-  }
-  const bulkBtn = button({ label: "Bulk", trailingIcon: "chevronDown", kind: "secondary", title: "Actions on the marked mods (B). Mark mods with X.", onClick: bulkMenu });
   const upBtn = button({ label: "Move up", icon: "up", iconOnly: true, kind: "secondary", title: "Move up (Ctrl+Up)", onClick: () => api.move(-1), disabled: true });
   const downBtn = button({ label: "Move down", icon: "down", iconOnly: true, kind: "secondary", title: "Move down (Ctrl+Down)", onClick: () => api.move(1), disabled: true });
   const filter = h("input", { class: "input", type: "search", placeholder: "Filter mods", "aria-label": "Filter mods", autocomplete: "off", spellcheck: "false" });
   const search = h("div", { class: "search" }, icon("search"), filter);
-  const toolbar = h("div", { class: "toolbar", role: "toolbar", "aria-label": "Mods" }, launchBtn, check, importBtn, globalBtn, moreBtn, bulkBtn,
+  const toolbar = h("div", { class: "toolbar", role: "toolbar", "aria-label": "Mods" }, launchBtn, check, importBtn, globalBtn, moreBtn,
     h("span", { class: "sep", "aria-hidden": "true" }), upBtn, downBtn, h("span", { class: "grow" }));
   const chipEls = new Map();
   const chipBar = h("div", { class: "chips", role: "group", "aria-label": "Show" }, CHIPS.map(([id, label]) => {
@@ -79,11 +74,19 @@ export function mount(container, ctx) {
     return th;
   }));
   const tbody = h("tbody", {});
-  const table = h("table", { class: "mods", "aria-label": "Mods" },
+  const table = h("table", { class: "mods", "aria-label": "Mods", "aria-multiselectable": "true" },
     h("colgroup", {}, h("col", { class: "c-en" }), h("col", { class: "c-mod" }), h("col", { class: "c-installed" }), h("col", { class: "c-latest" }), h("col", { class: "c-status" })),
     h("thead", {}, headRow), tbody);
   const empty = h("div", { class: "empty", hidden: true });
-  const wrap = h("div", { class: "table-wrap" }, table, empty);
+  const selCount = h("span", { class: "n", role: "status" });
+  const enBtn = button({ label: "Enable", kind: "secondary", onClick: () => bulk("enable") });
+  const disBtn = button({ label: "Disable", kind: "secondary", onClick: () => bulk("disable") });
+  const updBtn = button({ label: "Update", kind: "secondary", onClick: () => bulk("update") });
+  const rmBtn = button({ label: "Remove...", kind: "secondary", onClick: () => bulk("remove") });
+  const clrBtn = button({ label: "Clear selection", icon: "close", iconOnly: true, kind: "ghost", title: "Clear selection (Esc)", onClick: () => { clearMulti(); focusRow(state.selected); } });
+  const selBar = h("div", { class: "selbar", role: "toolbar", "aria-label": "Selected mods", hidden: true }, selCount, enBtn, disBtn, updBtn, rmBtn, h("span", { class: "grow" }), clrBtn);
+  const marquee = h("div", { class: "marquee", "aria-hidden": "true", hidden: true });
+  const wrap = h("div", { class: "table-wrap" }, table, empty, marquee, selBar);
   const panel = createDetails({ onClose: (refocus) => closePanel(refocus) });
   container.append(badges, banner, updBanner, toolbar, chipBar, h("div", { class: "mods-layout" }, wrap, panel.el));
   function closePanel(refocus) {
@@ -125,22 +128,31 @@ export function mount(container, ctx) {
     if (row.pinned) out.push(h("span", { class: "chip", title: "Version pinned" }, icon("pin"), `pinned ${row.pinned}`));
     if (row.note) out.push(h("span", { class: "chip", title: "Has a note" }, icon("note"), "note"));
     for (const t of row.tags.slice(0, 3)) out.push(h("span", { class: "chip", text: `#${t}` }));
-    if (row.marked) out.push(h("span", { class: "chip on", title: "Marked for bulk actions" }, icon("mark"), "marked"));
     return out;
   }
 
   function createRow(row) {
-    const sw = toggleSwitch({ label: row.folder, checked: false, tabindex: "-1", onChange: () => { select(row.folder, false); call("toggle", row.folder); } });
+    const sw = toggleSwitch({ label: row.folder, checked: false, tabindex: "-1", onChange: () => { if (!selSet.has(row.folder)) select(row.folder, false); call("toggle", row.folder); } });
     const name = h("td", { class: "name" });
     const installed = h("td", { class: "ver" }), latest = h("td", { class: "ver" }), statusCell = h("td");
     const status = badge({ value: "" });
     statusCell.append(status);
-    const tr = h("tr", { tabindex: "-1", "aria-selected": "false", data: { folder: row.folder } }, h("td", {}, h("div", { class: "en" }, h("span", { class: "grip", "aria-hidden": "true" }, icon("grip")), sw)), name, installed, latest, statusCell);
-    const e = { tr, sig: "", sw, name, installed, latest, status };
-    tr.addEventListener("click", () => { panelOpen = true; select(row.folder, false); });
+    const tr = h("tr", { tabindex: "-1", "aria-selected": "false", data: { folder: row.folder } }, h("td", {}, h("div", { class: "en" }, h("span", { class: "grip", "aria-hidden": "true", title: "Drag to reorder" }, icon("grip")), sw)), name, installed, latest, statusCell);
+    const e = { tr, sig: "", sw, name, installed, latest, status, grip: tr.querySelector(".grip") };
+    tr.addEventListener("click", (ev) => {
+      if (skipClick) return;
+      if (ev.ctrlKey || ev.metaKey) toggleSel(row.folder);
+      else if (ev.shiftKey) rangeSel(row.folder);
+      else { panelOpen = true; select(row.folder, false); }
+    });
     tr.addEventListener("dblclick", (ev) => { if (!ev.target.closest(".switch")) call("toggle", row.folder); });
-    wireDrag(tr, row.folder);
-    tr.addEventListener("contextmenu", (ev) => { ev.preventDefault(); select(row.folder, true); openMenu(row.folder, ev.clientX, ev.clientY); });
+    wireDrag(tr, row.folder, e.grip);
+    tr.addEventListener("contextmenu", (ev) => {
+      ev.preventDefault();
+      if (selSet.has(row.folder) && picked().length > 1) { state.selected = row.folder; syncSelection(); openManyMenu(ev.clientX, ev.clientY); return; }
+      select(row.folder, true);
+      openMenu(row.folder, ev.clientX, ev.clientY);
+    });
     return e;
   }
 
@@ -148,9 +160,10 @@ export function mount(container, ctx) {
   let dragging = null;
   const listed = (f) => { const r = state.rows.get(f); return !!r && r.present && r.en !== "unlisted"; };
   const clearDrop = () => { for (const { tr } of entries.values()) tr.classList.remove("drop-before", "drop-after", "dragging"); };
-  function wireDrag(tr, folder) {
+  function wireDrag(tr, folder, grip) {
     tr.addEventListener("dragstart", (ev) => {
-      if (!listed(folder)) { ev.preventDefault(); return; }
+      if (ev.target !== grip || !listed(folder)) { ev.preventDefault(); return; }
+      ev.dataTransfer.setDragImage(tr, 16, 16);
       dragging = folder;
       ev.dataTransfer.effectAllowed = "move";
       ev.dataTransfer.setData("text/plain", folder);
@@ -185,8 +198,9 @@ export function mount(container, ctx) {
     setSwitch(e.sw, row.en === "on", `${row.folder}: ${row.en === "on" ? "on" : row.en === "off" ? "off" : "not in load order"}`);
     e.sw.classList.toggle("is-unlisted", row.en === "unlisted");
     e.sw.disabled = !row.present;
-    e.tr.draggable = row.present && row.en !== "unlisted";
-    e.tr.classList.toggle("can-drag", e.tr.draggable);
+    const can = row.present && row.en !== "unlisted";
+    e.grip.draggable = can; // only the grip starts a drag; the rest of the row is for selecting
+    e.tr.classList.toggle("can-drag", can);
     e.name.replaceChildren(h("div", { class: "in" }, h("span", { class: "t", text: row.folder, title: row.folder }), ...chips(row), row.suffix ? h("span", { class: "muted", text: row.suffix }) : null));
     e.installed.textContent = row.installed;
     e.latest.textContent = row.latest === "-" ? "—" : row.latest;
@@ -210,8 +224,13 @@ export function mount(container, ctx) {
       patchRow(e, row);
       if (tbody.children[i] !== e.tr) tbody.insertBefore(e.tr, tbody.children[i] || null);
     });
-    if (keep && seen.has(keep)) state.selected = keep;
-    else if (state.selected && !seen.has(state.selected)) state.selected = state.order[Math.min(Math.max(lastIndex, 0), state.order.length - 1)] || null;
+    for (const f of [...selSet]) if (!seen.has(f)) selSet.delete(f);
+    if (anchor && !seen.has(anchor)) anchor = null;
+    if (keep && seen.has(keep)) { state.selected = keep; selSet.clear(); selSet.add(keep); anchor = keep; }
+    else if (state.selected && !seen.has(state.selected)) {
+      state.selected = [...selSet].pop() || state.order[Math.min(Math.max(lastIndex, 0), state.order.length - 1)] || null;
+      if (state.selected && !selSet.size) selSet.add(state.selected);
+    } else if (state.selected && !selSet.size) selSet.add(state.selected);
     syncSelection();
     if (keep && entries.has(keep)) entries.get(keep).tr.scrollIntoView({ block: "nearest" });
     const vis = shown(), visSet = new Set(vis);
@@ -239,31 +258,134 @@ export function mount(container, ctx) {
       c.b.setAttribute("aria-pressed", String(id === activeChip));
       c.b.setAttribute("aria-label", n === null ? c.label : `${c.label}, ${n}`);
     }
-    const marked = [...state.rows.values()].filter((r) => r.marked).length;
-    bulkBtn.firstChild.textContent = marked ? `Bulk (${marked})` : "Bulk";
   }
 
   // ---- selection
+  const picked = () => shown().filter((f) => selSet.has(f)); // selected AND visible, in list order
   function syncSelection() {
     let tab = state.selected && entries.has(state.selected) ? state.selected : shown()[0];
     for (const [f, e] of entries) {
-      const sel = f === state.selected;
-      e.tr.setAttribute("aria-selected", String(sel));
+      e.tr.setAttribute("aria-selected", String(selSet.has(f)));
       e.tr.tabIndex = f === tab ? 0 : -1;
     }
     const row = state.rows.get(state.selected);
     ctx.setHint(row ? row.hint : state.emptyHint);
     if (panelOpen && state.selected !== panel.current()) { if (state.selected && state.rows.has(state.selected)) panel.show(state.selected); else panel.hide(); }
     lastIndex = state.selected ? state.order.indexOf(state.selected) : lastIndex;
+    renderBar();
+  }
+
+  function renderBar() {
+    const sel = picked();
+    selBar.hidden = sel.length < 2;
+    if (selBar.hidden) return;
+    selCount.textContent = `${sel.length} selected`;
+    updBtn.hidden = !sel.some((f) => (state.rows.get(f) || {}).kind === "update");
   }
 
   function select(folder, focus) {
     if (!entries.has(folder)) return;
     state.selected = folder;
+    selSet.clear();
+    selSet.add(folder);
+    anchor = folder;
     syncSelection();
     refreshToolbar();
     if (focus) focusRow(folder);
   }
+
+  function toggleSel(folder) {
+    if (!entries.has(folder)) return;
+    if (selSet.has(folder)) { selSet.delete(folder); if (state.selected === folder) state.selected = [...selSet].pop() || null; }
+    else { selSet.add(folder); state.selected = folder; }
+    anchor = folder;
+    syncSelection();
+    refreshToolbar();
+  }
+
+  function rangeSel(folder, focus) {
+    const list = shown(), a = list.indexOf(anchor && entries.has(anchor) ? anchor : state.selected), b = list.indexOf(folder);
+    if (b < 0) return;
+    if (a < 0) { select(folder, focus); return; }
+    selSet.clear();
+    for (const f of list.slice(Math.min(a, b), Math.max(a, b) + 1)) selSet.add(f);
+    state.selected = folder;
+    syncSelection();
+    refreshToolbar();
+    if (focus) focusRow(folder);
+  }
+
+  function selectAll() {
+    const list = shown();
+    if (!list.length) return;
+    selSet.clear();
+    for (const f of list) selSet.add(f);
+    if (!state.selected || !selSet.has(state.selected)) state.selected = list[0];
+    if (!anchor || !selSet.has(anchor)) anchor = list[0];
+    syncSelection();
+    refreshToolbar();
+  }
+
+  function clearMulti() {
+    selSet.clear();
+    if (state.selected) selSet.add(state.selected);
+    anchor = state.selected;
+    syncSelection();
+    refreshToolbar();
+  }
+
+  // ---- marquee: press on a row body and drag to box-select; Ctrl adds to the selection. Auto-scrolls near the top/bottom edge.
+  let skipClick = false;
+  const scroller = () => wrap.closest(".content");
+  tbody.addEventListener("mousedown", (ev) => {
+    if (ev.button !== 0 || ev.target.closest(".switch, .grip, button, a, input")) return;
+    const sc = scroller();
+    if (!sc || !ev.target.closest("tr")) return;
+    const base = (ev.ctrlKey || ev.metaKey) ? new Set(selSet) : new Set();
+    const start = { x: ev.clientX, y: ev.clientY + sc.scrollTop }; // y in scroll space, so the box stays put while the page scrolls
+    let cur = { x: ev.clientX, y: ev.clientY }, active = false, raf = 0;
+    const frame = () => {
+      raf = 0;
+      const sr = sc.getBoundingClientRect(), edge = 36;
+      const near = cur.y < sr.top + edge || cur.y > sr.bottom - edge;
+      if (cur.y < sr.top + edge) sc.scrollTop -= Math.ceil((sr.top + edge - cur.y) / 3);
+      else if (cur.y > sr.bottom - edge) sc.scrollTop += Math.ceil((cur.y - (sr.bottom - edge)) / 3);
+      const x1 = Math.min(start.x, cur.x), x2 = Math.max(start.x, cur.x);
+      const y1 = Math.min(start.y, cur.y + sc.scrollTop) - sc.scrollTop, y2 = Math.max(start.y, cur.y + sc.scrollTop) - sc.scrollTop;
+      const wr = wrap.getBoundingClientRect();
+      marquee.hidden = false;
+      marquee.style.left = `${x1 - wr.left}px`;
+      marquee.style.top = `${y1 - wr.top}px`;
+      marquee.style.width = `${x2 - x1}px`;
+      marquee.style.height = `${y2 - y1}px`;
+      const hit = [];
+      for (const f of shown()) { const r = entries.get(f).tr.getBoundingClientRect(); if (r.bottom >= y1 && r.top <= y2 && r.right >= x1 && r.left <= x2) hit.push(f); }
+      selSet.clear();
+      for (const f of base) selSet.add(f);
+      for (const f of hit) selSet.add(f);
+      if (hit.length) { state.selected = hit[hit.length - 1]; anchor = hit[0]; }
+      else if (!selSet.has(state.selected)) state.selected = [...selSet].pop() || null;
+      syncSelection();
+      if (near) raf = requestAnimationFrame(frame);
+    };
+    const move = (e) => {
+      cur = { x: e.clientX, y: e.clientY };
+      if (!active) {
+        if (Math.hypot(cur.x - ev.clientX, cur.y - ev.clientY) < 4) return;
+        active = true;
+      }
+      if (!raf) raf = requestAnimationFrame(frame);
+    };
+    const up = () => {
+      document.removeEventListener("mousemove", move, true);
+      document.removeEventListener("mouseup", up, true);
+      if (raf) cancelAnimationFrame(raf);
+      marquee.hidden = true;
+      if (active) { skipClick = true; setTimeout(() => { skipClick = false; }, 0); refreshToolbar(); }
+    };
+    document.addEventListener("mousemove", move, true);
+    document.addEventListener("mouseup", up, true);
+  });
 
   function focusRow(folder) {
     const e = entries.get(folder);
@@ -282,12 +404,19 @@ export function mount(container, ctx) {
     if (r.ok && r.items.length) showMenu(x, y, r.items, (id) => call("row_action", folder, id));
   }
 
+  // ---- actions on the whole selection (the bar and the right-click menu)
+  function bulk(action) { const f = picked(); if (f.length > 1) call("bulk", action, f); }
+  function openManyMenu(x, y) {
+    const any = picked().some((f) => (state.rows.get(f) || {}).kind === "update");
+    showMenu(x, y, [{ label: "Enable", id: "enable", enabled: true }, { label: "Disable", id: "disable", enabled: true },
+      { label: "Update", id: "update", enabled: any }, null, { label: "Remove...", id: "remove", enabled: true }], (id) => bulk(id));
+  }
+
   const api = {
     selected: () => state.selected,
     toggle() { if (state.selected) call("toggle", state.selected); },
-    move(d) { if (state.selected) call("move", state.selected, d); },
-    bulk: bulkMenu,
-    mark() { if (state.selected) call("mark", state.selected); },
+    move(d) { if (state.selected && picked().length <= 1) call("move", state.selected, d); },
+    selectAll,
     fav() { if (state.selected) call("fav", state.selected); },
     note() { if (state.selected) call("edit_note", state.selected); },
     cycleSort() { call("cycle_sort"); },
@@ -295,7 +424,10 @@ export function mount(container, ctx) {
     inTable() { return tbody.contains(document.activeElement); },
     menuForSelected() {
       const e = entries.get(state.selected);
-      if (e) { const r = e.tr.getBoundingClientRect(); openMenu(state.selected, r.left + 80, r.bottom); }
+      if (!e) return;
+      const r = e.tr.getBoundingClientRect();
+      if (picked().length > 1) openManyMenu(r.left + 80, r.bottom);
+      else openMenu(state.selected, r.left + 80, r.bottom);
     },
   };
 
@@ -303,15 +435,18 @@ export function mount(container, ctx) {
     const f = e.target.closest ? e.target.closest("tr") : null;
     if (!f || e.target.closest(".switch") && e.key !== " " && e.key !== "Enter") return;
     const list = shown(), i = list.indexOf(f.dataset.folder);
+    if (e.key === "Escape" && picked().length > 1) { e.stopPropagation(); clearMulti(); return; }
     if (e.key === "Escape" && panelOpen) { e.stopPropagation(); closePanel(false); return; }
     if (e.key === "ArrowRight" && !panelOpen) { e.preventDefault(); panelOpen = true; select(f.dataset.folder, false); return; }
     if (e.key === "ArrowLeft" && panelOpen) { e.preventDefault(); closePanel(false); return; }
     if (e.key === "ArrowDown" || e.key === "ArrowUp") {
       e.preventDefault();
+      const n = list[Math.max(0, Math.min(list.length - 1, i + (e.key === "ArrowDown" ? 1 : -1)))];
       if (e.ctrlKey) api.move(e.key === "ArrowDown" ? 1 : -1);
-      else { const n = list[Math.max(0, Math.min(list.length - 1, i + (e.key === "ArrowDown" ? 1 : -1)))]; select(n, true); }
+      else if (e.shiftKey) rangeSel(n, true);
+      else select(n, true);
     } else if (e.key === "Home" || e.key === "End") { e.preventDefault(); select(list[e.key === "Home" ? 0 : list.length - 1], true); }
-    else if (e.key === " " || e.key === "Enter") { e.preventDefault(); select(f.dataset.folder, false); call("toggle", f.dataset.folder); }
+    else if (e.key === " " || e.key === "Enter") { e.preventDefault(); if (!selSet.has(f.dataset.folder)) select(f.dataset.folder, false); call("toggle", f.dataset.folder); }
     else if (e.key === "ContextMenu" || (e.key === "F10" && e.shiftKey)) { e.preventDefault(); api.menuForSelected(); }
   });
 
