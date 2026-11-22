@@ -1,4 +1,4 @@
-// The Mods page: header badges, toolbar, filter and the table. Rows are keyed by folder and patched in place; a full "state"
+// The Mods page: banners, toolbar, filter and the table. Rows are keyed by folder and patched in place; a full "state"
 // push only reorders / adds / removes row elements, and a row whose data did not change is not touched.
 import { call } from "../api.js";
 import { showMenu } from "../components/menu.js";
@@ -28,9 +28,6 @@ export function mount(container, ctx) {
   const entries = new Map(); // folder -> { tr, sig, sw, name, installed, latest, status }
   let lastIndex = -1;
 
-  // ---- header badges
-  const bDml = badge({ key: "DML", value: "" }), bDmf = badge({ key: "DMF", value: "" }), bMods = badge({ key: "Mods", value: "" }), bNexus = badge({ key: "Nexus", value: "" });
-  const badges = h("div", { class: "badges", role: "group", "aria-label": "Status" }, bDml, bDmf, bMods, bNexus);
   const banner = h("div", { class: "banner", role: "status", hidden: true });
   const updBanner = h("div", { class: "banner", role: "status", hidden: true });
   // a banner with a text and an action button
@@ -87,7 +84,7 @@ export function mount(container, ctx) {
   const marquee = h("div", { class: "marquee", "aria-hidden": "true", hidden: true });
   const wrap = h("div", { class: "table-wrap" }, table, empty, marquee, selBar);
   const panel = createDetails({ onClose: (refocus) => closePanel(refocus) });
-  container.append(badges, banner, updBanner, modsBanner.el, fwBanner.el, toolbar, chipBar, h("div", { class: "mods-layout" }, wrap, panel.el));
+  container.append(banner, updBanner, modsBanner.el, fwBanner.el, toolbar, chipBar, h("div", { class: "mods-layout" }, wrap, panel.el));
   function closePanel(refocus) {
     panelOpen = false;
     panel.hide();
@@ -95,30 +92,21 @@ export function mount(container, ctx) {
   }
 
   // ---- header
-  const fwBadge = (el, key, f) => {
-    if (!f) return;
-    const installed = f.status === "installed";
-    setBadge(el, { tone: !installed ? "bad" : (f.update ? "warn" : "ok"), key, value: installed ? `installed${f.version ? " " + f.version : ""}${f.update ? `, update ${f.update}` : ""}` : f.status });
-  };
+  // a problem banner: DML / DMF missing or incomplete (and the patch banner, e.g. mods are off); nothing is shown when all is well
+  const fwProblems = (fw) => [["Mod Loader (DML)", fw.dml], ["Mod Framework (DMF)", fw.dmf]].filter(([, f]) => f && f.status !== "installed").map(([k, f]) => `${k} is ${f.status}.`);
   function renderHeader() {
     const hd = state.header;
     if (!hd) return;
-    fwBadge(bDml, "DML", hd.frameworks.dml);
-    fwBadge(bDmf, "DMF", hd.frameworks.dmf);
-    setBadge(bMods, { tone: hd.mods === "ON" ? "ok" : (hd.mods === "OFF" ? "bad" : "warn"), key: "Mods", value: hd.mods === "ON" ? "on" : (hd.mods === "OFF" ? "off" : String(hd.mods).toLowerCase()) });
-    const nx = hd.nexus;
-    if (!nx.key_set) setBadge(bNexus, { tone: "warn", key: "Nexus", value: "no API key" });
-    else setBadge(bNexus, { tone: nx.premium === null ? "" : "ok", key: "Nexus", value: nx.premium === null ? "key set" : (nx.premium ? "premium" : "free") + (nx.quota ? `, quota ${nx.quota}` : "") });
     renderUpdates();
-    banner.hidden = !hd.banner;
-    banner.textContent = hd.banner || "";
+    const text = [hd.banner, ...fwProblems(hd.frameworks)].filter(Boolean).join(" ");
+    banner.hidden = !text;
+    banner.textContent = text;
     updBanner.hidden = !hd.update_banner;
     updBanner.textContent = hd.update_banner || "";
     globalBtn.lastChild.textContent = hd.mods === "ON" ? "Mods on" : "Mods off";
     check.classList.toggle("busy", !!hd.checking);
     check.disabled = !!hd.checking;
     check.lastChild.textContent = hd.checking ? "Checking..." : "Check updates";
-    bDml.title = hd.game_dir;
   }
 
   function renderUpdates() {

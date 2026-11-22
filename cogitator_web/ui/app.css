@@ -150,7 +150,6 @@ select.input option { background: var(--card); color: var(--fg); }
 .fchip .n:empty { display: none; }
 
 /* ---------- toolbar */
-.badges { display: flex; flex-wrap: wrap; gap: var(--sp-2); margin-bottom: var(--sp-4); }
 .toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: var(--sp-2); margin-bottom: var(--sp-4); }
 .toolbar .grow { flex: 1; }
 .banner-row { display: flex; align-items: center; gap: var(--sp-4); }

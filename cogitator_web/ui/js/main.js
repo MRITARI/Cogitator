@@ -99,6 +99,10 @@ async function boot() {
     if (/red/.test(st)) { toast(p.text, "bad"); drawer.flagError(); }
     else if (/(green|yellow|bold)/.test(st)) toast(p.text, /yellow/.test(st) ? "warn" : "ok");
   });
+  on("header", (p) => {
+    const nx = p.header && p.header.nexus;
+    status.setNexus(!nx ? "" : !nx.key_set ? "Nexus: no API key" : nx.premium === null ? "Nexus key set" : `Nexus ${nx.premium ? "premium" : "free"}${nx.quota ? ` - ${nx.quota}` : ""}`);
+  });
   on("ask", (p) => ask(p));
   on("report", (p) => info({ title: p.title, segments: p.segments, wide: true }));
   go("mods");

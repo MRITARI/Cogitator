@@ -56,10 +56,13 @@ export function buildDrawer() {
 export function buildStatusline() {
   const left = h("span", { class: "grow", "aria-live": "polite" });
   const right = h("span", { text: "" });
+  let summary = "", nexus = "";
+  const draw = () => { right.textContent = [summary, nexus].filter(Boolean).join("  |  "); };
   return {
     el: h("div", { class: "statusline" }, left, right),
     setHint(t) { left.textContent = t || ""; },
-    setSummary(t) { right.textContent = t || ""; },
+    setSummary(t) { summary = t || ""; draw(); },
+    setNexus(t) { nexus = t || ""; draw(); },
   };
 }
 
