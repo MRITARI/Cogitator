@@ -49,8 +49,8 @@ GUI_BACKGROUNDS = ("default", "plain", "custom")
 # boolean / choice settings the page may change: name -> allowed values (bool = a switch)
 SETTING_CHOICES = {"gui_theme": GUI_THEMES, "auto_repair": AUTO_REPAIR, "gui_background": GUI_BACKGROUNDS}
 SETTING_BOOLS = ("check_updates_on_start", "update_consent")
-ROW_ACTIONS = ("toggle", "up", "down", "open_page", "open_folder", "fav", "note", "pin", "rollback", "remove",
-               "link", "update", "changelog")
+ROW_ACTIONS = ("toggle", "open_page", "open_folder", "pin", "rollback", "remove",
+               "link", "update")
 GLOBAL_ACTIONS = ("update_all", "link_all", "framework_update")
 BULK_IDS = ("enable", "disable", "update", "remove")
 HELP_BODY = (
@@ -159,8 +159,8 @@ class Session:
                     "present": m.present, "suffix": (suffix[0].strip() if suffix else ""), "installed": installed,
                     "latest": (r.latest if r else None) or "-", "status": status, "tone": TONE.get(self.model.status_tag(m), ""),
                     "kind": status_kind(r, m),
-                    "fav": bool(meta.get("fav")), "pinned": meta.get("pinned_version") or "",
-                    "note": bool(meta.get("notes")), "rollback": bool((self.registry.mod(folder) or {}).get("previous")) if self.registry else False, "tags": list(meta.get("tags") or []), "linked": bool(r is not None and r.nexus_id),
+                    "pinned": meta.get("pinned_version") or "",
+                    "rollback": bool((self.registry.mod(folder) or {}).get("previous")) if self.registry else False, "linked": bool(r is not None and r.nexus_id),
                     "hint": self.model.hint(folder)}
 
     def header_payload(self) -> dict | None:
@@ -580,11 +580,6 @@ class Session:
                 self.model.set_sort(None)
         self.refresh_all(keep=folder)
 
-    def fav(self, folder: str) -> None:
-        if self.ready():
-            self.say(actions.toggle_fav(self.registry, folder), "green")
-            self.emit_row(folder)
-
     def pin(self, folder: str) -> None:
         if not self.ready():
             return
@@ -676,7 +671,6 @@ class Session:
         if m is None or not self.registry:
             return []
         meta = actions.mod_meta(self.registry, folder)
-        listed = m.state != UNLISTED
         linked = bool(row is not None and row.nexus_id)
         can_update = row is not None and row.status in (UPDATE, PROBABLY_OUTDATED)
         can_link = m.present and actions_nexus.link_refusal(folder) is None
@@ -684,38 +678,33 @@ class Session:
         def item(label: str, aid: str, enabled: bool = True) -> dict:
             return {"label": label, "id": aid, "enabled": bool(enabled)}
 
+        pinned = bool(meta.get("pinned_version"))
         items: list[dict | None] = [
-            item("Disable" if m.state == ENABLED else ("Enable" if m.state != UNLISTED else "Add to load order and enable"), "toggle", m.present),
-            item("Move up", "up", listed and m.present), item("Move down", "down", listed and m.present), None,
-            item("Update" + (f" to {row.latest}" if can_update and row.latest else ""), "update", can_update and m.present),
-            item("Open Nexus page" if linked else "Link to Nexus...", "open_page" if linked else "link", m.present if linked else can_link),
-            *([item("Set installed version...", "link", can_link and actions_nexus.link_needs_version_only(row))] if linked else []),
-            item("Open folder in Explorer" if sys.platform == "win32" else "Open folder", "open_folder", m.present), None,
-            item("Remove favourite" if meta.get("fav") else "Favourite", "fav"), item("Tags and note...", "note")]
-        if linked:
-            items += [item("Show changelog", "changelog", True),
-                      item("Unpin version" if meta.get("pinned_version") else "Pin version", "pin")]
-        items.append(None)
+            item("Disable" if m.state == ENABLED else ("Enable" if m.state != UNLISTED else "Add to load order and enable"), "toggle", m.present), None,
+            item("Update" + (f" to {row.latest}" if can_update and row.latest else ""), "update", can_update and m.present)]
         if (self.registry.mod(folder) or {}).get("previous"):
             items.append(item("Roll back last update", "rollback", m.present))
-        items.append(item("Remove...", "remove"))
+        if linked:
+            items.append(item("Unpin version" if pinned else "Pin version", "pin"))
+        items.append(None)
+        if linked:
+            items.append(item("Set installed version...", "link", can_link and actions_nexus.link_needs_version_only(row)))
+            items.append(item("Open Nexus page", "open_page", m.present))
+        else:
+            items.append(item("Link to Nexus...", "link", can_link))
+        items += [None, item("Open folder in Explorer" if sys.platform == "win32" else "Open folder", "open_folder", m.present), None,
+                  item("Remove...", "remove")]
         return items
 
     def row_action(self, folder: str, aid: str) -> None:
         if aid == "toggle":
             self.toggle(folder)
-        elif aid in ("up", "down"):
-            self.move(folder, -1 if aid == "up" else 1)
         elif aid == "open_page":
             self.open_page(folder)
         elif aid == "open_folder":
             self.open_folder(folder)
-        elif aid == "fav":
-            self.fav(folder)
         elif aid == "pin":
             self.pin(folder)
-        elif aid == "note":
-            self.edit_note(folder)
         elif aid == "rollback":
             self.job("roll back", "install", lambda: self._after_outcome_ui(actions.roll_back(self.ctx(), self.ui, folder)))
         elif aid == "remove":
@@ -724,8 +713,6 @@ class Session:
             self.link(folder)
         elif aid == "update":
             self.update(folder)
-        elif aid == "changelog":
-            self.changelog(folder)
 
     # ================================================================== Nexus flows (workers)
     def link(self, folder: str) -> None:
@@ -957,39 +944,7 @@ class Session:
 
         self.job("update selected", "install", work)
 
-    def changelog(self, folder: str) -> None:
-        if not self.ready():
-            return
-        reg = self.registry
-
-        def work() -> None:
-            res = actions_nexus.changelog_for(reg, folder)
-            if res.ok:
-                self.ctl.ask(NOTICE, title=f"{folder} changelog", body="\n".join(t for t, _ in res.lines), button="Close", dismissable=True)
-            else:
-                for t, st in res.lines:
-                    self.say(t, st)
-
-        self.job("changelog", "net", work)
-
     # ================================================================== per-mod flows that ask (workers)
-    def edit_note(self, folder: str) -> None:
-        if not self.ready():
-            return
-        meta = actions.mod_meta(self.registry, folder)
-        cur = " ".join([f"#{t}" for t in meta.get("tags") or []] + ([meta["notes"]] if meta.get("notes") else []))
-
-        def work() -> None:
-            text = self.ctl.ask(TEXT, title=f"Tags and note for {folder}", hint="#ui #hud  free text note (empty = clear)", body="",
-                                allow_blank=True, password=False, value=cur)
-            if text is None:
-                return
-            msg = actions.set_note(self.registry, folder, text)
-            self.ctl.ui(self.emit_row, folder)
-            self.say(msg, "green")
-
-        self.job("note", "note", work)
-
     def remove(self, folder: str) -> None:
         if not self.ready():
             return

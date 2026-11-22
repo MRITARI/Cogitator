@@ -79,8 +79,7 @@ def asks(win):
 @pytest.mark.parametrize("bad", ["nope", "../alpha", "a/b", "a\\b", "..", "", None, 5, ["alpha"], "alpha\0", "C:alpha"])
 def test_unknown_or_hostile_folder_names_are_rejected(web, bad):
     _, _, api, _ = web
-    for call in (lambda: api.toggle(bad), lambda: api.move(bad, 1), lambda: api.fav(bad), lambda: api.edit_note(bad),
-                 lambda: api.row_menu(bad), lambda: api.row_action(bad, "toggle")):
+    for call in (lambda: api.toggle(bad), lambda: api.move(bad, 1), lambda: api.row_menu(bad), lambda: api.row_action(bad, "toggle")):
         r = call()
         assert r["ok"] is False and "error" in r
         json.dumps(r)
@@ -135,7 +134,7 @@ def test_drag_and_drop_move_to(web):
     assert [r["folder"] for r in st["rows"]][:2] == ["beta", "alpha"]
 
 
-def test_move_sort_filter_and_favourites(web):
+def test_move_and_filter(web):
     win, s, api, _ = web
     n = len(win.of("state"))
     api.move("beta", -1)
@@ -145,17 +144,16 @@ def test_move_sort_filter_and_favourites(web):
     st = wait(lambda: [p for p in win.of("state") if p["filter"] == "gam"])[-1]
     assert [r["folder"] for r in st["rows"]] == ["gamma"]
     api.set_filter("")
-    api.fav("beta")
-    assert wait(lambda: [p for p in win.of("row") if p["row"]["fav"]])[-1]["row"]["folder"] == "beta"
 
 
 def test_row_menu_has_the_tk_entries(web):
     _, _, api, _ = web
     items = api.row_menu("alpha")["items"]
     ids = [i["id"] for i in items if i]
-    assert {"toggle", "up", "down", "fav", "note", "remove"} <= set(ids) and "mark" not in ids
+    assert {"toggle", "link", "open_folder", "remove"} <= set(ids)
+    assert not ({"up", "down", "fav", "note", "changelog", "mark"} & set(ids))
     en = {i["id"]: i["enabled"] for i in items if i}
-    assert en["update"] is False and "changelog" not in en  # not linked, nothing to update
+    assert en["update"] is False  # not linked, nothing to update
     assert en["link"] is True
     json.dumps(items)
 
@@ -193,16 +191,6 @@ def test_cancel_keeps_the_mod(web):
     s.ctl.join(5)
     assert (s.game_dir / "mods" / "beta").exists()
     assert not any("Removed" in p["text"] for p in win.of("log"))
-
-
-def test_note_dialog_round_trip(web):
-    win, s, api, _ = web
-    api.edit_note("alpha")
-    q = wait(lambda: asks(win))[0]
-    assert q["kind"] == "text" and q["allow_blank"] is True and q["password"] is False
-    api.answer(q["id"], "#ui #hud keep this")
-    row = wait(lambda: [p for p in win.of("row") if p["row"]["folder"] == "alpha" and p["row"]["tags"]])[-1]["row"]
-    assert row["tags"] == ["ui", "hud"] and row["note"] is True
 
 
 def test_worker_exception_is_reported_not_raised(web):
@@ -410,10 +398,10 @@ def test_row_menu_enables_by_state(web):
 
     _, s, api, _ = web
     items = {i["id"]: i for i in api.row_menu("alpha")["items"] if i}
-    assert items["link"]["enabled"] and not items["update"]["enabled"] and "changelog" not in items
+    assert items["link"]["enabled"] and not items["update"]["enabled"] 
     _set_rows(s, _row("alpha", UPDATE))
     items = {i["id"]: i for i in api.row_menu("alpha")["items"] if i}
-    assert items["update"]["enabled"] and items["changelog"]["enabled"] and items["open_page"]["enabled"]
+    assert items["update"]["enabled"] and items["open_page"]["enabled"]
     assert not any("coming soon" in i["label"] for i in items.values())
     json.dumps(items)
 
@@ -427,7 +415,6 @@ def test_new_api_methods_validate_and_serialise(web, monkeypatch):
         json.dumps(r)
     for bad in ("nope", None, 5, "../x"):
         assert api.row_action(bad, "link")["ok"] is False and api.row_action(bad, "update")["ok"] is False
-        assert api.row_action(bad, "changelog")["ok"] is False
     s.ctl.join(5)
 
 
@@ -471,17 +458,6 @@ def test_update_with_nothing_to_do_just_logs(web, monkeypatch):
     assert not seen and not asks(win)
     assert any("nothing to update" in p["text"] for p in wait(lambda: win.of("log")))
 
-
-def test_changelog_is_shown_as_a_notice(web, monkeypatch):
-    from cogitator.actions_nexus import Changelog
-
-    win, s, api, _ = web
-    _set_rows(s, _row("alpha"))
-    _calls(monkeypatch, changelog_for=Changelog(True, [("2.0  fixed things", ""), ("1.0  first", "")]))
-    api.row_action("alpha", "changelog")
-    q = wait(lambda: asks(win))[0]
-    assert q["kind"] == "notice" and q["title"] == "alpha changelog" and q["body"] == "2.0  fixed things\n1.0  first"
-    json.dumps(q)
 
 
 # ---------------------------------------------------------------- profiles, snapshots, bulk (W3)

@@ -125,14 +125,6 @@ class Api:
             raise _Reject("after must be true or false.")
         self._s.move_to(self._mod(folder, present=True), self._mod(target, present=True), after)
 
-    @_call
-    def fav(self, folder):
-        self._s.fav(self._mod(folder))
-
-    @_call
-    def edit_note(self, folder):
-        self._s.edit_note(self._mod(folder))
-
     # ---- profiles, snapshots, bulk
     def _profile(self, name: object) -> str:
         if not self._s.profile_known(name):
