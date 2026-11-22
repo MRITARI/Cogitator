@@ -154,6 +154,9 @@ table.mods { width: 100%; border-collapse: collapse; table-layout: fixed; }
 .mods td.ver { color: var(--muted); }
 .mods td.name .in { display: flex; align-items: center; gap: var(--sp-2); min-width: 0; }
 .mods td.name .t { overflow: hidden; text-overflow: ellipsis; }
+.mods .en { display: flex; align-items: center; gap: 2px; }
+.mods .grip { width: 14px; color: var(--muted); opacity: 0; cursor: grab; display: inline-flex; justify-content: center; flex: none; }
+.mods tr.can-drag:hover .grip, .mods tr.can-drag:focus-within .grip { opacity: 1; }
 .mods .muted { color: var(--muted); }
 .mods tr.is-off td.name .t { color: var(--muted); }
 .chip { display: inline-flex; align-items: center; gap: 4px; height: 20px; padding: 0 8px; border-radius: var(--radius-pill); background: var(--tile); color: var(--muted); font-size: 11px; flex: none; }

@@ -127,7 +127,7 @@ export function mount(container, ctx) {
     const installed = h("td", { class: "ver" }), latest = h("td", { class: "ver" }), statusCell = h("td");
     const status = badge({ value: "" });
     statusCell.append(status);
-    const tr = h("tr", { tabindex: "-1", "aria-selected": "false", data: { folder: row.folder } }, h("td", {}, sw), name, installed, latest, statusCell);
+    const tr = h("tr", { tabindex: "-1", "aria-selected": "false", data: { folder: row.folder } }, h("td", {}, h("div", { class: "en" }, h("span", { class: "grip", "aria-hidden": "true" }, icon("grip")), sw)), name, installed, latest, statusCell);
     const e = { tr, sig: "", sw, name, installed, latest, status };
     tr.addEventListener("click", () => select(row.folder, false));
     tr.addEventListener("dblclick", (ev) => { if (!ev.target.closest(".switch")) call("toggle", row.folder); });
@@ -178,6 +178,7 @@ export function mount(container, ctx) {
     e.sw.classList.toggle("is-unlisted", row.en === "unlisted");
     e.sw.disabled = !row.present;
     e.tr.draggable = row.present && row.en !== "unlisted";
+    e.tr.classList.toggle("can-drag", e.tr.draggable);
     e.name.replaceChildren(h("div", { class: "in" }, h("span", { class: "t", text: row.folder, title: row.folder }), ...chips(row), row.suffix ? h("span", { class: "muted", text: row.suffix }) : null));
     e.installed.textContent = row.installed;
     e.latest.textContent = row.latest === "-" ? "—" : row.latest;
