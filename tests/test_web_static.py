@@ -268,3 +268,28 @@ def test_details_panel_is_accessible_and_text_only():
     assert "createDetails" in mods and "ArrowRight" in mods and "closePanel" in mods
     css = (UI / "app.css").read_text(encoding="utf-8")
     assert "max-width: 1100px" in css and ".details" in css and "width: 420px" in css
+
+
+SELECTABLE = {"input", "textarea", "select", ".drawer-body", ".modal .body", ".d-text", ".pick"}
+
+
+def test_text_selection_is_off_except_where_listed():
+    css = (UI / "app.css").read_text(encoding="utf-8")
+    rules = re.findall(r"([^{}]+)\{([^{}]*)\}", re.sub(r"/\*.*?\*/", "", css, flags=re.S))
+    body = [d for sel, d in rules if sel.strip() == "body"]
+    assert body and "user-select: none" in body[0] and "-webkit-user-select: none" in body[0]
+    assert any(sel.strip() == "img" and "-webkit-user-drag: none" in d for sel, d in rules)
+    enabled = set()
+    for sel, decl in rules:
+        if re.search(r"user-select:\s*(text|auto|all)", decl):
+            enabled |= {s.strip() for s in sel.split(",")}
+    assert enabled == SELECTABLE
+
+
+def test_selection_hooks_and_no_row_selection():
+    mods = (UI / "js" / "pages" / "mods.js").read_text(encoding="utf-8")
+    assert 'aria-multiselectable": "true"' in mods
+    assert '"aria-selected"' in mods
+    assert "draggable" in mods and "grip" in mods
+    for gone in ('call("bulk_menu")', 'call("mark"', "Bulk"):
+        assert gone not in mods

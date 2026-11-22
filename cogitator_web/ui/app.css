@@ -7,7 +7,12 @@ body {
   font: 14px/1.5 var(--font);
   overflow: hidden;
   -webkit-font-smoothing: antialiased;
+  user-select: none;
+  -webkit-user-select: none;
 }
+img { -webkit-user-drag: none; }
+/* the only places where text can be selected */
+input, textarea, select, .drawer-body, .modal .body, .d-text, .pick { user-select: text; -webkit-user-select: text; }
 button, input, select, textarea { font: inherit; color: inherit; }
 [hidden] { display: none !important; }
 :focus { outline: none; }
@@ -64,7 +69,7 @@ html.icons-text .icon { font-family: var(--font); font-weight: 600; }
 .drawer-bar { display: flex; align-items: center; gap: var(--sp-2); height: 36px; padding: 0 var(--sp-4); color: var(--muted); font-size: 12px; }
 .drawer-bar button { display: flex; align-items: center; gap: var(--sp-2); border: 0; background: transparent; color: inherit; height: 26px; padding: 0 var(--sp-3); border-radius: var(--radius-pill); cursor: pointer; transition: background var(--t-fast), color var(--t-fast); }
 .drawer-bar button:hover { background: var(--secondary); color: var(--fg); }
-.drawer-body { border: 1px solid var(--border); height: 104px; overflow: auto; margin: 0 var(--sp-4) var(--sp-3); padding: var(--sp-3) var(--sp-4); border-radius: var(--radius-tile); background: var(--card); font: 12px/1.55 var(--mono); user-select: text; }
+.drawer-body { border: 1px solid var(--border); height: 104px; overflow: auto; margin: 0 var(--sp-4) var(--sp-3); padding: var(--sp-3) var(--sp-4); border-radius: var(--radius-tile); background: var(--card); font: 12px/1.55 var(--mono); }
 .drawer-body div { white-space: pre-wrap; overflow-wrap: anywhere; }
 .statusline { display: flex; gap: var(--sp-4); align-items: center; height: 28px; padding: 0 var(--sp-5); border-top: 1px solid var(--divider); background: var(--sidebar); color: var(--muted); font-size: 12px; user-select: none; }
 .statusline .grow { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -190,7 +195,7 @@ table.mods { width: 100%; border-collapse: collapse; table-layout: fixed; }
 .content::-webkit-scrollbar, .drawer-body::-webkit-scrollbar, .modal .body::-webkit-scrollbar { width: 10px; height: 10px; }
 .content::-webkit-scrollbar-thumb, .drawer-body::-webkit-scrollbar-thumb, .modal .body::-webkit-scrollbar-thumb { background: var(--input); border-radius: var(--radius-pill); border: 2px solid transparent; background-clip: padding-box; }
 .content::-webkit-scrollbar-thumb:hover { background: var(--border); background-clip: padding-box; }
-::selection { background: var(--ring); color: var(--bg); }
+::selection { background: color-mix(in srgb, var(--accent) 35%, transparent); color: var(--fg); }
 
 /* narrow windows: icon-only sidebar, tighter padding */
 @media (max-width: 860px) {
@@ -223,7 +228,7 @@ table.mods { width: 100%; border-collapse: collapse; table-layout: fixed; }
 .d-note.bad { color: var(--destructive-text); }
 .d-fold { margin: var(--sp-2) 0; }
 .d-fold summary { cursor: pointer; padding: var(--sp-2) 0; font-weight: 500; }
-.d-text { white-space: pre-wrap; overflow-wrap: anywhere; color: var(--muted); max-height: 260px; overflow: auto; user-select: text; margin-bottom: var(--sp-2); }
+.d-text { white-space: pre-wrap; overflow-wrap: anywhere; color: var(--muted); max-height: 260px; overflow: auto; margin-bottom: var(--sp-2); }
 .d-ver { margin: var(--sp-2) 0; }
 .d-vname { font-weight: 500; }
 .d-ver ul { margin: var(--sp-1) 0 0; padding-left: var(--sp-5); color: var(--muted); overflow-wrap: anywhere; }
@@ -252,7 +257,7 @@ table.mods { width: 100%; border-collapse: collapse; table-layout: fixed; }
 .modal.wide { width: min(820px, calc(100vw - 48px)); }
 .scrim.show .modal { transform: none; }
 .modal h2 { margin: 0; padding: var(--sp-6) var(--sp-6) var(--sp-2); font-size: 18px; font-weight: 600; letter-spacing: -0.02em; }
-.modal .body { padding: 0 var(--sp-6) var(--sp-4); overflow: auto; white-space: pre-wrap; overflow-wrap: anywhere; color: var(--muted); user-select: text; }
+.modal .body { padding: 0 var(--sp-6) var(--sp-4); overflow: auto; white-space: pre-wrap; overflow-wrap: anywhere; color: var(--muted); }
 .modal .body.mono { font: 12px/1.55 var(--mono); color: var(--fg); }
 .modal .field { padding: 0 var(--sp-6) var(--sp-4); }
 .modal .choices { display: flex; flex-direction: column; gap: var(--sp-2); padding: 0 var(--sp-6) var(--sp-4); }

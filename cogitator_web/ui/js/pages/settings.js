@@ -17,6 +17,9 @@ function row(label, help, ...ctl) {
     ctl.length ? h("div", { class: "ctl" }, ...ctl) : null);
 }
 
+// the one place in the app where the user may select text: a path they might want to copy
+function pick(r) { const el = r.querySelector(".h"); if (el) el.classList.add("pick"); return r; }
+
 function select(label, options, value, onChange) {
   const s = h("select", { class: "input", "aria-label": label }, options.map(([v, t]) => h("option", { value: v, text: t })));
   s.value = value;
@@ -131,8 +134,8 @@ export function mount(container, ctx) {
 
     // ---- About
     wrap.append(h("section", { class: "s-group", "aria-label": "About" },
-      row("Version", "Cogitator is not affiliated with Fatshark, Games Workshop or Nexus Mods.", h("span", { text: s.version })),
-      row("Log file", s.log_path), row("Settings folder", s.config_dir)));
+      row("Version", "Cogitator is not affiliated with Fatshark, Games Workshop or Nexus Mods.", h("span", { class: "pick", text: s.version })),
+      pick(row("Log file", s.log_path)), pick(row("Settings folder", s.config_dir))));
     wrap.append(err);
   }
 
