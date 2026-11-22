@@ -171,3 +171,8 @@ def test_accessibility_hooks_are_in_the_scripts():
     assert "aria-current" in js["js/components/shell.js"]
     assert 'aria-label": "Mods"' in js["js/pages/mods.js"] and 'scope: "col"' in js["js/pages/mods.js"] and "aria-sort" in js["js/pages/mods.js"]
     assert 'role: "dialog"' in js["js/components/modal.js"] and "Escape" in js["js/components/modal.js"]
+
+
+def test_filter_chips_are_pressable_buttons():
+    js = (UI / "js" / "pages" / "mods.js").read_text(encoding="utf-8")
+    assert "aria-pressed" in js and all(w in js for w in ('"Updates"', '"Not linked"', '"Favourites"', '"Enabled"'))

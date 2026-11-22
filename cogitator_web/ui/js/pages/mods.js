@@ -12,6 +12,11 @@ export const modsApi = { current: null };
 const COLUMNS = [["en", "On/Off"], ["mod", "Mod"], ["installed", "Installed"], ["latest", "Latest"], ["status", "Status"]];
 const TONE = { ok: "ok", warn: "warn", bad: "bad", dim: "", "": "" };
 
+const CHIPS = [["all", "All", () => true], ["enabled", "Enabled", (r) => r.en === "on"], ["updates", "Updates", (r) => r.kind === "update"],
+  ["unlinked", "Not linked", (r) => r.kind === "unlinked"], ["fav", "Favourites", (r) => r.fav]];
+let activeChip = "all"; // kept across list refreshes (and page switches)
+const chipTest = (id) => (CHIPS.find((c) => c[0] === id) || CHIPS[0])[2];
+
 export const title = "Mods";
 export const subtitle = "Turn mods on or off, change their load order and check Nexus for updates.";
 
@@ -47,11 +52,19 @@ export function mount(container, ctx) {
   const filter = h("input", { class: "input", type: "search", placeholder: "Filter mods", "aria-label": "Filter mods", autocomplete: "off", spellcheck: "false" });
   const search = h("div", { class: "search" }, icon("search"), filter);
   const toolbar = h("div", { class: "toolbar", role: "toolbar", "aria-label": "Mods" }, launchBtn, check, importBtn, globalBtn, moreBtn, bulkBtn,
-    h("span", { class: "sep", "aria-hidden": "true" }), upBtn, downBtn, h("span", { class: "grow" }), search);
+    h("span", { class: "sep", "aria-hidden": "true" }), upBtn, downBtn, h("span", { class: "grow" }));
+  const chipEls = new Map();
+  const chipBar = h("div", { class: "chips", role: "group", "aria-label": "Show" }, CHIPS.map(([id, label]) => {
+    const b = h("button", { type: "button", class: "fchip", "aria-pressed": String(id === activeChip) }, h("span", { text: label }), h("span", { class: "n" }));
+    b.addEventListener("click", () => { activeChip = id; reconcile(null); });
+    chipEls.set(id, { b, label, n: b.lastChild });
+    return b;
+  }), h("span", { class: "grow" }), search);
+  const shown = () => { const t = chipTest(activeChip); return state.order.filter((f) => t(state.rows.get(f))); };
   let ftimer = null;
   filter.value = state.filter;
   filter.addEventListener("input", () => { clearTimeout(ftimer); ftimer = setTimeout(() => call("set_filter", filter.value), 120); });
-  filter.addEventListener("keydown", (e) => { if (e.key === "Escape" && filter.value) { filter.value = ""; call("set_filter", ""); e.stopPropagation(); } else if (e.key === "ArrowDown") { e.preventDefault(); focusRow(state.selected || state.order[0]); } });
+  filter.addEventListener("keydown", (e) => { if (e.key === "Escape" && filter.value) { filter.value = ""; call("set_filter", ""); e.stopPropagation(); } else if (e.key === "ArrowDown") { e.preventDefault(); focusRow(state.selected || shown()[0]); } });
 
   // ---- table
   const heads = new Map();
@@ -69,7 +82,7 @@ export function mount(container, ctx) {
     h("thead", {}, headRow), tbody);
   const empty = h("div", { class: "empty", hidden: true });
   const wrap = h("div", { class: "table-wrap" }, table, empty);
-  container.append(badges, banner, updBanner, toolbar, wrap);
+  container.append(badges, banner, updBanner, toolbar, chipBar, wrap);
 
   // ---- header
   const fwBadge = (el, key, f) => {
@@ -192,8 +205,12 @@ export function mount(container, ctx) {
     else if (state.selected && !seen.has(state.selected)) state.selected = state.order[Math.min(Math.max(lastIndex, 0), state.order.length - 1)] || null;
     syncSelection();
     if (keep && entries.has(keep)) entries.get(keep).tr.scrollIntoView({ block: "nearest" });
-    empty.hidden = state.order.length > 0 || !state.loaded;
-    empty.textContent = state.filter ? `No mods match "${state.filter}". Press Esc in the filter box to clear it.` : state.emptyHint;
+    const vis = shown(), visSet = new Set(vis);
+    for (const [f, e] of entries) e.tr.hidden = !visSet.has(f);
+    renderChips();
+    empty.hidden = vis.length > 0 || !state.loaded;
+    empty.textContent = state.order.length ? "No mods match this filter. Choose All to see every mod."
+      : state.filter ? `No mods match "${state.filter}". Press Esc in the filter box to clear it.` : state.emptyHint;
     wrap.classList.toggle("is-empty", !empty.hidden);
     for (const [id, { th, arrow }] of heads) {
       const on = state.sort.col === id;
@@ -205,9 +222,19 @@ export function mount(container, ctx) {
     refreshToolbar();
   }
 
+  function renderChips() {
+    for (const [id, c] of chipEls) {
+      const t = chipTest(id);
+      const n = id === "all" ? null : [...state.rows.values()].filter(t).length;
+      c.n.textContent = n === null ? "" : String(n);
+      c.b.setAttribute("aria-pressed", String(id === activeChip));
+      c.b.setAttribute("aria-label", n === null ? c.label : `${c.label}, ${n}`);
+    }
+  }
+
   // ---- selection
   function syncSelection() {
-    let tab = state.selected && entries.has(state.selected) ? state.selected : state.order[0];
+    let tab = state.selected && entries.has(state.selected) ? state.selected : shown()[0];
     for (const [f, e] of entries) {
       const sel = f === state.selected;
       e.tr.setAttribute("aria-selected", String(sel));
@@ -263,12 +290,12 @@ export function mount(container, ctx) {
   tbody.addEventListener("keydown", (e) => {
     const f = e.target.closest ? e.target.closest("tr") : null;
     if (!f || e.target.closest(".switch") && e.key !== " " && e.key !== "Enter") return;
-    const i = state.order.indexOf(f.dataset.folder);
+    const list = shown(), i = list.indexOf(f.dataset.folder);
     if (e.key === "ArrowDown" || e.key === "ArrowUp") {
       e.preventDefault();
       if (e.ctrlKey) api.move(e.key === "ArrowDown" ? 1 : -1);
-      else { const n = state.order[Math.max(0, Math.min(state.order.length - 1, i + (e.key === "ArrowDown" ? 1 : -1)))]; select(n, true); }
-    } else if (e.key === "Home" || e.key === "End") { e.preventDefault(); select(state.order[e.key === "Home" ? 0 : state.order.length - 1], true); }
+      else { const n = list[Math.max(0, Math.min(list.length - 1, i + (e.key === "ArrowDown" ? 1 : -1)))]; select(n, true); }
+    } else if (e.key === "Home" || e.key === "End") { e.preventDefault(); select(list[e.key === "Home" ? 0 : list.length - 1], true); }
     else if (e.key === " " || e.key === "Enter") { e.preventDefault(); select(f.dataset.folder, false); call("toggle", f.dataset.folder); }
     else if (e.key === "ContextMenu" || (e.key === "F10" && e.shiftKey)) { e.preventDefault(); api.menuForSelected(); }
   });
@@ -277,7 +304,7 @@ export function mount(container, ctx) {
     if (what === "state") reconcile(p.keep);
     else if (what === "row") {
       const e = entries.get(p.row.folder);
-      if (e) { patchRow(e, state.rows.get(p.row.folder)); if (state.selected === p.row.folder) syncSelection(); ctx.setSummary(state.summary); refreshToolbar(); }
+      if (e) { patchRow(e, state.rows.get(p.row.folder)); e.tr.hidden = !chipTest(activeChip)(state.rows.get(p.row.folder)); renderChips(); if (state.selected === p.row.folder) syncSelection(); ctx.setSummary(state.summary); refreshToolbar(); }
     } else if (what === "header") renderHeader();
   });
 
@@ -285,5 +312,5 @@ export function mount(container, ctx) {
   if (state.loaded) reconcile(null);
   else ctx.setHint("");
   modsApi.current = api;
-  return { unmount() { off(); modsApi.current = null; }, focus() { if (state.order.length) focusRow(state.selected || state.order[0]); else filter.focus(); } };
+  return { unmount() { off(); modsApi.current = null; }, focus() { if (shown().length) focusRow(state.selected || shown()[0]); else filter.focus(); } };
 }
