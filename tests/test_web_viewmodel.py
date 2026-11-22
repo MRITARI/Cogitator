@@ -79,20 +79,6 @@ def test_favourites_and_pins_show_in_the_name_cell():
     assert m.rows()[0].cells[1] == "* alpha  [pinned 1.0]"
 
 
-def test_sort_by_header_toggles_direction_and_cycle_matches_the_tui():
-    m = model()
-    m.set_rows([row("alpha", UPDATE, "1.0", "1.2")])
-    m.set_sort("mod")
-    assert folders(m) == ["alpha", "Beta", "gamma", "ghost", "nomod"]  # case-insensitive
-    m.set_sort("mod")
-    assert m.sort_desc and folders(m)[0] == "nomod"
-    m.set_sort("status")
-    assert not m.sort_desc and m.sort_col == "status"
-    m.set_sort(None)
-    assert m.sort_col is None and folders(m)[0] == "alpha"
-    seen = [m.cycle_sort() for _ in range(6)]
-    assert seen == ["mod", "status", "installed", "latest", "en", "mod"]
-
 
 def test_hint_and_summary():
     m = model({"alpha": {"tags": ["ui"], "notes": "n", "pinned_version": "1"}})

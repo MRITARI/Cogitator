@@ -3,7 +3,7 @@ const handlers = new Map();
 const watchers = new Set();
 
 export const state = {
-  header: null, order: [], rows: new Map(), summary: "", sort: { col: null, desc: false }, filter: "", emptyHint: "",
+  header: null, order: [], rows: new Map(), summary: "", filter: "", emptyHint: "",
   selected: null, logs: [], page: "mods", loaded: false,
   details: new Map(), versions: new Map(), goto: null, // Nexus data per folder (details panel); goto(pageId) is set by main.js
 };
@@ -28,7 +28,7 @@ function dispatch(p) {
     case "state":
       state.order = p.rows.map((r) => r.folder);
       state.rows = new Map(p.rows.map((r) => [r.folder, r]));
-      state.summary = p.summary; state.sort = p.sort; state.filter = p.filter; state.emptyHint = p.empty; state.loaded = true;
+      state.summary = p.summary; state.filter = p.filter; state.emptyHint = p.empty; state.loaded = true;
       if (p.header) state.header = p.header;
       break;
     case "row":

@@ -30,7 +30,6 @@ NOTICE_BODY = (
 EMPTY_STATE = ("No mods installed yet. Download mods from nexusmods.com/warhammer40kdarktide, then press I to import the "
                "zip (or drop it onto this window). Press ? for help.")
 BASELINE_UNKNOWN_LABEL = "version unknown - press L to set it"
-SORT_COLUMNS = ("mod", "status", "installed", "latest", "en")
 
 STATUS_STYLE = {UP_TO_DATE: "green", UPDATE: "bold yellow", UNKNOWN: "dim", FAILED: "bold red", NOT_LINKED: "dim",
                 PROBABLY_UP_TO_DATE: "green", PROBABLY_OUTDATED: "bold yellow", "pinned": "cyan"}

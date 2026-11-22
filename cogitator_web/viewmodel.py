@@ -9,7 +9,7 @@ from typing import Callable, Iterable
 from cogitator import actions
 from cogitator.mods import DISABLED, ENABLED, UNLISTED, Mod
 from cogitator.updates import FAILED, PROBABLY_OUTDATED, PROBABLY_UP_TO_DATE, UP_TO_DATE, UPDATE, ModRow
-from cogitator.viewtext import SORT_COLUMNS, installed_label, mod_suffix, status_label
+from cogitator.viewtext import installed_label, mod_suffix, status_label
 
 ARROW = "→"  # the Windows UI fonts have it; the terminal UI uses "->" where it cannot be sure
 ON_TEXT, OFF_TEXT, UNLISTED_TEXT = "On", "Off", "-"
@@ -26,7 +26,7 @@ class RowView:
 
 
 class ModListModel:
-    """The mod table: scanned mods, cached update rows, filter and sort. `meta` returns a mod's registry record."""
+    """The mod table: scanned mods, cached update rows and filter. `meta` returns a mod's registry record."""
 
     def __init__(self, meta: Callable[[str], dict] = lambda f: {}, mtime: Callable[[str], float | None] = lambda f: None):
         self.meta = meta
@@ -34,8 +34,6 @@ class ModListModel:
         self.mods: list[Mod] = []
         self.urows: dict[str, ModRow] = {}
         self.filter_text = ""
-        self.sort_col: str | None = None  # None = load order
-        self.sort_desc = False
 
     # ---- data in
     def set_mods(self, mods: Iterable[Mod]) -> None:
@@ -50,25 +48,9 @@ class ModListModel:
     def mod(self, folder: str | None) -> Mod | None:
         return next((m for m in self.mods if m.folder == folder), None)
 
-    # ---- filter, sort
+    # ---- filter
     def visible(self, m: Mod) -> bool:
         return actions.mod_visible(m.folder, self.meta(m.folder), self.filter_text)
-
-    def set_sort(self, col: str | None) -> None:
-        """A header click: the same column again flips the direction; a new column sorts ascending; None = load order."""
-        if col is None or col not in SORT_COLUMNS:
-            self.sort_col, self.sort_desc = None, False
-        elif col == self.sort_col:
-            self.sort_desc = not self.sort_desc
-        else:
-            self.sort_col, self.sort_desc = col, False
-
-    def cycle_sort(self) -> str | None:
-        """The O key: load order, then each column in turn (same order as the terminal UI)."""
-        i = -1 if self.sort_col is None else SORT_COLUMNS.index(self.sort_col)
-        nxt = (i + 1) % len(SORT_COLUMNS)
-        self.sort_col, self.sort_desc = SORT_COLUMNS[nxt], False
-        return self.sort_col
 
     # ---- row text
     def name_cell(self, m: Mod) -> str:
@@ -96,17 +78,10 @@ class ModListModel:
             return TAG_OK
         return ""
 
-    def _sort_key(self, m: Mod, cells: tuple[str, ...]):
-        col = self.sort_col
-        text = m.folder if col == "mod" else cells[SORT_COLUMNS_INDEX[col]]
-        return text.casefold()
-
     def rows(self, keep: str | None = None) -> list[RowView]:
         """Rows to show, in order. A mod being kept selected stays in the list even if the filter hides it."""
         shown = [m for m in self.mods if self.visible(m) or m.folder == keep]
         built = [(m, self.cells(m)) for m in shown]
-        if self.sort_col is not None:
-            built.sort(key=lambda mc: self._sort_key(*mc), reverse=self.sort_desc)
         return [RowView(m.folder, c, (self.status_tag(m), STRIPES[i % 2])) for i, (m, c) in enumerate(built)]
 
     # ---- texts
@@ -130,9 +105,6 @@ class ModListModel:
     def listed(self) -> list[str]:
         """Folders in the load order (the ones Move up/down and drag act on)."""
         return [m.folder for m in self.mods if m.state != UNLISTED]
-
-
-SORT_COLUMNS_INDEX = {"en": 0, "mod": 1, "installed": 2, "latest": 3, "status": 4}
 
 
 def move_steps(listed: list[str], src: str, dst: str) -> int | None:
