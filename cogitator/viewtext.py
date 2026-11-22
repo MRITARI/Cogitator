@@ -66,6 +66,21 @@ def status_label(row: ModRow | None, arrow: str, mod: Mod | None = None, gui: bo
     return label, STATUS_STYLE.get(row.status, "")
 
 
+def status_kind(row: ModRow | None, mod: Mod | None = None) -> str:
+    """Coarse status class for the window: ok | update | unlinked | error | other (the page quiets "ok", badges the rest)."""
+    if mod is not None and not mod.present:
+        return "error"
+    if row is None or row.status == NOT_LINKED:
+        return "unlinked"
+    if row.status in (UPDATE, PROBABLY_OUTDATED):
+        return "update"
+    if row.status == FAILED:
+        return "error"
+    if row.status in (UP_TO_DATE, PROBABLY_UP_TO_DATE):
+        return "ok"
+    return "other"
+
+
 GUI_EMPTY_STATE = ("No mods installed yet. Download mods from nexusmods.com/warhammer40kdarktide, then press Import zip (Ctrl+I). "
                    "Press F1 for help.")
 GUI_SELECT_TIP = "Select a mod to see its details. Right-click a mod for more actions."

@@ -32,7 +32,7 @@ from cogitator.procs import darktide_running
 from cogitator.registry import Registry
 from cogitator.updates import (PROBABLY_OUTDATED, UPDATE, CheckBundle, FrameworkUpdate, ModRow, cached_frameworks, cached_rows,
                                quota_text, run_checks)
-from cogitator.viewtext import (NOTICE_BODY, NOTICE_TITLE, gui_words, installed_label, mod_suffix, report_segments, status_label)
+from cogitator.viewtext import (NOTICE_BODY, NOTICE_TITLE, gui_words, installed_label, mod_suffix, report_segments, status_kind, status_label)
 from cogitator_web.controller import TEXT, GuiUi
 from cogitator_web.viewmodel import ARROW, TAG_BAD, TAG_DIM, TAG_OK, TAG_WARN, ModListModel
 
@@ -152,6 +152,7 @@ class Session:
             return {"folder": folder, "en": "on" if m.state == ENABLED else ("off" if m.state == DISABLED else "unlisted"),
                     "present": m.present, "suffix": (suffix[0].strip() if suffix else ""), "installed": installed,
                     "latest": (r.latest if r else None) or "-", "status": status, "tone": TONE.get(self.model.status_tag(m), ""),
+                    "kind": status_kind(r, m),
                     "marked": folder in self.model.marked, "fav": bool(meta.get("fav")), "pinned": meta.get("pinned_version") or "",
                     "note": bool(meta.get("notes")), "tags": list(meta.get("tags") or []), "linked": bool(r is not None and r.nexus_id),
                     "hint": self.model.hint(folder)}

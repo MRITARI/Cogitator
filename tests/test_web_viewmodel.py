@@ -143,3 +143,15 @@ def test_gui_wording_has_no_terminal_key_hints():
     assert "press I to" not in hint_for(None, None, gui=True) and "press I" in hint_for(None, None)
     assert "File >" not in hint_for(None, None, gui=True) and "Import zip (Ctrl+I)" in hint_for(None, None, gui=True)
 
+
+
+def test_status_kind_quiets_only_up_to_date():
+    from cogitator.mods import Mod
+    from cogitator.updates import FAILED, NOT_LINKED, UP_TO_DATE, UPDATE, ModRow
+    from cogitator.viewtext import status_kind
+
+    m = Mod(folder="a", state="enabled", present=True, has_mod_file=True)
+    row = lambda st: ModRow(folder="a", nexus_id=1, installed="1", latest="2", status=st, reason="")  # noqa: E731
+    assert status_kind(row(UP_TO_DATE), m) == "ok" and status_kind(row(UPDATE), m) == "update"
+    assert status_kind(row(FAILED), m) == "error" and status_kind(row(NOT_LINKED), m) == "unlinked"
+    assert status_kind(None, m) == "unlinked" and status_kind(row(UP_TO_DATE), Mod(folder="a", state="enabled", present=False, has_mod_file=False)) == "error"

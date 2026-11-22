@@ -170,7 +170,14 @@ export function mount(container, ctx) {
     e.latest.textContent = row.latest;
     e.installed.className = row.installed === "-" ? "muted" : "";
     e.latest.className = row.latest === "-" ? "muted" : "";
-    setBadge(e.status, { tone: TONE[row.tone] ?? "", value: row.status });
+    if (row.kind === "ok") {
+      e.status.className = "ok-mark";
+      e.status.title = row.status;
+      e.status.replaceChildren(icon("check"), h("span", { class: "sr-only", text: row.status }));
+    } else {
+      e.status.title = "";
+      setBadge(e.status, { tone: TONE[row.tone] ?? "", value: row.status });
+    }
   }
 
   function reconcile(keep) {
