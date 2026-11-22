@@ -1,19 +1,29 @@
+<div align="center">
+
+<img src="cogitator_web/ui/img/logo.png" alt="Cogitator" width="96" height="96">
+
 # Cogitator
 
-A mod manager for **Warhammer 40,000: Darktide** (Steam version), for Windows 11 (x64).
+**A mod manager for Warhammer 40,000: Darktide**
 
-It finds your Darktide install, installs the Darktide Mod Loader and Mod Framework, switches mods on and off (the game
-update that turns them off is detected), enables or disables individual mods, and checks your mods for updates on every
-start. Mods are not supported by Fatshark and are used at your own risk.
+Steam version · Windows 11 (x64) · MIT licence
 
-Cogitator is an independent fan project. It is not affiliated with, endorsed by or connected to Fatshark, Games Workshop or
-Nexus Mods.
+[Download](https://github.com/MRITARI/Cogitator/releases) · [Report a bug](https://github.com/MRITARI/Cogitator/issues)
 
-Cogitator is released under the MIT licence (see `LICENSE`).
+<img src="docs/screenshot.png" alt="Cogitator mod list with the details panel" width="900">
 
----
----
----
+</div>
+
+## What it does
+
+- Finds your Darktide install and installs the Darktide Mod Loader and Mod Framework.
+- Switches mods on and off, individually or all at once (the game update that turns them off is detected).
+- Reorders the load order by dragging, with snapshots and profiles.
+- Links mods to Nexus Mods, shows their details, and checks for updates on every start.
+- Includes a doctor that finds problems and tells you how to fix them.
+
+> Mods are not supported by Fatshark and are used at your own risk.
+> Cogitator is an independent fan project. It is not affiliated with, endorsed by or connected to Fatshark, Games Workshop or Nexus Mods.
 
 ## Install
 
@@ -24,15 +34,22 @@ Follow the window that opens: it asks for your Nexus key (optional) and installs
 Framework. It installs per user and needs no administrator rights. A ticked option adds `cogitator` to your user PATH, so the
 commands below work in any new terminal window (open a new one after installing).
 
+To run from source instead (Python 3.10 or newer):
+
+```powershell
+git clone https://github.com/MRITARI/Cogitator.git
+cd Cogitator
+pipx install .
+```
+
 ## Uninstall
 
 Use **Settings > Apps > Installed apps > Cogitator > Uninstall**. It asks whether to remove the Mod Loader and Framework from
 Darktide too (your own mods are never deleted). It also removes the PATH entry. Cogitator's settings, logs and saved Nexus key are kept unless you also remove
 them: delete `%LOCALAPPDATA%\cogitator` and the Windows Credential Manager entry named `cogitator`.
 
----
----
----
+## Verify your download
+
 The installer is not code-signed, so Windows SmartScreen may warn about it. Click **More info**, then **Run anyway**.
 
 To check that your download is genuine, also download `SHA256SUMS` and `SHA256SUMS.sig` from the same release, then run
@@ -53,14 +70,6 @@ python -c "import base64; from cryptography.hazmat.primitives.asymmetric.ed25519
 ```
 
 If step 1 prints nothing, or step 2 raises `InvalidSignature`, do not run the installer.
-
-To run from source instead (Python 3.10 or newer):
-
-```powershell
-git clone https://github.com/MRITARI/Cogitator.git
-cd Cogitator
-pipx install .
-```
 
 ## Use
 
@@ -84,8 +93,8 @@ the window is open.
 
 ## Updates
 
-Cogitator looks for a newer version on GitHub Releases and tells you; **nothing is downloaded until you press `A` and
-confirm.** An update is downloaded, its SHA-256 and Ed25519 signature are verified, and only then is the app folder replaced;
+Cogitator looks for a newer version on GitHub Releases and tells you; a banner in the window announces it, and **nothing is downloaded until you press the Update button on the
+Tools page and confirm.** An update is downloaded, its SHA-256 and Ed25519 signature are verified, and only then is the app folder replaced;
 the previous version is kept so `cogitator self-update --rollback` can restore it. `cogitator self-update --check` looks
 without changing anything. To download updates automatically, set `update_mode = "download"` (or `"auto"` to also install them)
 and `update_consent = true` in `config.toml`; `update_mode = "off"` turns the check off.
@@ -125,6 +134,8 @@ what you expected and what happened, and the log file `%LOCALAPPDATA%\cogitator\
 from it, but check it before posting).
 
 
+
+---
 
 ## Windows packaging
 
