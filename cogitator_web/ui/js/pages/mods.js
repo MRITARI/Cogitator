@@ -33,23 +33,22 @@ export function mount(container, ctx) {
   const badges = h("div", { class: "badges", role: "group", "aria-label": "Status" }, bDml, bDmf, bMods, bNexus);
   const banner = h("div", { class: "banner", role: "status", hidden: true });
   const updBanner = h("div", { class: "banner", role: "status", hidden: true });
+  // a banner with a text and an action button
+  const mkBanner = (label, id) => {
+    const text = h("span", { class: "grow" }), btn = button({ label, kind: "secondary", onClick: () => call(id) });
+    const el = h("div", { class: "banner banner-row", role: "status", hidden: true }, text, btn);
+    return { el, set(t) { el.hidden = !t; text.textContent = t || ""; } };
+  };
+  const modsBanner = mkBanner("Update all", "update_all"), fwBanner = mkBanner("Update", "framework_update");
 
   // ---- toolbar
   const check = button({ label: "Check updates", icon: "sync", kind: "secondary", title: "Check Nexus for updates (R, F5)", onClick: () => call("check_updates") });
   const importBtn = button({ label: "Import zip", icon: "add", kind: "secondary", title: "Import zip(s) (Ctrl+I)", onClick: () => call("import_zips") });
   const launchBtn = button({ label: "Launch game", icon: "play", kind: "primary", title: "Launch Darktide (G)", onClick: () => call("launch") });
-  const globalBtn = button({ label: "Mods on/off", icon: "power", kind: "secondary", title: "Turn all mods on or off (T)", onClick: () => call("toggle_global") });
-  const moreBtn = button({ label: "Nexus", trailingIcon: "chevronDown", kind: "secondary", title: "Update all, link all, update Mod Loader / Framework", onClick: () => {
-    const r = moreBtn.getBoundingClientRect();
-    showMenu(r.left, r.bottom + 4, [{ label: "Update all (Ctrl+U)", id: "update_all", enabled: true }, { label: "Link all mods to Nexus (M)", id: "link_all", enabled: true },
-      { label: "Update Mod Loader / Framework (F)", id: "framework_update", enabled: true }], (id) => call(id));
-  } });
-  const upBtn = button({ label: "Move up", icon: "up", iconOnly: true, kind: "secondary", title: "Move up (Ctrl+Up)", onClick: () => api.move(-1), disabled: true });
-  const downBtn = button({ label: "Move down", icon: "down", iconOnly: true, kind: "secondary", title: "Move down (Ctrl+Down)", onClick: () => api.move(1), disabled: true });
+  const globalBtn = button({ label: "Mods on", icon: "power", kind: "secondary", title: "Mods on or off: click to switch (T)", onClick: () => call("toggle_global") });
   const filter = h("input", { class: "input", type: "search", placeholder: "Filter mods", "aria-label": "Filter mods", autocomplete: "off", spellcheck: "false" });
   const search = h("div", { class: "search" }, icon("search"), filter);
-  const toolbar = h("div", { class: "toolbar", role: "toolbar", "aria-label": "Mods" }, launchBtn, check, importBtn, globalBtn, moreBtn,
-    h("span", { class: "sep", "aria-hidden": "true" }), upBtn, downBtn, h("span", { class: "grow" }));
+  const toolbar = h("div", { class: "toolbar", role: "toolbar", "aria-label": "Mods" }, launchBtn, check, importBtn, globalBtn);
   const chipEls = new Map();
   const chipBar = h("div", { class: "chips", role: "group", "aria-label": "Show" }, CHIPS.map(([id, label]) => {
     const b = h("button", { type: "button", class: "fchip", "aria-pressed": String(id === activeChip) }, h("span", { text: label }), h("span", { class: "n" }));
@@ -88,7 +87,7 @@ export function mount(container, ctx) {
   const marquee = h("div", { class: "marquee", "aria-hidden": "true", hidden: true });
   const wrap = h("div", { class: "table-wrap" }, table, empty, marquee, selBar);
   const panel = createDetails({ onClose: (refocus) => closePanel(refocus) });
-  container.append(badges, banner, updBanner, toolbar, chipBar, h("div", { class: "mods-layout" }, wrap, panel.el));
+  container.append(badges, banner, updBanner, modsBanner.el, fwBanner.el, toolbar, chipBar, h("div", { class: "mods-layout" }, wrap, panel.el));
   function closePanel(refocus) {
     panelOpen = false;
     panel.hide();
@@ -110,15 +109,24 @@ export function mount(container, ctx) {
     const nx = hd.nexus;
     if (!nx.key_set) setBadge(bNexus, { tone: "warn", key: "Nexus", value: "no API key" });
     else setBadge(bNexus, { tone: nx.premium === null ? "" : "ok", key: "Nexus", value: nx.premium === null ? "key set" : (nx.premium ? "premium" : "free") + (nx.quota ? `, quota ${nx.quota}` : "") });
+    renderUpdates();
     banner.hidden = !hd.banner;
     banner.textContent = hd.banner || "";
     updBanner.hidden = !hd.update_banner;
     updBanner.textContent = hd.update_banner || "";
-    globalBtn.lastChild.textContent = hd.mods === "ON" ? "Turn mods off" : "Turn mods on";
+    globalBtn.lastChild.textContent = hd.mods === "ON" ? "Mods on" : "Mods off";
     check.classList.toggle("busy", !!hd.checking);
     check.disabled = !!hd.checking;
     check.lastChild.textContent = hd.checking ? "Checking..." : "Check updates";
     bDml.title = hd.game_dir;
+  }
+
+  function renderUpdates() {
+    const n = [...state.rows.values()].filter((r) => r.kind === "update").length;
+    modsBanner.set(n ? `${n} mod update${n === 1 ? "" : "s"} available.` : "");
+    const hd = state.header, fw = hd ? hd.frameworks : null;
+    const names = fw ? [["Mod Loader", fw.dml], ["Mod Framework", fw.dmf]].filter(([, f]) => f && f.update).map(([k, f]) => `${k} ${f.update}`) : [];
+    fwBanner.set(names.length ? `Update available: ${names.join(", ")}.` : "");
   }
 
   // ---- rows
@@ -232,6 +240,7 @@ export function mount(container, ctx) {
       if (state.selected && !selSet.size) selSet.add(state.selected);
     } else if (state.selected && !selSet.size) selSet.add(state.selected);
     syncSelection();
+    renderUpdates();
     if (keep && entries.has(keep)) entries.get(keep).tr.scrollIntoView({ block: "nearest" });
     const vis = shown(), visSet = new Set(vis);
     for (const [f, e] of entries) e.tr.hidden = !visSet.has(f);
@@ -247,7 +256,6 @@ export function mount(container, ctx) {
     }
     if (document.activeElement !== filter) filter.value = state.filter;
     ctx.setSummary(state.summary);
-    refreshToolbar();
   }
 
   function renderChips() {
@@ -290,7 +298,6 @@ export function mount(container, ctx) {
     selSet.add(folder);
     anchor = folder;
     syncSelection();
-    refreshToolbar();
     if (focus) focusRow(folder);
   }
 
@@ -300,7 +307,6 @@ export function mount(container, ctx) {
     else { selSet.add(folder); state.selected = folder; }
     anchor = folder;
     syncSelection();
-    refreshToolbar();
   }
 
   function rangeSel(folder, focus) {
@@ -311,7 +317,6 @@ export function mount(container, ctx) {
     for (const f of list.slice(Math.min(a, b), Math.max(a, b) + 1)) selSet.add(f);
     state.selected = folder;
     syncSelection();
-    refreshToolbar();
     if (focus) focusRow(folder);
   }
 
@@ -323,7 +328,6 @@ export function mount(container, ctx) {
     if (!state.selected || !selSet.has(state.selected)) state.selected = list[0];
     if (!anchor || !selSet.has(anchor)) anchor = list[0];
     syncSelection();
-    refreshToolbar();
   }
 
   function clearMulti() {
@@ -331,7 +335,6 @@ export function mount(container, ctx) {
     if (state.selected) selSet.add(state.selected);
     anchor = state.selected;
     syncSelection();
-    refreshToolbar();
   }
 
   // ---- marquee: press on a row body and drag to box-select; Ctrl adds to the selection. Auto-scrolls near the top/bottom edge.
@@ -381,7 +384,7 @@ export function mount(container, ctx) {
       document.removeEventListener("mouseup", up, true);
       if (raf) cancelAnimationFrame(raf);
       marquee.hidden = true;
-      if (active) { skipClick = true; setTimeout(() => { skipClick = false; }, 0); refreshToolbar(); }
+      if (active) { skipClick = true; setTimeout(() => { skipClick = false; }, 0); }
     };
     document.addEventListener("mousemove", move, true);
     document.addEventListener("mouseup", up, true);
@@ -392,11 +395,6 @@ export function mount(container, ctx) {
     if (e) { e.tr.focus(); e.tr.scrollIntoView({ block: "nearest" }); }
   }
 
-  function refreshToolbar() {
-    const row = state.rows.get(state.selected);
-    const can = !!row && row.present && row.en !== "unlisted";
-    upBtn.disabled = downBtn.disabled = !can;
-  }
 
   // ---- actions on the selected mod (also used by keyboard shortcuts)
   async function openMenu(folder, x, y) {
@@ -454,7 +452,7 @@ export function mount(container, ctx) {
     if (what === "state") reconcile(p.keep);
     else if (what === "row") {
       const e = entries.get(p.row.folder);
-      if (e) { patchRow(e, state.rows.get(p.row.folder)); e.tr.hidden = !chipTest(activeChip)(state.rows.get(p.row.folder)); renderChips(); if (state.selected === p.row.folder) syncSelection(); ctx.setSummary(state.summary); refreshToolbar(); }
+      if (e) { patchRow(e, state.rows.get(p.row.folder)); e.tr.hidden = !chipTest(activeChip)(state.rows.get(p.row.folder)); renderChips(); renderUpdates(); if (state.selected === p.row.folder) syncSelection(); ctx.setSummary(state.summary); }
     } else if (what === "header") renderHeader();
   });
 

@@ -153,6 +153,8 @@ select.input option { background: var(--card); color: var(--fg); }
 .badges { display: flex; flex-wrap: wrap; gap: var(--sp-2); margin-bottom: var(--sp-4); }
 .toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: var(--sp-2); margin-bottom: var(--sp-4); }
 .toolbar .grow { flex: 1; }
+.banner-row { display: flex; align-items: center; gap: var(--sp-4); }
+.banner-row .grow { flex: 1; min-width: 0; }
 .banner { border: 1px solid var(--border); border-radius: var(--radius-tile); background: var(--card); box-shadow: inset 3px 0 0 var(--attention); padding: var(--sp-3) var(--sp-5); margin-bottom: var(--sp-4); }
 
 /* ---------- table: inside a card */
