@@ -186,6 +186,7 @@ table.mods { width: 100%; border-collapse: collapse; table-layout: fixed; }
 .mods .muted { color: var(--muted); }
 .mods tr.is-off td.name .t { color: var(--muted); }
 .chip { display: inline-flex; align-items: center; gap: 4px; height: 20px; padding: 0 8px; border-radius: var(--radius-pill); background: var(--tile); color: var(--muted); font-size: 11px; flex: none; }
+.pin-mark { display: inline-flex; color: var(--muted); flex: none; }
 .mods tbody tr:hover .chip, .mods tbody tr[aria-selected="true"] .chip { background: var(--card); }
 .empty { padding: calc(var(--sp-6) * 2) var(--sp-6); text-align: center; color: var(--muted); max-width: 52ch; margin: 0 auto; text-wrap: balance; }
 .mods td:nth-child(3) { font-variant-numeric: tabular-nums; }

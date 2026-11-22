@@ -71,7 +71,7 @@ function onKey(e) {
   // plain letters act only while the table has focus (typing in a field must not trigger anything)
   const letters = { r: () => call("check_updates"), i: () => call("import_zips"), g: () => call("launch"), d: () => call("doctor"), t: () => call("toggle_global"),
     m: () => call("link_all"), f: () => call("framework_update"),
-    k: () => go("settings", true), n: () => mods.note(), "*": () => mods.fav(), "/": () => mods.focusFilter() };
+    k: () => go("settings", true), "/": () => mods.focusFilter() };
   const fn = letters[k.length === 1 ? k.toLowerCase() : k];
   if (fn) run(fn);
 }

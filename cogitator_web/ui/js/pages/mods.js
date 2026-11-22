@@ -17,7 +17,7 @@ const versionText = (r) => (r.kind === "unlinked" ? "-" : r.kind === "update" &&
 const TONE = { ok: "ok", warn: "warn", bad: "bad", dim: "", "": "" };
 
 const CHIPS = [["all", "All", () => true], ["enabled", "Enabled", (r) => r.en === "on"], ["updates", "Updates", (r) => r.kind === "update"],
-  ["unlinked", "Not linked", (r) => r.kind === "unlinked"], ["fav", "Favourites", (r) => r.fav]];
+  ["unlinked", "Not linked", (r) => r.kind === "unlinked"]];
 let activeChip = "all"; // kept across list refreshes (and page switches)
 let panelOpen = false; // the details panel: opened by a click (or ArrowRight on a row), follows the selection, closed by x / Esc / ArrowLeft
 const selSet = new Set(); // every selected folder; state.selected is the cursor (the one the panel and Ctrl+Up/Down follow)
@@ -114,10 +114,7 @@ export function mount(container, ctx) {
   // ---- rows
   function chips(row) {
     const out = [];
-    if (row.fav) out.push(h("span", { class: "chip on", title: "Favourite" }, icon("star"), "Favourite"));
-    if (row.pinned) out.push(h("span", { class: "chip", title: "Version pinned" }, icon("pin"), `pinned ${row.pinned}`));
-    if (row.note) out.push(h("span", { class: "chip", title: "Has a note" }, icon("note"), "note"));
-    for (const t of row.tags.slice(0, 3)) out.push(h("span", { class: "chip", text: `#${t}` }));
+    if (row.pinned) out.push(h("span", { class: "pin-mark", title: `Version pinned: ${row.pinned}` }, icon("pin"), h("span", { class: "sr-only", text: `pinned ${row.pinned}` })));
     return out;
   }
 
@@ -393,8 +390,6 @@ export function mount(container, ctx) {
     toggle() { if (state.selected) call("toggle", state.selected); },
     move(d) { if (state.selected && picked().length <= 1) call("move", state.selected, d); },
     selectAll,
-    fav() { if (state.selected) call("fav", state.selected); },
-    note() { if (state.selected) call("edit_note", state.selected); },
     focusFilter() { filter.focus(); filter.select(); },
     inTable() { return tbody.contains(document.activeElement); },
     menuForSelected() {
