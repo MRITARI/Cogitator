@@ -63,9 +63,3 @@ window.cogitatorPush = (batch) => {
     try { dispatch(p); } catch (e) { console.error(e); }
   }
 };
-
-export function applyTheme(choice) {
-  const root = document.documentElement;
-  if (choice === "light" || choice === "dark") root.dataset.theme = choice;
-  else delete root.dataset.theme;
-}

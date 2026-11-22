@@ -76,7 +76,7 @@ def test_filter_matches_name_tags_note_fav_pinned_like_the_tui():
 
 def test_favourites_and_pins_show_in_the_name_cell():
     m = model({"alpha": {"fav": True, "pinned_version": "1.0"}})
-    assert m.rows()[0].cells[1] == "* alpha  [pinned 1.0]"
+    assert m.rows()[0].cells[1] == "alpha  [pinned 1.0]"
 
 
 

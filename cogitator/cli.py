@@ -1315,7 +1315,7 @@ def _dispatch(args) -> int:
     if args.cmd is None:  # no command: open the Cogitator window
         from cogitator_web.launch import launch_app
 
-        extra = (["--game-dir", args.game_dir] if args.game_dir else []) + (["--instance", args.instance] if args.instance else [])
+        extra = (["--game-dir", str(Path(args.game_dir).resolve())] if args.game_dir else []) + (["--instance", args.instance] if args.instance else [])
         extra += ["--no-update-check"] if args.no_update_check else []
         return 0 if launch_app(args=extra) else 1
     return 2

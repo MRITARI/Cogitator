@@ -6,6 +6,7 @@ key or the remembered hourly quota is low, and images only when a panel is opene
 from __future__ import annotations
 
 import base64
+import contextlib
 import hashlib
 import html
 import json
@@ -165,11 +166,12 @@ def remembered_hourly(registry: Any, now: float) -> int | None:
     return None
 
 
-def record_quota(registry: Any, nx: NexusClient, now: float) -> None:
+def record_quota(registry: Any, nx: NexusClient, now: float, lock: Any = None) -> None:
     try:
         if nx.requests > 0:
-            registry.data["updates"]["quota"] = {"text": str(nx.quota), "at": now}
-            registry.save()
+            with (lock or contextlib.nullcontext()):
+                registry.data["updates"]["quota"] = {"text": str(nx.quota), "at": now}
+                registry.save()
     except (AttributeError, KeyError, OSError):
         pass
 
@@ -208,7 +210,8 @@ def _cached_or(status: str, rec: dict | None) -> Result:
     return Result(status, None, MESSAGES.get(status, ""))
 
 
-def _call(mod_id: int, registry: Any, t: float, key: str, factory: Callable[[str], NexusClient] | None, what: Callable[[NexusClient], Any]) -> Any:
+def _call(mod_id: int, registry: Any, t: float, key: str, factory: Callable[[str], NexusClient] | None, what: Callable[[NexusClient], Any],
+          lock: Any = None) -> Any:
     """One guarded Nexus call; the quota the reply reported is remembered even when the call fails."""
     with (factory or NexusClient)(key) as nx:
         if nx.exhausted:
@@ -216,7 +219,7 @@ def _call(mod_id: int, registry: Any, t: float, key: str, factory: Callable[[str
         try:
             return what(nx)
         finally:
-            record_quota(registry, nx, t)
+            record_quota(registry, nx, t, lock)
 
 
 def _failure(e: Exception, mod_id: int, t: float, rec: dict | None) -> Result:
@@ -229,7 +232,7 @@ def _failure(e: Exception, mod_id: int, t: float, rec: dict | None) -> Result:
 
 
 def details_for(mod_id: int | None, registry: Any, *, api_key: str | None = None, now: Callable[[], float] = time.time,
-                client_factory: Callable[[str], NexusClient] | None = None) -> Result:
+                client_factory: Callable[[str], NexusClient] | None = None, lock: Any = None) -> Result:
     """Cached details when fresh; else exactly one mod() call, unless there is no key, the quota is low, or a recent call failed."""
     if not mod_id:
         return Result(UNLINKED, None, MESSAGES[UNLINKED])
@@ -246,7 +249,7 @@ def details_for(mod_id: int | None, registry: Any, *, api_key: str | None = None
     if t - _failed.get(mod_id, -1e12) < FAIL_BACKOFF_S:
         return _cached_or(OFFLINE, rec)
     try:
-        payload = _call(mod_id, registry, t, key, client_factory, lambda nx: nx.mod(int(mod_id)))
+        payload = _call(mod_id, registry, t, key, client_factory, lambda nx: nx.mod(int(mod_id)), lock)
     except NexusError as e:
         if isinstance(e, NotFound):
             _write(path, {"at": t, "data": None})
@@ -260,7 +263,7 @@ def details_for(mod_id: int | None, registry: Any, *, api_key: str | None = None
 
 
 def changes_for(mod_id: int | None, registry: Any, *, api_key: str | None = None, now: Callable[[], float] = time.time,
-                client_factory: Callable[[str], NexusClient] | None = None) -> Result:
+                client_factory: Callable[[str], NexusClient] | None = None, lock: Any = None) -> Result:
     """The changelog (newest first, plain text), same cache and guard rules; called only when the user opens "Versions"."""
     if not mod_id:
         return Result(UNLINKED, None, MESSAGES[UNLINKED])
@@ -274,10 +277,15 @@ def changes_for(mod_id: int | None, registry: Any, *, api_key: str | None = None
         return _cached_or(NO_KEY, rec)
     if blocked_by_quota(registry, t):
         return _cached_or(LOW_QUOTA, rec)
+    if t - _failed.get(mod_id, -1e12) < FAIL_BACKOFF_S:
+        return _cached_or(OFFLINE, rec)
     try:
-        raw = _call(mod_id, registry, t, key, client_factory, lambda nx: nx.changelogs(int(mod_id)))
+        raw = _call(mod_id, registry, t, key, client_factory, lambda nx: nx.changelogs(int(mod_id)), lock)
     except NexusError as e:
         return _failure(e, mod_id, t, rec)
+    if not isinstance(raw, dict) or not all(isinstance(v, (list, tuple)) for v in raw.values()):
+        _failed[mod_id] = t
+        return _cached_or(ERROR, rec)
     items = [{"version": plain_text(v, 40), "lines": [plain_text(x, 300) for x in lines[:30]]} for v, lines in list(raw.items())[-15:][::-1]]
     data = {"versions": items}
     _write(path, {"at": t, "data": data})

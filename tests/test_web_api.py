@@ -92,7 +92,7 @@ def test_other_bad_arguments(web):
     assert api.set_filter(123)["ok"] is False and api.set_filter("x" * 500)["ok"] is False
     assert api.set_setting("game_dir", "C:\\")["ok"] is False  # not on the page's list
     assert api.set_setting("check_updates_on_start", "yes")["ok"] is False
-    assert api.set_setting("gui_theme", "neon")["ok"] is False
+    assert api.set_setting("gui_theme", "dark")["ok"] is False  # the setting is gone
     assert api.set_setting("downloads_dir", "Z:\\no\\such\\folder")["ok"] is False
     assert api.set_setting(3, True)["ok"] is False
     for k in (None, 7, "short", "has space inside the key 12345", "k" * 300, "ключ-with-unicode-12345"):
@@ -345,15 +345,14 @@ def test_settings_save_to_the_shared_file_and_unknown_keys_survive_load(web, tmp
     _, s, api, _ = web
     dl = tmp_path / "dl"
     dl.mkdir()
-    assert api.set_setting("gui_theme", "dark")["ok"]
     assert api.set_setting("check_updates_on_start", False)["ok"]
     assert api.set_setting("auto_repair", "auto")["ok"]
     assert api.set_setting("downloads_dir", str(dl))["ok"]
     again = Settings.load()
-    assert (again.gui_theme, again.check_updates_on_start, again.auto_repair, again.downloads_dir) == ("dark", False, "auto", str(dl))
+    assert (again.check_updates_on_start, again.auto_repair, again.downloads_dir) == (False, "auto", str(dl))
     path = Settings.path()
     path.write_text(path.read_text() + 'web_future_key = "x"\n')  # an unknown key must not break the other interfaces
-    assert Settings.load().gui_theme == "dark"
+    assert Settings.load().auto_repair == "auto"
     s.pick_folder = lambda: str(tmp_path)
     assert api.pick_downloads()["settings"]["downloads_dir"] == str(tmp_path)
     s.pick_folder = lambda: None
@@ -657,48 +656,13 @@ def test_crashlog_notice_is_plain_text_and_no_game_is_refused(web, game):
 
 
 # ---------------------------------------------------------------- window background
-PNG = b"\x89PNG\r\n\x1a\n" + b"\0" * 64
-JPG = b"\xff\xd8\xff\xe0" + b"\0" * 64
-WEBP = b"RIFF\x10\0\0\0WEBPVP8 " + b"\0" * 32
-
-
-def test_background_choice_validation_and_round_trip(web, tmp_path):
-    from cogitator.config import config_dir
-
+def test_background_choice_validation(web):
     _, s, api, _ = web
     assert api.get_settings()["settings"]["gui_background"] == "default"
     assert api.set_setting("gui_background", "plain")["settings"]["gui_background"] == "plain"
     assert api.set_setting("gui_background", "neon")["ok"] is False
-    assert api.set_setting("gui_background", "custom")["ok"] is False  # no image yet
-    assert api.get_background()["data"] is None
-    for name, data, why in (("a.png", b"not an image at all", "bad magic"), ("a.svg", b"<svg xmlns='http://www.w3.org/2000/svg'/>", "svg"),
-                            ("a.png", PNG + b"\0" * (4 * 1024 * 1024), "oversize"), ("a.png.png", JPG[:2], "short"), ("a.gif", b"GIF89a" + b"\0" * 20, "gif")):
-        f = tmp_path / name
-        f.write_bytes(data)
-        s.pick_image = lambda f=f: str(f)
-        assert api.pick_background()["ok"] is False, why
-    assert not list(config_dir().glob("background.*"))
-    f = tmp_path / "pic.jpeg"  # the bytes decide the format, not the extension
-    f.write_bytes(PNG)
-    s.pick_image = lambda: str(f)
-    r = api.pick_background()
-    assert r["ok"] and r["settings"]["gui_background"] == "custom" and (config_dir() / "background.png").is_file()
-    assert api.get_background()["data"].startswith("data:image/png;base64,")
-    assert Settings.load().gui_background == "custom"
-    f2 = tmp_path / "w.webp"
-    f2.write_bytes(WEBP)
-    s.pick_image = lambda: str(f2)
-    assert api.pick_background()["ok"] and not (config_dir() / "background.png").exists()  # replaced, not accumulated
-    assert api.get_background()["data"].startswith("data:image/webp;")
-    s.pick_image = lambda: None
-    assert api.pick_background() == {"ok": True, "settings": api.get_settings()["settings"]}  # cancelled: nothing changes
-    r = api.reset_background()
-    assert r["settings"]["gui_background"] == "default" and not list(config_dir().glob("background.*")) and api.get_background()["data"] is None
-
-
-def test_a_custom_setting_without_its_file_falls_back_to_default(web):
-    _, s, api, _ = web
-    s.settings.gui_background = "custom"
+    assert api.set_setting("gui_background", "custom")["ok"] is False  # custom images are gone
+    s.settings.gui_background = "custom"  # a stale value from an older version
     assert api.get_settings()["settings"]["gui_background"] == "default"
 
 

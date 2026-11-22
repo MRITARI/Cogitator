@@ -14,8 +14,11 @@ def web_target(frozen: bool, executable: str) -> list[str] | None:
     """installed: app/cogitator-web.exe next to the setup folder (None when it is missing); source: python -m cogitator_web."""
     if not frozen:
         return [executable, "-m", "cogitator_web"]
-    exe = Path(executable).resolve().parent.parent / "app" / WEB_EXE
-    return [str(exe)] if exe.is_file() else None
+    here = Path(executable).resolve().parent
+    for exe in (here / WEB_EXE, here.parent / "app" / WEB_EXE):  # side by side (dist folder, updater), then the setup layout
+        if exe.is_file():
+            return [str(exe)]
+    return None
 
 
 MISSING = "cogitator-web.exe was not found next to this install, so the Cogitator window cannot open. The command line still works: cogitator --help"

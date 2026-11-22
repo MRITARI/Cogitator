@@ -123,9 +123,7 @@ def _block(css: str, selector: str) -> dict[str, str]:
 def _themes():
     css = (UI / "theme.css").read_text(encoding="utf-8")
     dark = _block(css, ":root")
-    light = _block(css, ':root[data-theme="light"]')
-    system_light = _block(css, ":root:not([data-theme])")
-    return css, dark, light, system_light
+    return css, dark
 
 
 def _lum(h: str) -> float:
@@ -144,7 +142,7 @@ SURFACES = ("bg", "sidebar", "card", "tile", "secondary", "input")
 
 
 def test_the_spec_colours_are_there():
-    _, d, _, _ = _themes()
+    _, d = _themes()
     for k, v in {"bg": "#0a0a0a", "card": "#171717", "tile": "#1e1e1e", "input": "#282828", "secondary": "#262626", "border": "#2f2f2f",
                  "primary": "#e5e5e5", "fg": "#fafafa", "muted": "#a3a3a3", "destructive": "#ef4444", "ok": "#4ade80", "attention": "#fbbf24",
                  "neutral": "#71717a", "accent": "#b8892e"}.items():
@@ -152,10 +150,9 @@ def test_the_spec_colours_are_there():
     assert (d["radius-pill"], d["radius-card"], d["radius-tile"], d["radius-menu"]) == ("0", "0", "0", "0")  # square, industrial
 
 
-@pytest.mark.parametrize("which", ["dark", "light"])
-def test_text_contrast_on_every_surface(which):
-    _, dark, light, _ = _themes()
-    t = dark if which == "dark" else light
+def test_text_contrast_on_every_surface():
+    _, t = _themes()
+    which = "dark"
     for fg in TEXT_COLOURS:
         for bg in SURFACES:
             assert ratio(t[fg], t[bg]) >= 4.5, f"{which}: {fg} {t[fg]} on {bg} {t[bg]} = {ratio(t[fg], t[bg]):.2f}"
@@ -171,19 +168,12 @@ def test_text_contrast_on_every_surface(which):
     assert ratio(t["accent-fg"], t["accent"]) >= 3  # switch ON knob on its track
 
 
-def test_light_variants_are_identical_and_complete():
-    _, dark, light, system_light = _themes()
-    assert {k: v for k, v in light.items() if k != "color-scheme"} == {k: v for k, v in system_light.items() if k != "color-scheme"}
-    colour_keys = {k for k, v in dark.items() if v.startswith("#") or v.startswith("rgba")}
-    assert colour_keys <= set(light), colour_keys - set(light)
-
-
 def test_css_uses_only_defined_variables():
-    css, dark, _, _ = _themes()
+    css, dark = _themes()
     app = (UI / "app.css").read_text(encoding="utf-8") + (UI / "setup.css").read_text(encoding="utf-8") + (UI / "uninstall.css").read_text(encoding="utf-8")
     used = set(re.findall(r"var\(--([\w-]+)", app))
     assert used <= set(dark), used - set(dark)
-    assert "prefers-reduced-motion" in app and "prefers-color-scheme" in css
+    assert "prefers-reduced-motion" in app and "prefers-color-scheme" not in css and "light" not in css.lower().replace("highlight", "")
 
 
 def test_accessibility_hooks_are_in_the_scripts():
@@ -218,27 +208,6 @@ def _over(top, under):
     return "#" + "".join(f"{round(c * a + u * (1 - a)):02x}" for c, u in zip((r, g, b), under))
 
 
-def test_text_contrast_on_translucent_surfaces_over_the_worst_custom_image():
-    _, d, light, _ = _themes()
-    worst = _over(_rgba(d["bg-shade"]), (255, 255, 255))  # a pure white photo under the dark shade
-    assert _rgba(d["bg-shade"])[3] >= 0.8
-    rgb = lambda h: tuple(int(worst[i:i + 2], 16) for i in (1, 3, 5))  # noqa: E731
-    assert ratio(d["muted"], worst) >= 4.5 and ratio(d["fg"], worst) >= 4.5  # text sitting straight on the layer
-    for glass in ("sidebar-glass", "card-glass", "menu-glass"):
-        surface = _over(_rgba(d[glass]), rgb(worst))
-        for fg in TEXT_COLOURS:
-            assert ratio(d[fg], surface) >= 4.5, f"{fg} on {glass} over the worst background = {ratio(d[fg], surface):.2f}"
-    card = _over(_rgba(d["card-glass"]), rgb(worst))
-    for glass in ("tile-glass", "secondary-glass", "input-glass"):  # row hover / selected row / inputs sit on a glass card
-        surface = _over(_rgba(d[glass]), rgb(card))
-        for fg in TEXT_COLOURS:
-            assert ratio(d[fg], surface) >= 4.5, f"{fg} on {glass} over a glass card over the worst background = {ratio(d[fg], surface):.2f}"
-    for k in ("sidebar-glass", "card-glass", "menu-glass"):  # the light theme never shows a layer: its glass is the opaque surface
-        assert light[k] == light[k.replace("-glass", "").replace("menu", "card")]
-    for k in ("tile", "secondary", "input"):
-        assert light[f"{k}-glass"] == light[k]
-
-
 def test_no_rounded_corners_anywhere():
     for name in ("app.css", "setup.css", "uninstall.css"):
         css = (UI / name).read_text(encoding="utf-8")
@@ -256,12 +225,12 @@ def test_glass_surfaces_are_blurred_and_have_hairlines():
 
 def test_background_is_wired():
     js = {rel(p): p.read_text(encoding="utf-8") for p in JS}
-    assert "style.backgroundImage" in js["js/background.js"] and "get_background" in js["js/background.js"]
-    assert "applyBackground" in js["js/main.js"] and "pick_background" in js["js/pages/settings.js"] and "reset_background" in js["js/pages/settings.js"]
+    assert "dataset.bg" in js["js/background.js"] and "get_background" not in js["js/background.js"]
+    assert "applyBackground" in js["js/main.js"] and "pick_background" not in js["js/pages/settings.js"] and "applyTheme" not in js["js/main.js"]
     html = (UI / "index.html").read_text(encoding="utf-8")
     assert 'id="bg"' in html
     css = (UI / "app.css").read_text(encoding="utf-8")
-    assert 'img/cogitator-bg.svg' in css and "blur(" in css and "--bg-shade" in css
+    assert 'img/cogitator-bg.svg' in css and "blur(" in css and "--bg-shade" not in css and "data-bg=\"custom\"" not in css
 
 
 def test_details_panel_is_accessible_and_text_only():
@@ -318,16 +287,9 @@ def test_grip_gutter():
 def test_filter_chip_states():
     css = (UI / "app.css").read_text(encoding="utf-8")
     assert re.search(r'\.fchip\[aria-pressed="true"\] \{[^}]*color: var\(--fg\);[^}]*inset 0 -2px 0 var\(--accent\)', css)
-    _, d, light, _ = _themes()
-    worst = _over(_rgba(d["bg-shade"]), (255, 255, 255))
-    card = _over(_rgba(d["card-glass"]), tuple(int(worst[i:i + 2], 16) for i in (1, 3, 5)))
-    rgb = tuple(int(card[i:i + 2], 16) for i in (1, 3, 5))
-    for glass in ("secondary-glass", "tile-glass"):  # active / hovered chip over the worst custom image
-        surface = _over(_rgba(d[glass]), rgb)
-        assert ratio(d["fg"], surface) >= 4.5 and ratio(d["muted"], surface) >= 4.5, glass
-    for t in (d, light):
-        for bg in ("secondary", "tile"):
-            assert ratio(t["fg"], t[bg]) >= 4.5 and ratio(t["muted"], t[bg]) >= 4.5
+    _, t = _themes()
+    for bg in ("secondary", "tile"):
+        assert ratio(t["fg"], t[bg]) >= 4.5 and ratio(t["muted"], t[bg]) >= 4.5
 
 
 def _js(*parts):

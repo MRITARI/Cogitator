@@ -4,7 +4,7 @@ import { call } from "../api.js";
 import { applyBackground } from "../background.js";
 import { button, toggleSwitch, setSwitch } from "../components/widgets.js";
 import { h } from "../dom.js";
-import { applyTheme, watch } from "../store.js";
+import { watch } from "../store.js";
 
 export const title = "Settings";
 export const focusIds = { key: "nexus-key" };
@@ -82,30 +82,12 @@ export function mount(container, ctx) {
       h("div", { class: "s-row" }, h("div", { class: "lbl" }, h("div", { class: "t", text: "Account" }), account))));
 
     // ---- Appearance
-    const bgRow = (st) => {
-      const sel = select("Background", [["default", "Default"], ["plain", "Plain"], ["custom", "Custom image"]], st.gui_background, async (v) => {
-        const n = await save("gui_background", v);
-        if (n) await applyBackground(n.gui_background);
-        sel.value = cur.gui_background;
-      });
-      const apply = async (r) => {
-        if (!r.ok) { fail(r.error); return; }
-        fail("");
-        if (r.cancelled) return;
-        cur = r.settings;
-        sel.value = cur.gui_background;
-        await applyBackground(cur.gui_background);
-      };
-      return row("Background", "Only in the dark theme. A custom image (PNG, JPG or WEBP, up to 4 MB) is blurred and darkened so text stays readable.", sel,
-        button({ label: "Choose image...", icon: "folder", kind: "secondary", onClick: async () => apply(await call("pick_background")) }),
-        button({ label: "Reset", kind: "ghost", onClick: async () => apply(await call("reset_background")) }));
-    };
-    wrap.append(h("section", { class: "s-group", "aria-label": "Appearance" },
-      row("Theme", "System follows the Windows setting.", select("Theme", [["system", "System"], ["dark", "Dark"], ["light", "Light"]], s.gui_theme, async (v) => {
-        applyTheme(v);
-        await save("gui_theme", v);
-      })),
-      bgRow(s)));
+    const bgSel = select("Background", [["default", "Default"], ["plain", "Plain"]], s.gui_background, async (v) => {
+      const n = await save("gui_background", v);
+      if (n) applyBackground(n.gui_background);
+      bgSel.value = cur.gui_background;
+    });
+    wrap.append(h("section", { class: "s-group", "aria-label": "Appearance" }, row("Background", "The picture behind the window.", bgSel)));
 
     // ---- Behaviour
     const sw = (label, name, value) => {

@@ -102,9 +102,16 @@ def test_bare_cogitator_opens_the_window_and_forwards_flags(monkeypatch):
     seen = []
     monkeypatch.setattr(launch, "launch_app", lambda **k: seen.append(k) or ["x"])
     assert cli.main(["--game-dir", "G", "--no-update-check"]) == 0
-    assert seen == [{"args": ["--game-dir", "G", "--no-update-check"]}]
+    assert seen == [{"args": ["--game-dir", str(Path("G").resolve()), "--no-update-check"]}]
     monkeypatch.setattr(launch, "launch_app", lambda **k: None)
     assert cli.main([]) == 1
+
+
+def test_web_target_finds_a_side_by_side_exe(tmp_path):
+    from cogitator_web import launch
+
+    (tmp_path / "cogitator-web.exe").write_bytes(b"")
+    assert launch.web_target(True, str(tmp_path / "cogitator.exe")) == [str(tmp_path / "cogitator-web.exe")]
 
 
 def test_setup_start_button_uses_the_launch_helper(monkeypatch):

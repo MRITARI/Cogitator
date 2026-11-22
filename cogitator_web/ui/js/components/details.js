@@ -78,6 +78,15 @@ export function createDetails({ onClose }) {
     return parts;
   }
 
+  function fetchVersions() {
+    const v = state.versions.get(folder);
+    const done = v && (v.status === "ok" || v.status === "cached");
+    if (!folder || done || versLoading.has(folder)) return;
+    versLoading.add(folder);
+    call("mod_versions", folder);
+    render();
+  }
+
   function versionsSection() {
     const v = state.versions.get(folder);
     const det = h("details", { class: "d-fold" }, h("summary", { text: "Versions" }));
@@ -89,8 +98,9 @@ export function createDetails({ onClose }) {
     }
     det.open = verOpen;
     det.addEventListener("toggle", () => {
+      if (det.open === verOpen) return; // the toggle event of our own `open = verOpen` in a render
       verOpen = det.open;
-      if (verOpen && folder && !state.versions.has(folder)) { versLoading.add(folder); call("mod_versions", folder); render(); }
+      if (verOpen) fetchVersions();
     });
     return det;
   }

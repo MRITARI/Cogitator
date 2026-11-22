@@ -12,7 +12,7 @@ import { modsApi } from "./pages/mods.js";
 import * as toolsPage from "./pages/tools.js";
 import * as profilesPage from "./pages/profiles.js";
 import * as settingsPage from "./pages/settings.js";
-import { applyTheme, on, state } from "./store.js";
+import { on, state } from "./store.js";
 
 const PAGES = { mods: modsPage, profiles: profilesPage, tools: toolsPage, settings: settingsPage };
 let sidebar, content, head, status, drawer, mounted = null;
@@ -80,9 +80,8 @@ function onKey(e) {
 async function boot() {
   detectIcons();
   const r = await call("boot");
-  const settings = r.ok ? r.settings : { gui_theme: "system", version: "" };
-  applyTheme(settings.gui_theme);
-  await applyBackground(settings.gui_background);
+  const settings = r.ok ? r.settings : { version: "" };
+  applyBackground(settings.gui_background);
   const app = document.getElementById("app");
   initModals(document.getElementById("modal-root"), app);
   state.goto = (id) => go(id, true);

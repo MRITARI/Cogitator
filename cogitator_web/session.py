@@ -33,7 +33,6 @@ from cogitator.registry import Registry
 from cogitator.updates import (PROBABLY_OUTDATED, UPDATE, CheckBundle, FrameworkUpdate, ModRow, cached_frameworks, cached_rows,
                                quota_text, run_checks)
 from cogitator.viewtext import (NOTICE_BODY, NOTICE_TITLE, gui_words, installed_label, mod_suffix, report_segments, status_kind, status_label)
-from cogitator_web import background
 from cogitator_web.controller import GuiUi
 from cogitator_web.viewmodel import ARROW, TAG_BAD, TAG_DIM, TAG_OK, TAG_WARN, ModListModel
 
@@ -43,11 +42,10 @@ log = logging.getLogger("cogitator.web")
 
 NOTICE = "notice"  # a question kind only the web page knows: a message with one button (answer: True)
 TONE = {TAG_BAD: "bad", TAG_WARN: "warn", TAG_OK: "ok", TAG_DIM: "dim", "": ""}
-GUI_THEMES = ("system", "light", "dark")
 AUTO_REPAIR = ("off", "ask", "auto")
-GUI_BACKGROUNDS = ("default", "plain", "custom")
+GUI_BACKGROUNDS = ("default", "plain")
 # boolean / choice settings the page may change: name -> allowed values (bool = a switch)
-SETTING_CHOICES = {"gui_theme": GUI_THEMES, "auto_repair": AUTO_REPAIR, "gui_background": GUI_BACKGROUNDS}
+SETTING_CHOICES = {"auto_repair": AUTO_REPAIR, "gui_background": GUI_BACKGROUNDS}
 SETTING_BOOLS = ("check_updates_on_start", "update_consent")
 ROW_ACTIONS = ("toggle", "open_page", "open_folder", "pin", "rollback", "remove",
                "link", "update")
@@ -103,7 +101,6 @@ class Session:
         self.started = False
         # seams: the window supplies the native dialogs; tests replace anything here
         self.pick_folder: Callable[[], str | None] = lambda: None
-        self.pick_image: Callable[[], str | None] = lambda: None
         self.pick_files: Callable[[Path], list[str] | None] = lambda start: None
         self.on_quit: Callable[[], None] = lambda: None
         self.game_running: Callable[[], bool] = darktide_running
@@ -630,32 +627,28 @@ class Session:
         self.ctl.run("mod details", self._details_loop, "details")
 
     def _details_loop(self) -> None:
-        try:
-            while True:
-                with self._dlock:
-                    folder, self._details_want = self._details_want, None
-                    if folder is None:
-                        self._details_busy = False
-                        return
-                try:
-                    res = nexus_info.details_for(self.nexus_id_of(folder), self.registry)
-                    url = (res.data or {}).get("picture_url") or ""
-                    image = nexus_info.cached_image(url) if url else None
-                    if url and image is None and self._details_want is None:  # only fetch while this panel is still the one shown
-                        image = nexus_info.fetch_image(url)
-                    self._details_push(folder, res, image)
-                except Exception:
-                    log.exception("details for %s failed", folder)
-                    self._details_push(folder, nexus_info.Result(nexus_info.ERROR, None, nexus_info.MESSAGES[nexus_info.ERROR]))
-        finally:
+        while True:
             with self._dlock:
-                self._details_busy = False
+                folder, self._details_want = self._details_want, None
+                if folder is None:
+                    self._details_busy = False
+                    return
+            try:
+                res = nexus_info.details_for(self.nexus_id_of(folder), self.registry, lock=self.lock)
+                url = (res.data or {}).get("picture_url") or ""
+                image = nexus_info.cached_image(url) if url else None
+                if url and image is None and self._details_want is None:  # only fetch while this panel is still the one shown
+                    image = nexus_info.fetch_image(url)
+                self._details_push(folder, res, image)
+            except Exception:
+                log.exception("details for %s failed", folder)
+                self._details_push(folder, nexus_info.Result(nexus_info.ERROR, None, nexus_info.MESSAGES[nexus_info.ERROR]))
 
     def request_versions(self, folder: str) -> None:
         mod_id = self.nexus_id_of(folder)
 
         def work() -> None:
-            res = nexus_info.changes_for(mod_id, self.registry)
+            res = nexus_info.changes_for(mod_id, self.registry, lock=self.lock)
             self.bridge.emit({"type": "versions", "folder": folder, "status": res.status, "message": res.message, "stale": res.stale,
                               "versions": (res.data or {}).get("versions", [])})
 
@@ -1092,7 +1085,7 @@ class Session:
     # ================================================================== settings page
     def settings_payload(self) -> dict:
         s = self.settings
-        return {"version": __version__, "gui_theme": s.gui_theme if s.gui_theme in GUI_THEMES else "system",
+        return {"version": __version__,
                 "gui_background": self.background_mode(),
                 "check_updates_on_start": s.check_updates_on_start, "update_consent": s.update_consent, "auto_repair": s.auto_repair,
                 "downloads_dir": s.downloads_dir, "downloads_effective": str(self.ctx().downloads_dir()) if self.game_dir else
@@ -1101,27 +1094,9 @@ class Session:
 
     def background_mode(self) -> str:
         mode = self.settings.gui_background
-        if mode not in GUI_BACKGROUNDS or (mode == "custom" and background.stored() is None):
+        if mode not in GUI_BACKGROUNDS:
             return "default"
         return mode
-
-    def choose_background(self) -> str | None:
-        """The native file dialog, then validate and keep the image. Returns an error text, None on success or cancel (see `chosen`)."""
-        picked = self.pick_image()
-        if not picked:
-            return None
-        try:
-            background.store(Path(str(picked)))
-        except background.BackgroundError as e:
-            return str(e)
-        self.settings.gui_background = "custom"
-        self.settings.save()
-        return None
-
-    def reset_background(self) -> None:
-        background.reset()
-        self.settings.gui_background = "default"
-        self.settings.save()
 
     def set_setting(self, name: str, value: object) -> str | None:
         """Change one setting the page is allowed to touch. Returns an error text, or None when saved."""
@@ -1131,8 +1106,6 @@ class Session:
         elif name in SETTING_CHOICES:
             if value not in SETTING_CHOICES[name]:
                 return f"{name} must be one of: {', '.join(SETTING_CHOICES[name])}."
-            if name == "gui_background" and value == "custom" and background.stored() is None:
-                return "Choose an image first."
         elif name == "downloads_dir":
             if not isinstance(value, str) or len(value) > 1000 or "\0" in value:
                 return "downloads_dir must be a folder path."

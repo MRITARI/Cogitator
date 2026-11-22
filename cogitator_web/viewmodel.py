@@ -55,10 +55,9 @@ class ModListModel:
     # ---- row text
     def name_cell(self, m: Mod) -> str:
         meta = self.meta(m.folder)
-        prefix = "* " if meta.get("fav") else ""
         suffix = mod_suffix(m)
         pinned = f"  [pinned {meta['pinned_version']}]" if meta.get("pinned_version") else ""
-        return prefix + m.folder + pinned + (suffix[0] if suffix else "")
+        return m.folder + pinned + (suffix[0] if suffix else "")
 
     def cells(self, m: Mod) -> tuple[str, str, str, str, str]:
         r = self.urows.get(m.folder)

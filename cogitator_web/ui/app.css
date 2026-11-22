@@ -22,22 +22,18 @@ button, input, select, textarea { font: inherit; color: inherit; }
 .icon { font-family: var(--icons); font-size: 16px; line-height: 1; width: 16px; text-align: center; font-style: normal; flex: none; user-select: none; }
 html.icons-text .icon { font-family: var(--font); font-weight: 600; }
 
-/* ---------- background layer (dark theme only; set by js/background.js through html[data-bg]) */
+/* ---------- background layer (set by js/background.js through html[data-bg]) */
 #bg { position: fixed; inset: 0; z-index: -1; display: none; background-size: cover; background-position: center; background-repeat: no-repeat; overflow: hidden; }
 :root[data-bg="default"] #bg { display: block; background-image: url("img/cogitator-bg.svg"); }
-:root[data-bg="custom"] #bg { display: block; inset: -24px; filter: blur(14px); }
-:root[data-bg="custom"] #bg::after { content: ""; position: absolute; inset: 0; background: var(--bg-shade); }
-:root[data-theme="light"] #bg { display: none !important; }
-@media (prefers-color-scheme: light) { :root:not([data-theme]) #bg { display: none !important; } }
-:root:is([data-bg="default"], [data-bg="custom"]) :is(.sidebar, .drawer, .statusline) { background: var(--sidebar-glass); }
-:root:is([data-bg="default"], [data-bg="custom"]) :is(.table-wrap, .s-group, .banner, .drawer-body, .details, .setup .card) { background: var(--card-glass); }
-:root:is([data-bg="default"], [data-bg="custom"]) :is(.menu, .modal, .toast) { background: var(--menu-glass); }
-:root:is([data-bg="default"], [data-bg="custom"]) .mods th { background: var(--menu-glass); backdrop-filter: blur(10px); }
-:root:is([data-bg="default"], [data-bg="custom"]) :is(.mods tbody tr:hover, .d-note, .d-hero, .chip, .setup .lines, .setup .group, .setup pre, .setup .notes) { background: var(--tile-glass); }
-:root:is([data-bg="default"], [data-bg="custom"]) :is(.mods tbody tr[aria-selected="true"], .btn-secondary, .badge, .fchip) { background: var(--secondary-glass); }
-:root:is([data-bg="default"], [data-bg="custom"]) :is(.input) { background: var(--input-glass); }
-:root:is([data-bg="default"], [data-bg="custom"]) :is(.mods tbody tr:hover, .mods tbody tr[aria-selected="true"]) :is(.badge, .chip) { background: var(--card-glass); }
-:root:is([data-bg="default"], [data-bg="custom"]) :is(.sidebar, .details, .table-wrap, .s-group, .banner, .menu, .modal, .toast, .setup .card) { backdrop-filter: blur(8px); }
+:root[data-bg="default"] :is(.sidebar, .drawer, .statusline) { background: var(--sidebar-glass); }
+:root[data-bg="default"] :is(.table-wrap, .s-group, .banner, .drawer-body, .details, .setup .card) { background: var(--card-glass); }
+:root[data-bg="default"] :is(.menu, .modal, .toast) { background: var(--menu-glass); }
+:root[data-bg="default"] .mods th { background: var(--menu-glass); backdrop-filter: blur(10px); }
+:root[data-bg="default"] :is(.mods tbody tr:hover, .d-note, .d-hero, .chip, .setup .lines, .setup .group, .setup pre, .setup .notes) { background: var(--tile-glass); }
+:root[data-bg="default"] :is(.mods tbody tr[aria-selected="true"], .btn-secondary, .badge, .fchip) { background: var(--secondary-glass); }
+:root[data-bg="default"] :is(.input) { background: var(--input-glass); }
+:root[data-bg="default"] :is(.mods tbody tr:hover, .mods tbody tr[aria-selected="true"]) :is(.badge, .chip) { background: var(--card-glass); }
+:root[data-bg="default"] :is(.sidebar, .details, .table-wrap, .s-group, .banner, .menu, .modal, .toast, .setup .card) { backdrop-filter: blur(8px); }
 
 /* ---------- shell */
 .app { display: grid; grid-template-columns: 240px minmax(0, 1fr); height: 100vh; }
@@ -238,7 +234,7 @@ table.mods { width: 100%; border-collapse: collapse; table-layout: fixed; }
 .d-folder { margin-top: var(--sp-4); font-size: 12px; overflow-wrap: anywhere; }
 .d-hint { font-size: 13px; overflow-wrap: anywhere; }
 .d-actions { display: flex; flex-wrap: wrap; gap: var(--sp-2); margin-top: var(--sp-4); }
-:root[data-bg="default"] .details, :root[data-bg="custom"] .details { background: var(--card-glass); }
+:root[data-bg="default"] .details { background: var(--card-glass); }
 @media (max-width: 1100px) {
   .details { position: fixed; top: 0; right: 0; bottom: 0; z-index: 40; width: min(420px, 100vw); max-height: none; border-radius: 0; box-shadow: -12px 0 32px rgba(0, 0, 0, 0.4); background: var(--card); }
 }
