@@ -5,6 +5,7 @@ const watchers = new Set();
 export const state = {
   header: null, order: [], rows: new Map(), summary: "", sort: { col: null, desc: false }, filter: "", emptyHint: "",
   selected: null, logs: [], page: "mods", loaded: false,
+  details: new Map(), versions: new Map(), goto: null, // Nexus data per folder (details panel); goto(pageId) is set by main.js
 };
 
 export function on(type, fn) {
@@ -40,6 +41,15 @@ function dispatch(p) {
     case "log":
       state.logs.push({ text: p.text, style: p.style });
       if (state.logs.length > 500) state.logs.splice(0, state.logs.length - 500);
+      break;
+    case "details":
+      state.details.delete(p.folder);
+      state.details.set(p.folder, p);
+      if (state.details.size > 200) state.details.delete(state.details.keys().next().value);
+      break;
+    case "versions":
+      state.versions.set(p.folder, p);
+      if (state.versions.size > 100) state.versions.delete(state.versions.keys().next().value);
       break;
     default:
       break;

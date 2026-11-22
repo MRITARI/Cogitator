@@ -2,6 +2,7 @@
 // push only reorders / adds / removes row elements, and a row whose data did not change is not touched.
 import { call } from "../api.js";
 import { showMenu } from "../components/menu.js";
+import { createDetails } from "../components/details.js";
 import { badge, button, setBadge, setSwitch, toggleSwitch } from "../components/widgets.js";
 import { h } from "../dom.js";
 import { icon } from "../icons.js";
@@ -15,6 +16,7 @@ const TONE = { ok: "ok", warn: "warn", bad: "bad", dim: "", "": "" };
 const CHIPS = [["all", "All", () => true], ["enabled", "Enabled", (r) => r.en === "on"], ["updates", "Updates", (r) => r.kind === "update"],
   ["unlinked", "Not linked", (r) => r.kind === "unlinked"], ["fav", "Favourites", (r) => r.fav]];
 let activeChip = "all"; // kept across list refreshes (and page switches)
+let panelOpen = false; // the details panel: opened by a click (or ArrowRight on a row), follows the selection, closed by x / Esc / ArrowLeft
 const chipTest = (id) => (CHIPS.find((c) => c[0] === id) || CHIPS[0])[2];
 
 export const title = "Mods";
@@ -82,7 +84,13 @@ export function mount(container, ctx) {
     h("thead", {}, headRow), tbody);
   const empty = h("div", { class: "empty", hidden: true });
   const wrap = h("div", { class: "table-wrap" }, table, empty);
-  container.append(badges, banner, updBanner, toolbar, chipBar, wrap);
+  const panel = createDetails({ onClose: (refocus) => closePanel(refocus) });
+  container.append(badges, banner, updBanner, toolbar, chipBar, h("div", { class: "mods-layout" }, wrap, panel.el));
+  function closePanel(refocus) {
+    panelOpen = false;
+    panel.hide();
+    if (refocus && state.selected) focusRow(state.selected);
+  }
 
   // ---- header
   const fwBadge = (el, key, f) => {
@@ -129,7 +137,7 @@ export function mount(container, ctx) {
     statusCell.append(status);
     const tr = h("tr", { tabindex: "-1", "aria-selected": "false", data: { folder: row.folder } }, h("td", {}, h("div", { class: "en" }, h("span", { class: "grip", "aria-hidden": "true" }, icon("grip")), sw)), name, installed, latest, statusCell);
     const e = { tr, sig: "", sw, name, installed, latest, status };
-    tr.addEventListener("click", () => select(row.folder, false));
+    tr.addEventListener("click", () => { panelOpen = true; select(row.folder, false); });
     tr.addEventListener("dblclick", (ev) => { if (!ev.target.closest(".switch")) call("toggle", row.folder); });
     wireDrag(tr, row.folder);
     tr.addEventListener("contextmenu", (ev) => { ev.preventDefault(); select(row.folder, true); openMenu(row.folder, ev.clientX, ev.clientY); });
@@ -245,6 +253,7 @@ export function mount(container, ctx) {
     }
     const row = state.rows.get(state.selected);
     ctx.setHint(row ? row.hint : state.emptyHint);
+    if (panelOpen && state.selected !== panel.current()) { if (state.selected && state.rows.has(state.selected)) panel.show(state.selected); else panel.hide(); }
     lastIndex = state.selected ? state.order.indexOf(state.selected) : lastIndex;
   }
 
@@ -294,6 +303,9 @@ export function mount(container, ctx) {
     const f = e.target.closest ? e.target.closest("tr") : null;
     if (!f || e.target.closest(".switch") && e.key !== " " && e.key !== "Enter") return;
     const list = shown(), i = list.indexOf(f.dataset.folder);
+    if (e.key === "Escape" && panelOpen) { e.stopPropagation(); closePanel(false); return; }
+    if (e.key === "ArrowRight" && !panelOpen) { e.preventDefault(); panelOpen = true; select(f.dataset.folder, false); return; }
+    if (e.key === "ArrowLeft" && panelOpen) { e.preventDefault(); closePanel(false); return; }
     if (e.key === "ArrowDown" || e.key === "ArrowUp") {
       e.preventDefault();
       if (e.ctrlKey) api.move(e.key === "ArrowDown" ? 1 : -1);
@@ -315,5 +327,5 @@ export function mount(container, ctx) {
   if (state.loaded) reconcile(null);
   else ctx.setHint("");
   modsApi.current = api;
-  return { unmount() { off(); modsApi.current = null; }, focus() { if (shown().length) focusRow(state.selected || shown()[0]); else filter.focus(); } };
+  return { unmount() { off(); panel.destroy(); modsApi.current = null; }, focus() { if (shown().length) focusRow(state.selected || shown()[0]); else filter.focus(); } };
 }

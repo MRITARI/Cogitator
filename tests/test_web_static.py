@@ -235,3 +235,14 @@ def test_background_is_wired():
     assert 'id="bg"' in html
     css = (UI / "app.css").read_text(encoding="utf-8")
     assert 'img/cogitator-bg.svg' in css and "blur(" in css and "--bg-shade" in css
+
+
+def test_details_panel_is_accessible_and_text_only():
+    js = (UI / "js" / "components" / "details.js").read_text(encoding="utf-8")
+    assert 'role: "complementary"' in js and 'aria-label": "Close details"' in js and "Escape" in js
+    assert "innerHTML" not in js and "text: data.description" in js and "text: data.summary" in js  # author text only via textContent
+    assert "mod_details" in js and "mod_versions" in js and "open_nexus_page" in js
+    mods = (UI / "js" / "pages" / "mods.js").read_text(encoding="utf-8")
+    assert "createDetails" in mods and "ArrowRight" in mods and "closePanel" in mods
+    css = (UI / "app.css").read_text(encoding="utf-8")
+    assert "max-width: 1100px" in css and ".details" in css and "width: 420px" in css

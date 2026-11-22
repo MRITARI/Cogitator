@@ -78,6 +78,7 @@ async function boot() {
   await applyBackground(settings.gui_background);
   const app = document.getElementById("app");
   initModals(document.getElementById("modal-root"), app);
+  state.goto = (id) => go(id, true);
   sidebar = buildSidebar((id) => go(id, true), settings.version);
   head = pageHead("", "");
   content = h("main", { class: "content", id: "content" });

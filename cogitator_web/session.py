@@ -638,7 +638,7 @@ class Session:
 
     def _details_push(self, folder: str, res: nexus_info.Result, image: str | None = None) -> None:
         self.bridge.emit({"type": "details", "folder": folder, "nexus_id": self.nexus_id_of(folder), "status": res.status, "message": res.message,
-                          "stale": res.stale, "at": res.at, "data": res.data, "image": image})
+                          "stale": res.stale, "why": res.extra.get("why", ""), "at": res.at, "data": res.data, "image": image})
 
     def request_details(self, folder: str) -> None:
         if self.nexus_id_of(folder) is None:

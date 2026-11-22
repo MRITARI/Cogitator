@@ -96,6 +96,11 @@ and `update_consent = true` in `config.toml`; `update_mode = "off"` turns the ch
   `User-Agent: Cogitator/<version>`). If you set a Nexus key: requests to `api.nexusmods.com` carrying that key, the
   application name and version, and `User-Agent: Cogitator/<version> (Windows; Python x.y)`. Downloading the Mod Loader/Framework from GitHub, if you choose it, contacts GitHub only.
   No telemetry, no analytics, no crash reports.
+- **Mod details panel:** opening a linked mod's panel asks `api.nexusmods.com` for that one mod (with your key, at most once per mod per
+  14 days, and not at all while your remembered request budget is low) and, for the picture, downloads one image from the Nexus CDN
+  (`*.nexusmods.com`, https only, at most 1.5 MB) with the `User-Agent` only, no key. The "Versions" list is a second request, made only when you
+  open it. Results are cached under the cache folder in `nexus\` (JSON and images) and can be deleted at any time. Descriptions and images
+  belong to their authors; they are shown through the Nexus API with a link back to the mod's page on Nexus Mods.
 - **Stored on your PC:** your Nexus key (Windows Credential Manager; if that is unavailable, a plain-text file in the settings
   folder), `config.toml`, `registry.json`, the log and caches in `%LOCALAPPDATA%\cogitator`, and the files Cogitator puts in
   the Darktide folder.
