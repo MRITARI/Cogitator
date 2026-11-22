@@ -61,7 +61,7 @@ export function buildStatusline() {
     el: h("div", { class: "statusline" }, left, right),
     setHint(t) { left.textContent = t || ""; },
     setSummary(t) { summary = t || ""; draw(); },
-    setNexus(t) { nexus = t || ""; draw(); },
+    setNexus(t, tip) { nexus = t || ""; right.title = tip || ""; draw(); },
   };
 }
 

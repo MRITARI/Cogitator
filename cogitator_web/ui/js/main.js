@@ -31,6 +31,8 @@ function go(id, focus = false) {
   if (focus && mounted.focus) mounted.focus();
 }
 
+const hourlyLeft = (q) => { const m = /(\d+) hourly/.exec(q || ""); return m ? m[1] : ""; };
+
 async function searchNexus() {
   const text = await promptText({ title: "Search Nexus Mods", hint: "part of a mod's name" });
   if (text) await call("search_nexus", text);
@@ -100,7 +102,7 @@ async function boot() {
   });
   on("header", (p) => {
     const nx = p.header && p.header.nexus;
-    status.setNexus(!nx ? "" : !nx.key_set ? "Nexus: no API key" : nx.premium === null ? "Nexus key set" : `Nexus ${nx.premium ? "premium" : "free"}${nx.quota ? ` - ${nx.quota}` : ""}`);
+    status.setNexus(!nx ? "" : !nx.key_set ? "Nexus: no API key" : nx.premium === null ? "Nexus key set" : `Nexus ${nx.premium ? "premium" : "free"}${hourlyLeft(nx.quota) ? ` - ${hourlyLeft(nx.quota)} left` : ""}`, nx && nx.quota || "");
   });
   on("ask", (p) => ask(p));
   on("report", (p) => info({ title: p.title, segments: p.segments, wide: true }));
