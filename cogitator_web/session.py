@@ -34,7 +34,7 @@ from cogitator.updates import (PROBABLY_OUTDATED, UPDATE, CheckBundle, Framework
                                quota_text, run_checks)
 from cogitator.viewtext import (NOTICE_BODY, NOTICE_TITLE, gui_words, installed_label, mod_suffix, report_segments, status_kind, status_label)
 from cogitator_web import background
-from cogitator_web.controller import TEXT, GuiUi
+from cogitator_web.controller import GuiUi
 from cogitator_web.viewmodel import ARROW, TAG_BAD, TAG_DIM, TAG_OK, TAG_WARN, ModListModel
 
 from .bridge import Bridge

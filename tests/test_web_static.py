@@ -196,7 +196,7 @@ def test_accessibility_hooks_are_in_the_scripts():
 
 def test_filter_chips_are_pressable_buttons():
     js = (UI / "js" / "pages" / "mods.js").read_text(encoding="utf-8")
-    assert "aria-pressed" in js and all(w in js for w in ('"Updates"', '"Not linked"', '"Favourites"', '"Enabled"'))
+    assert "aria-pressed" in js and all(w in js for w in ('"Updates"', '"Not linked"', '"Enabled"'))
 
 
 def test_toasts_are_a_polite_live_region_and_wired():
@@ -328,3 +328,21 @@ def test_filter_chip_states():
     for t in (d, light):
         for bg in ("secondary", "tile"):
             assert ratio(t["fg"], t[bg]) >= 4.5 and ratio(t["muted"], t[bg]) >= 4.5
+
+
+def _js(*parts):
+    return (UI / "js" / Path(*parts)).read_text(encoding="utf-8")
+
+
+def test_removed_controls_are_gone():
+    mods, shell, main, tools = _js("pages", "mods.js"), _js("components", "shell.js"), _js("main.js"), _js("pages", "tools.js")
+    assert "Favourites" not in mods and "Favourite" not in mods and "Bulk" not in mods
+    assert 'label: "Nexus"' not in mods and "moreBtn" not in mods and "Move up" not in mods and "Move down" not in mods
+    assert "badges" not in mods and 'class: "chip"' not in mods and 'class: "chip on"' not in mods and "#${" not in mods
+    assert '"Snapshots"' not in shell and "snapshots" not in main and not (UI / "js" / "pages" / "snapshots.js").exists()
+    assert "Prune" not in tools and "subtitle" not in main and "subtitle" not in shell
+    for name in ("Restore...", "Take snapshot", "Link mods to Nexus", "Update Mod Loader / Framework"):
+        assert name in tools
+    for col in ('"Installed"', '"Latest"'):
+        assert col not in mods
+    assert "Version" in mods and "Update all" in mods

@@ -398,7 +398,7 @@ def test_row_menu_enables_by_state(web):
 
     _, s, api, _ = web
     items = {i["id"]: i for i in api.row_menu("alpha")["items"] if i}
-    assert items["link"]["enabled"] and not items["update"]["enabled"] 
+    assert items["link"]["enabled"] and not items["update"]["enabled"]
     _set_rows(s, _row("alpha", UPDATE))
     items = {i["id"]: i for i in api.row_menu("alpha")["items"] if i}
     assert items["update"]["enabled"] and items["open_page"]["enabled"]
