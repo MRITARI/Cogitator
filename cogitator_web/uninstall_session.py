@@ -120,7 +120,7 @@ class UninstallSession:
 
         threading.Thread(target=run, name=f"uninstall-{name}", daemon=True).start()
 
-    # ------------------------------------------------------------------ controller messages (as the tkinter `_poll`)
+    # ------------------------------------------------------------------ controller messages
     def _handle(self, msg: tuple) -> None:
         kind = msg[0]
         if kind == "progress":
@@ -228,7 +228,7 @@ class UninstallSession:
 
     # ------------------------------------------------------------------ choose
     def _option_state(self, name: str) -> tuple[bool, bool]:
-        """(checked, enabled) for one fixed option; the same rules as the tkinter page."""
+        """(checked, enabled) for one fixed option."""
         m, d = self.model, self.model.det
         if name == "app":
             return bool(m.remove_app), m.svc.app_remover is not None
@@ -349,7 +349,7 @@ class UninstallSession:
         self.on_quit()
 
     def escape(self) -> None:
-        """Esc closes only on Choose and Review (as tkinter)."""
+        """Esc closes only on Choose and Review."""
         with self._lock:
             if self.maintenance or self.model.page not in (UPage.CHOOSE, UPage.REVIEW) or self.ctl.running:
                 return

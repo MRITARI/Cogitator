@@ -46,7 +46,7 @@ class NotPremium(ModImportError):
     pass
 
 
-# `choose(question, options) -> index | None` -- interactive disambiguation supplied by CLI/TUI.
+# `choose(question, options) -> index | None` -- interactive disambiguation supplied by the CLI or the window.
 Choose = Callable[[str, list[str]], "int | None"]
 
 

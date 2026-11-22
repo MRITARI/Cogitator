@@ -133,7 +133,7 @@ class WizardSession:
                 return None
         return holder["value"]
 
-    # ------------------------------------------------------------------ controller messages (same mapping as the tkinter `_handle`)
+    # ------------------------------------------------------------------ controller messages
     def _handle(self, msg: tuple) -> None:
         kind = msg[0]
         if kind == "express":
@@ -240,7 +240,7 @@ class WizardSession:
             self.on_quit()  # nothing has been changed before the Progress page
 
     def escape(self) -> None:
-        """Esc: same rules as tkinter. Only before Progress; from Game onward it asks first."""
+        """Esc: same rules as the wizard. Only before Progress; from Game onward it asks first."""
         with self._lock:
             if not self.in_wizard or self.model.page in (Page.PROGRESS, Page.FINISH):
                 return
@@ -364,7 +364,7 @@ class WizardSession:
     def _install(self) -> None:
         if self.ctl.running or not self.model.confirm_install():
             return
-        plan = self.model.build_plan()  # same arguments as the tkinter wizard: none
+        plan = self.model.build_plan()  # none
         self.in_wizard = True
         self.steps = [{"name": n, "label": STEP_LABELS.get(n, n), "state": "pending", "detail": ""} for n in planned_steps(plan)]
         self.fraction = 0.0
@@ -378,7 +378,7 @@ class WizardSession:
         return self.result.diagnostics() if self.result else ""  # redacted
 
     def finish(self) -> None:
-        """As the tkinter `on_finish`: show the check-up results, start Cogitator, then close the window."""
+        """Show the check-up results, start Cogitator, then close the window."""
         with self._lock:
             res = self.result
             show_doctor = bool(res and res.ok and self.model.run_doctor and res.doctor)

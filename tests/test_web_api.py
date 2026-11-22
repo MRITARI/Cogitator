@@ -373,19 +373,11 @@ def test_window_geometry_is_sanitised(tmp_path):
     assert winstate.load(screens)["width"] == 1000
 
 
-def test_missing_webview2_falls_back_to_the_tk_gui(monkeypatch):
+def test_missing_webview2_says_so_and_returns_nonzero(monkeypatch):
     calls = []
-    monkeypatch.setattr(web_app, "fallback_to_gui", lambda msg, argv: calls.append(msg) or 0)
-    assert web_app.run_web(["--x"], webview2_check=lambda: False) == 0
-    assert "WebView2" in calls[0]
-
-
-def test_missing_pywebview_falls_back_to_the_tk_gui(monkeypatch):
-    calls = []
-    monkeypatch.setattr(web_app, "fallback_to_gui", lambda msg, argv: calls.append(msg) or 0)
-    monkeypatch.setitem(__import__("sys").modules, "webview", None)  # import webview -> ImportError
-    assert web_app.run_web([], webview2_check=lambda: True) == 0
-    assert "pywebview" in calls[0]
+    monkeypatch.setattr(web_app, "notify", calls.append)
+    assert web_app.run_web(["--x"], webview2_check=lambda: False) == 4
+    assert "WebView2" in calls[0] and "cogitator --help" in calls[0]
 
 
 def test_installed_pywebview_has_the_parameters_app_uses():

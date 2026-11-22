@@ -1,7 +1,6 @@
-"""Display text shared by every interface (terminal and graphical): constants and plain (text, style) pieces.
+"""Display text for the window: constants and plain (text, style) pieces.
 
-No rich, textual or tkinter in here. A "style" is a rich-style string such as "bold green"; the terminal UI hands it to rich
-and the graphical UI maps it to a text tag. Keeping the wording in one place means both show the same thing."""
+No window toolkit in here. A "style" is a style name such as "bold green" that the window maps to a colour."""
 from __future__ import annotations
 
 import time

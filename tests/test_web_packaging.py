@@ -1,4 +1,4 @@
-"""W7: self-check of the windowed programs, entry routing (--classic)."""
+"""W7: self-check of the windowed programs, entry routing."""
 from pathlib import Path
 
 import pytest
@@ -59,12 +59,10 @@ def test_web_main_self_check_routes(monkeypatch):
     assert app.main(["--self-check", "--expect-version", "1.2"]) == 0 and got == ["1.2"]
 
 
-def test_entry_classic_goes_to_tkinter_without_the_flag(monkeypatch):
+def test_entry_goes_to_main(monkeypatch):
     seen = []
-    monkeypatch.setattr(setup_app, "_classic", lambda argv: seen.append(("tk", argv)) or 0)
-    monkeypatch.setattr(setup_app, "main", lambda argv: seen.append(("web", argv)) or 0)
-    assert setup_app.entry(["--classic", "--wizard"]) == 0 and seen[-1] == ("tk", ["--wizard"])
-    assert setup_app.entry(["--wizard"]) == 0 and seen[-1] == ("web", ["--wizard"])
+    monkeypatch.setattr(setup_app, "main", lambda argv: seen.append(argv) or 0)
+    assert setup_app.entry(["--wizard"]) == 0 and seen == [["--wizard"]]
 
 
 # ---------------------------------------------------------------- launch targets (setup "Start Cogitator")

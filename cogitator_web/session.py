@@ -624,7 +624,7 @@ class Session:
             self.say(f"Opened {open_files_page(r.nexus_id, self.open_url)}", "cyan")
 
     def row_menu(self, folder: str) -> list[dict | None]:
-        """(label, id, enabled) entries of the right-click menu: the ones the tkinter window has."""
+        """(label, id, enabled) entries of the right-click menu: the ones the window offers."""
         with self._mlock:
             m, row = self.model.mod(folder), self.model.urows.get(folder)
             marked = folder in self.model.marked

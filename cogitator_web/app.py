@@ -1,4 +1,4 @@
-"""Window creation, the WebView2 check with its fallback to the tkinter GUI, and the entry point.
+"""Window creation, the WebView2 check, and the entry point.
 
 `webview` is imported here, inside functions only, so importing this module (and the package) needs nothing installed."""
 from __future__ import annotations
@@ -49,32 +49,23 @@ def webview2_available() -> bool:
     return False
 
 
+WEBVIEW2_MISSING = ("The Microsoft Edge WebView2 runtime is required for the Cogitator window. Windows 11 includes it; if it was "
+                    "removed, reinstall it from Microsoft (search for 'WebView2 Runtime').\n"
+                    "The command line still works: cogitator --help")
+
+
 def notify(message: str) -> None:
-    """One clear message: a message box when tkinter is there, and always stderr."""
+    """One clear message: a message box, and always stderr."""
     try:
         print(message, file=sys.stderr)
     except Exception:
         pass
     try:
-        import tkinter as tk
-        from tkinter import messagebox
+        import ctypes
 
-        r = tk.Tk()
-        r.withdraw()
-        messagebox.showwarning(TITLE, message, parent=r)
-        r.destroy()
+        ctypes.windll.user32.MessageBoxW(None, message, TITLE, 0x30)
     except Exception:
         pass
-
-
-def fallback_to_gui(message: str, argv: list[str]) -> int:
-    notify(message + "\n\nOpening the classic Cogitator window instead.")
-    try:
-        from cogitator_gui.app import main as gui_main
-    except Exception as e:  # tkinter missing
-        notify(f"The classic window is not available either ({e}). Use the terminal version:  cogitator --tui")
-        return 4
-    return gui_main(argv)
 
 
 def _screens(webview) -> list[tuple[int, int, int, int]]:
@@ -99,13 +90,9 @@ def run_web(argv: list[str], game_override: str | None = None, check_updates: bo
         notify(str(e))
         return 2
     if not webview2_check():
-        return fallback_to_gui("The Microsoft Edge WebView2 runtime is not installed, so the web-style window cannot open.\n"
-                               "Install it from Microsoft (search for 'WebView2 Runtime') to use it.", argv)
-    try:
-        import webview
-    except ImportError:
-        return fallback_to_gui("The 'pywebview' package is not installed, so the web-style window cannot open.\n"
-                               "Install it with:  pip install \"cogitator[web]\"", argv)
+        notify(WEBVIEW2_MISSING)
+        return 4
+    import webview
 
     bridge = Bridge()
     session = Session(bridge, game_override=game_override, check_updates=check_updates)

@@ -92,34 +92,33 @@ def run(expect_version: str | None = None, *, ui_dir: Path | None = None, webvie
             import webview.platforms.edgechromium  # noqa: F401  (loads pythonnet / clr_loader; opens nothing)
         return f"pywebview {getattr(webview, '__version__', '?')}"
 
-    def sv():
-        import sv_ttk  # noqa: F401
-
     def runtime():
-        # Not a failure: without WebView2 (or pywebview) the tkinter windows open instead.
+        # Not a failure of the build, but the window cannot open without it.
         ok = (webview2_check or app.webview2_available)()
-        return "WebView2 runtime found" if ok else "WebView2 runtime NOT found (the classic tkinter windows will be used)"
+        return "WebView2 runtime found" if ok else "WebView2 runtime NOT found (the Cogitator window needs it; Windows 11 includes it)"
 
-    for label, fn in (("version", version), ("web ui files", ui), ("pywebview", webview_mod), ("sv_ttk", sv), ("webview2", runtime)):
+    for label, fn in (("version", version), ("web ui files", ui), ("pywebview", webview_mod), ("webview2", runtime)):
         step(label, fn)
     emit(f"python {sys.version.split()[0]}, frozen={getattr(sys, 'frozen', False)}")
     return 1 if problems else 0
 
 
 def run_setup(expect_version: str | None = None, **kw) -> int:
-    """Setup program: the tkinter setup self-check (its output is captured into the log) plus the web checks."""
-    from cogitator_setup.selfcheck import run as classic
+    """Setup program: the engine self-check and the platform line (output is captured into the log) plus the web checks."""
+    import contextlib
+
+    from cogitator import selfcheck
+    from cogitator_setup import platform_gate
 
     buf = io.StringIO()
-    real, sys.stdout = sys.stdout, buf
-    try:
-        rc = classic()
-    finally:
-        sys.stdout = real
-    for line in buf.getvalue().splitlines():
+    with contextlib.redirect_stdout(buf):
+        rc = selfcheck.run()
+    b = platform_gate.windows_build()
+    lines = buf.getvalue().splitlines() + [f"ok    platform: Windows build {b} ({'supported' if platform_gate.is_supported(b) else 'NOT Windows 11'})"]
+    for line in lines:
         log.info("self-check %s", line)
         try:
-            if real is not None:
+            if sys.stdout is not None:
                 print(line)
         except Exception:
             pass

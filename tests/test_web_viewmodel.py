@@ -114,7 +114,7 @@ def test_hint_and_summary():
 def test_drag_steps_count_load_order_positions():
     listed = ["a", "b", "c", "d"]
     assert move_steps(listed, "a", "c") == 2 and move_steps(listed, "d", "b") == -2 and move_steps(listed, "b", "b") == 0
-    assert move_steps(listed, "a", "unlisted") == 3  # dropping on an unlisted row moves to the end, like the TUI
+    assert move_steps(listed, "a", "unlisted") == 3  # dropping on an unlisted row moves to the end
     assert move_steps(listed, "unlisted", "a") is None
     assert model().listed() == ["alpha", "Beta", "ghost", "nomod"]
 
