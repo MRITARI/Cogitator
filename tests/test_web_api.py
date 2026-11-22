@@ -90,7 +90,7 @@ def test_other_bad_arguments(web):
     _, _, api, _ = web
     assert api.move("alpha", 2)["ok"] is False and api.move("alpha", True)["ok"] is False and api.move("alpha", "1")["ok"] is False
     assert api.row_action("alpha", "format_c")["ok"] is False and api.row_action("alpha", 7)["ok"] is False
-    assert api.set_sort("; drop")["ok"] is False and api.set_filter(123)["ok"] is False and api.set_filter("x" * 500)["ok"] is False
+    assert api.set_filter(123)["ok"] is False and api.set_filter("x" * 500)["ok"] is False
     assert api.set_setting("game_dir", "C:\\")["ok"] is False  # not on the page's list
     assert api.set_setting("check_updates_on_start", "yes")["ok"] is False
     assert api.set_setting("gui_theme", "neon")["ok"] is False
@@ -145,8 +145,6 @@ def test_move_sort_filter_and_favourites(web):
     st = wait(lambda: [p for p in win.of("state") if p["filter"] == "gam"])[-1]
     assert [r["folder"] for r in st["rows"]] == ["gamma"]
     api.set_filter("")
-    api.set_sort("mod")
-    wait(lambda: [p for p in win.of("state") if p["sort"]["col"] == "mod"])
     api.fav("beta")
     assert wait(lambda: [p for p in win.of("row") if p["row"]["fav"]])[-1]["row"]["folder"] == "beta"
 
@@ -165,7 +163,6 @@ def test_row_menu_has_the_tk_entries(web):
 def test_every_pushed_payload_is_json_serialisable(web):
     win, s, api, _ = web
     api.toggle("beta")
-    api.set_sort("status")
     s.say("hello", "green")
     wait(lambda: win.of("log"))
     for script in win.scripts:

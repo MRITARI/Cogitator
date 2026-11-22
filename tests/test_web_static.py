@@ -190,7 +190,7 @@ def test_accessibility_hooks_are_in_the_scripts():
     js = {rel(p): p.read_text(encoding="utf-8") for p in JS}
     assert 'role: "switch"' in js["js/components/widgets.js"] and "aria-checked" in js["js/components/widgets.js"]
     assert "aria-current" in js["js/components/shell.js"]
-    assert 'aria-label": "Mods"' in js["js/pages/mods.js"] and 'scope: "col"' in js["js/pages/mods.js"] and "aria-sort" in js["js/pages/mods.js"]
+    assert 'aria-label": "Mods"' in js["js/pages/mods.js"] and 'scope: "col"' in js["js/pages/mods.js"]
     assert 'role: "dialog"' in js["js/components/modal.js"] and "Escape" in js["js/components/modal.js"]
 
 

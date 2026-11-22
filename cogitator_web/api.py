@@ -20,7 +20,6 @@ from .session import BULK_IDS, ROW_ACTIONS, Session, valid_folder_name
 
 log = logging.getLogger("cogitator.web")
 
-SORTABLE = ("mod", "status", "installed", "latest", "en")
 KEY_MAX = 200
 
 
@@ -84,16 +83,6 @@ class Api:
     @_call
     def set_filter(self, text):
         self._s.set_filter(self._text(text, 200, "The filter"))
-
-    @_call
-    def set_sort(self, col):
-        if col is not None and col not in SORTABLE:
-            raise _Reject("Unknown column.")
-        self._s.set_sort(col)
-
-    @_call
-    def cycle_sort(self):
-        self._s.cycle_sort()
 
     @_call
     def row_menu(self, folder):

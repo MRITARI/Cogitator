@@ -10,7 +10,10 @@ import { state, watch } from "../store.js";
 
 export const modsApi = { current: null };
 
-const COLUMNS = [["en", "On/Off"], ["mod", "Mod"], ["installed", "Installed"], ["latest", "Latest"], ["status", "Status"]];
+const COLUMNS = ["On/Off", "Mod", "Version", "Status"]; // the list is always in load order, so the headers are plain labels
+// status column: icon only (the text is the tooltip and a visually hidden label); other states keep a text badge
+const STATUS_MARKS = { ok: ["ok", "check"], update: ["warn", "up"], unlinked: ["dim", "dash"], error: ["bad", "error"] };
+const versionText = (r) => (r.kind === "unlinked" ? "-" : r.kind === "update" && r.latest && r.latest !== "-" ? `${r.installed} → ${r.latest}` : r.installed || "-");
 const TONE = { ok: "ok", warn: "warn", bad: "bad", dim: "", "": "" };
 
 const CHIPS = [["all", "All", () => true], ["enabled", "Enabled", (r) => r.en === "on"], ["updates", "Updates", (r) => r.kind === "update"],
@@ -59,18 +62,10 @@ export function mount(container, ctx) {
   filter.addEventListener("keydown", (e) => { if (e.key === "Escape" && filter.value) { filter.value = ""; call("set_filter", ""); e.stopPropagation(); } else if (e.key === "ArrowDown") { e.preventDefault(); focusRow(state.selected || shown()[0]); } });
 
   // ---- table
-  const heads = new Map();
-  const headRow = h("tr", {}, COLUMNS.map(([id, label]) => {
-    const arrow = h("span", { class: "sortmark", "aria-hidden": "true" });
-    const b = h("button", { type: "button", title: `Sort by ${label}` }, h("span", { text: label }), arrow);
-    b.addEventListener("click", () => call("set_sort", id));
-    const th = h("th", { scope: "col", "aria-sort": "none" }, b);
-    heads.set(id, { th, arrow });
-    return th;
-  }));
+  const headRow = h("tr", {}, COLUMNS.map((label) => h("th", { scope: "col", text: label })));
   const tbody = h("tbody", {});
   const table = h("table", { class: "mods", "aria-label": "Mods", "aria-multiselectable": "true" },
-    h("colgroup", {}, h("col", { class: "c-en" }), h("col", { class: "c-mod" }), h("col", { class: "c-installed" }), h("col", { class: "c-latest" }), h("col", { class: "c-status" })),
+    h("colgroup", {}, h("col", { class: "c-en" }), h("col", { class: "c-mod" }), h("col", { class: "c-version" }), h("col", { class: "c-status" })),
     h("thead", {}, headRow), tbody);
   const empty = h("div", { class: "empty", hidden: true });
   const selCount = h("span", { class: "n", role: "status" });
@@ -129,11 +124,11 @@ export function mount(container, ctx) {
   function createRow(row) {
     const sw = toggleSwitch({ label: row.folder, checked: false, tabindex: "-1", onChange: () => { if (!selSet.has(row.folder)) select(row.folder, false); call("toggle", row.folder); } });
     const name = h("td", { class: "name" });
-    const installed = h("td", { class: "ver" }), latest = h("td", { class: "ver" }), statusCell = h("td");
+    const version = h("td", { class: "ver" }), statusCell = h("td");
     const status = badge({ value: "" });
     statusCell.append(status);
-    const tr = h("tr", { tabindex: "-1", "aria-selected": "false", data: { folder: row.folder } }, h("td", {}, h("div", { class: "en" }, h("span", { class: "grip", "aria-hidden": "true", title: "Drag to reorder" }, icon("grip")), sw)), name, installed, latest, statusCell);
-    const e = { tr, sig: "", sw, name, installed, latest, status, grip: tr.querySelector(".grip") };
+    const tr = h("tr", { tabindex: "-1", "aria-selected": "false", data: { folder: row.folder } }, h("td", {}, h("div", { class: "en" }, h("span", { class: "grip", "aria-hidden": "true", title: "Drag to reorder" }, icon("grip")), sw)), name, version, statusCell);
+    const e = { tr, sig: "", sw, name, version, status, grip: tr.querySelector(".grip") };
     tr.addEventListener("click", (ev) => {
       if (skipClick) return;
       if (ev.ctrlKey || ev.metaKey) toggleSel(row.folder);
@@ -197,12 +192,13 @@ export function mount(container, ctx) {
     e.grip.draggable = can; // only the grip starts a drag; the rest of the row is for selecting
     e.tr.classList.toggle("can-drag", can);
     e.name.replaceChildren(h("div", { class: "in" }, h("span", { class: "t", text: row.folder, title: row.folder }), ...chips(row), row.suffix ? h("span", { class: "muted", text: row.suffix }) : null));
-    e.installed.textContent = row.installed;
-    e.latest.textContent = row.latest === "-" ? "—" : row.latest;
-    if (row.kind === "ok") {
-      e.status.className = "ok-mark";
+    e.version.textContent = versionText(row);
+    e.version.classList.toggle("dash", row.kind === "unlinked");
+    const mark = STATUS_MARKS[row.kind];
+    if (mark) {
+      e.status.className = `st-mark ${mark[0]}`;
       e.status.title = row.status;
-      e.status.replaceChildren(icon("check"), h("span", { class: "sr-only", text: row.status }));
+      e.status.replaceChildren(icon(mark[1]), h("span", { class: "sr-only", text: row.status }));
     } else {
       e.status.title = "";
       setBadge(e.status, { tone: TONE[row.tone] ?? "", value: row.status });
@@ -236,11 +232,6 @@ export function mount(container, ctx) {
     empty.textContent = state.order.length ? "No mods match this filter. Choose All to see every mod."
       : state.filter ? `No mods match "${state.filter}". Press Esc in the filter box to clear it.` : state.emptyHint;
     wrap.classList.toggle("is-empty", !empty.hidden);
-    for (const [id, { th, arrow }] of heads) {
-      const on = state.sort.col === id;
-      th.setAttribute("aria-sort", on ? (state.sort.desc ? "descending" : "ascending") : "none");
-      arrow.replaceChildren(on ? icon(state.sort.desc ? "down" : "up") : "");
-    }
     if (document.activeElement !== filter) filter.value = state.filter;
     ctx.setSummary(state.summary);
   }
@@ -404,7 +395,6 @@ export function mount(container, ctx) {
     selectAll,
     fav() { if (state.selected) call("fav", state.selected); },
     note() { if (state.selected) call("edit_note", state.selected); },
-    cycleSort() { call("cycle_sort"); },
     focusFilter() { filter.focus(); filter.select(); },
     inTable() { return tbody.contains(document.activeElement); },
     menuForSelected() {

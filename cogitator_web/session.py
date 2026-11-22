@@ -537,16 +537,6 @@ class Session:
             self.model.filter_text = text[:200]
         self.emit_state()
 
-    def set_sort(self, col: str | None) -> None:
-        with self._mlock:
-            self.model.set_sort(col)
-        self.emit_state()
-
-    def cycle_sort(self) -> None:
-        with self._mlock:
-            self.model.cycle_sort()
-        self.emit_state()
-
     # ================================================================== per-mod (short, on the API thread)
     def toggle(self, folder: str) -> None:
         if not self.ready():
