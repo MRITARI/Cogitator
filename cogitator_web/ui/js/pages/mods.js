@@ -35,7 +35,7 @@ export function mount(container, ctx) {
   const importBtn = button({ label: "Import zip", icon: "add", kind: "secondary", title: "Import zip(s) (Ctrl+I)", onClick: () => call("import_zips") });
   const launchBtn = button({ label: "Launch game", icon: "play", kind: "primary", title: "Launch Darktide (G)", onClick: () => call("launch") });
   const globalBtn = button({ label: "Mods on/off", icon: "power", kind: "secondary", title: "Turn all mods on or off (T)", onClick: () => call("toggle_global") });
-  const moreBtn = button({ label: "Nexus", kind: "secondary", title: "Update all, link all, update Mod Loader / Framework", onClick: () => {
+  const moreBtn = button({ label: "Nexus", trailingIcon: "chevronDown", kind: "secondary", title: "Update all, link all, update Mod Loader / Framework", onClick: () => {
     const r = moreBtn.getBoundingClientRect();
     showMenu(r.left, r.bottom + 4, [{ label: "Update all (Ctrl+U)", id: "update_all", enabled: true }, { label: "Link all mods to Nexus (M)", id: "link_all", enabled: true },
       { label: "Update Mod Loader / Framework (F)", id: "framework_update", enabled: true }], (id) => call(id));
@@ -46,7 +46,7 @@ export function mount(container, ctx) {
     const b = bulkBtn.getBoundingClientRect();
     showMenu(b.left, b.bottom + 4, r.items, (id) => call("bulk", id));
   }
-  const bulkBtn = button({ label: "Bulk", kind: "secondary", title: "Actions on the marked mods (B). Mark mods with X.", onClick: bulkMenu });
+  const bulkBtn = button({ label: "Bulk", trailingIcon: "chevronDown", kind: "secondary", title: "Actions on the marked mods (B). Mark mods with X.", onClick: bulkMenu });
   const upBtn = button({ label: "Move up", icon: "up", iconOnly: true, kind: "secondary", title: "Move up (Ctrl+Up)", onClick: () => api.move(-1), disabled: true });
   const downBtn = button({ label: "Move down", icon: "down", iconOnly: true, kind: "secondary", title: "Move down (Ctrl+Down)", onClick: () => api.move(1), disabled: true });
   const filter = h("input", { class: "input", type: "search", placeholder: "Filter mods", "aria-label": "Filter mods", autocomplete: "off", spellcheck: "false" });
@@ -230,6 +230,8 @@ export function mount(container, ctx) {
       c.b.setAttribute("aria-pressed", String(id === activeChip));
       c.b.setAttribute("aria-label", n === null ? c.label : `${c.label}, ${n}`);
     }
+    const marked = [...state.rows.values()].filter((r) => r.marked).length;
+    bulkBtn.firstChild.textContent = marked ? `Bulk (${marked})` : "Bulk";
   }
 
   // ---- selection

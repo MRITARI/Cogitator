@@ -1,9 +1,9 @@
 import { h } from "../dom.js";
 import { icon } from "../icons.js";
 
-export function button({ label, icon: ic, kind = "outline", title, onClick, disabled, id, iconOnly }) {
+export function button({ label, icon: ic, kind = "outline", title, onClick, disabled, id, iconOnly, trailingIcon }) {
   const b = h("button", { type: "button", class: `btn btn-${kind}${iconOnly ? " btn-icon" : ""}`, title, id, "aria-label": iconOnly ? label : null },
-    ic ? icon(ic) : null, iconOnly ? null : label);
+    ic ? icon(ic) : null, iconOnly ? null : label, trailingIcon ? icon(trailingIcon) : null);
   if (disabled) b.disabled = true;
   if (onClick) b.addEventListener("click", onClick);
   return b;
