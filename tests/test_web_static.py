@@ -149,7 +149,7 @@ def test_the_spec_colours_are_there():
                  "primary": "#e5e5e5", "fg": "#fafafa", "muted": "#a3a3a3", "destructive": "#ef4444", "ok": "#4ade80", "attention": "#fbbf24",
                  "neutral": "#71717a", "accent": "#b8892e"}.items():
         assert d[k].lower() == v, k
-    assert (d["radius-pill"], d["radius-card"], d["radius-tile"]) == ("999px", "24px", "16px")
+    assert (d["radius-pill"], d["radius-card"], d["radius-tile"], d["radius-menu"]) == ("0", "0", "0", "0")  # square, industrial
 
 
 @pytest.mark.parametrize("which", ["dark", "light"])
@@ -223,8 +223,30 @@ def test_text_contrast_on_translucent_surfaces_over_the_worst_custom_image():
         surface = _over(_rgba(d[glass]), rgb(worst))
         for fg in TEXT_COLOURS:
             assert ratio(d[fg], surface) >= 4.5, f"{fg} on {glass} over the worst background = {ratio(d[fg], surface):.2f}"
+    card = _over(_rgba(d["card-glass"]), rgb(worst))
+    for glass in ("tile-glass", "secondary-glass", "input-glass"):  # row hover / selected row / inputs sit on a glass card
+        surface = _over(_rgba(d[glass]), rgb(card))
+        for fg in TEXT_COLOURS:
+            assert ratio(d[fg], surface) >= 4.5, f"{fg} on {glass} over a glass card over the worst background = {ratio(d[fg], surface):.2f}"
     for k in ("sidebar-glass", "card-glass", "menu-glass"):  # the light theme never shows a layer: its glass is the opaque surface
         assert light[k] == light[k.replace("-glass", "").replace("menu", "card")]
+    for k in ("tile", "secondary", "input"):
+        assert light[f"{k}-glass"] == light[k]
+
+
+def test_no_rounded_corners_anywhere():
+    for name in ("app.css", "setup.css", "uninstall.css"):
+        css = (UI / name).read_text(encoding="utf-8")
+        for v in re.findall(r"border-radius:\s*([^;}]+)", css):
+            assert v.strip() in ("0", "var(--radius-pill)", "var(--radius-card)", "var(--radius-tile)", "var(--radius-menu)"), f"{name}: {v}"
+    assert "border-radius" not in "".join(p.read_text(encoding="utf-8") for p in JS) and "borderRadius" not in "".join(p.read_text(encoding="utf-8") for p in JS)
+
+
+def test_glass_surfaces_are_blurred_and_have_hairlines():
+    css = (UI / "app.css").read_text(encoding="utf-8")
+    assert "backdrop-filter: blur(8px)" in css and "tr { backdrop" not in css and "tbody tr" not in re.findall(r"[^{}]*backdrop-filter[^{}]*", css)[0]
+    for sel in (".table-wrap {", ".s-group {", ".details {", ".banner {"):
+        assert re.search(re.escape(sel) + r"[^}]*border: 1px solid", css), sel
 
 
 def test_background_is_wired():

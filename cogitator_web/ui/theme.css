@@ -28,15 +28,18 @@
   --ring: #b8892e;
   --scrim: rgba(0, 0, 0, 0.6);
   /* translucent surfaces, used only while a background image is shown (dark theme); the light blocks keep them opaque */
-  --sidebar-glass: rgba(10, 10, 10, 0.72);
-  --card-glass: rgba(23, 23, 23, 0.80);
-  --menu-glass: rgba(23, 23, 23, 0.94);
+  --sidebar-glass: rgba(10, 10, 10, 0.48);
+  --card-glass: rgba(23, 23, 23, 0.54);
+  --menu-glass: rgba(23, 23, 23, 0.66);
+  --tile-glass: rgba(30, 30, 30, 0.50);
+  --secondary-glass: rgba(38, 38, 38, 0.56);
+  --input-glass: rgba(40, 40, 40, 0.56);
   --bg-shade: rgba(0, 0, 0, 0.82);  /* over a custom image: at least 80% black so muted text keeps 4.5:1 on the brightest photo */
 
-  --radius-pill: 999px;
-  --radius-card: 24px;
-  --radius-tile: 16px;
-  --radius-menu: 16px;
+  --radius-pill: 0;
+  --radius-card: 0;
+  --radius-tile: 0;
+  --radius-menu: 0;
   --sp-1: 4px;
   --sp-2: 8px;
   --sp-3: 12px;
@@ -83,6 +86,9 @@
     --sidebar-glass: #ffffff;
     --card-glass: #f5f5f5;
     --menu-glass: #f5f5f5;
+    --tile-glass: #ececec;
+    --secondary-glass: #e5e5e5;
+    --input-glass: #ededed;
     --bg-shade: rgba(0, 0, 0, 0.82);
     color-scheme: light;
   }
@@ -117,6 +123,9 @@
   --sidebar-glass: #ffffff;
   --card-glass: #f5f5f5;
   --menu-glass: #f5f5f5;
+  --tile-glass: #ececec;
+  --secondary-glass: #e5e5e5;
+  --input-glass: #ededed;
   --bg-shade: rgba(0, 0, 0, 0.82);
   color-scheme: light;
 }
