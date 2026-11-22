@@ -17,6 +17,21 @@ button, input, select, textarea { font: inherit; color: inherit; }
 .icon { font-family: var(--icons); font-size: 16px; line-height: 1; width: 16px; text-align: center; font-style: normal; flex: none; user-select: none; }
 html.icons-text .icon { font-family: var(--font); font-weight: 600; }
 
+/* ---------- background layer (dark theme only; set by js/background.js through html[data-bg]) */
+#bg { position: fixed; inset: 0; z-index: -1; display: none; background-size: cover; background-position: center; background-repeat: no-repeat; overflow: hidden; }
+:root[data-bg="default"] #bg { display: block; background-image: url("img/cogitator-bg.svg"); }
+:root[data-bg="custom"] #bg { display: block; inset: -24px; filter: blur(14px); }
+:root[data-bg="custom"] #bg::after { content: ""; position: absolute; inset: 0; background: var(--bg-shade); }
+:root[data-theme="light"] #bg { display: none !important; }
+@media (prefers-color-scheme: light) { :root:not([data-theme]) #bg { display: none !important; } }
+:root[data-bg="default"] .sidebar, :root[data-bg="custom"] .sidebar, :root[data-bg="default"] .drawer, :root[data-bg="custom"] .drawer,
+:root[data-bg="default"] .statusline, :root[data-bg="custom"] .statusline { background: var(--sidebar-glass); }
+:root[data-bg="default"] .table-wrap, :root[data-bg="custom"] .table-wrap, :root[data-bg="default"] .s-group, :root[data-bg="custom"] .s-group,
+:root[data-bg="default"] .banner, :root[data-bg="custom"] .banner, :root[data-bg="default"] .mods th, :root[data-bg="custom"] .mods th,
+:root[data-bg="default"] .drawer-body, :root[data-bg="custom"] .drawer-body { background: var(--card-glass); }
+:root[data-bg="default"] .menu, :root[data-bg="custom"] .menu, :root[data-bg="default"] .modal, :root[data-bg="custom"] .modal,
+:root[data-bg="default"] .toast, :root[data-bg="custom"] .toast { background: var(--menu-glass); }
+
 /* ---------- shell */
 .app { display: grid; grid-template-columns: 240px minmax(0, 1fr); height: 100vh; }
 .sidebar { background: var(--sidebar); border-right: 1px solid var(--divider); display: flex; flex-direction: column; padding: var(--sp-5) var(--sp-3); gap: var(--sp-1); user-select: none; }

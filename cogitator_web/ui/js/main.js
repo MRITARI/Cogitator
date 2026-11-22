@@ -3,6 +3,7 @@ import { call } from "./api.js";
 import { menuOpen } from "./components/menu.js";
 import { ask, info, initModals, modalOpen, promptText } from "./components/modal.js";
 import { buildDrawer, buildSidebar, buildStatusline, pageHead } from "./components/shell.js";
+import { applyBackground } from "./background.js";
 import { initToasts, toast } from "./components/toast.js";
 import { h } from "./dom.js";
 import { detectIcons } from "./icons.js";
@@ -74,6 +75,7 @@ async function boot() {
   const r = await call("boot");
   const settings = r.ok ? r.settings : { gui_theme: "system", version: "" };
   applyTheme(settings.gui_theme);
+  await applyBackground(settings.gui_background);
   const app = document.getElementById("app");
   initModals(document.getElementById("modal-root"), app);
   sidebar = buildSidebar((id) => go(id, true), settings.version);

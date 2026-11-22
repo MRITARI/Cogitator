@@ -27,6 +27,11 @@
   --accent-fg: #0a0a0a;
   --ring: #b8892e;
   --scrim: rgba(0, 0, 0, 0.6);
+  /* translucent surfaces, used only while a background image is shown (dark theme); the light blocks keep them opaque */
+  --sidebar-glass: rgba(10, 10, 10, 0.72);
+  --card-glass: rgba(23, 23, 23, 0.80);
+  --menu-glass: rgba(23, 23, 23, 0.94);
+  --bg-shade: rgba(0, 0, 0, 0.82);  /* over a custom image: at least 80% black so muted text keeps 4.5:1 on the brightest photo */
 
   --radius-pill: 999px;
   --radius-card: 24px;
@@ -75,6 +80,10 @@
     --accent-fg: #ffffff;
     --ring: #8a6420;
     --scrim: rgba(0, 0, 0, 0.4);
+    --sidebar-glass: #ffffff;
+    --card-glass: #f5f5f5;
+    --menu-glass: #f5f5f5;
+    --bg-shade: rgba(0, 0, 0, 0.82);
     color-scheme: light;
   }
 }
@@ -105,6 +114,10 @@
   --accent-fg: #ffffff;
   --ring: #8a6420;
   --scrim: rgba(0, 0, 0, 0.4);
+  --sidebar-glass: #ffffff;
+  --card-glass: #f5f5f5;
+  --menu-glass: #f5f5f5;
+  --bg-shade: rgba(0, 0, 0, 0.82);
   color-scheme: light;
 }
 

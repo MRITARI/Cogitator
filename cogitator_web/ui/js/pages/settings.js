@@ -1,6 +1,7 @@
 // The Settings page: rows with the label and muted help on the left, the control on the right. Changes are saved through
 // api.set_setting (Python validates and writes the same settings file the CLI and TUI use).
 import { call } from "../api.js";
+import { applyBackground } from "../background.js";
 import { button, toggleSwitch, setSwitch } from "../components/widgets.js";
 import { h } from "../dom.js";
 import { applyTheme, watch } from "../store.js";
@@ -79,11 +80,30 @@ export function mount(container, ctx) {
       h("div", { class: "s-row" }, h("div", { class: "lbl" }, h("div", { class: "t", text: "Account" }), account))));
 
     // ---- Appearance
+    const bgRow = (st) => {
+      const sel = select("Background", [["default", "Default"], ["plain", "Plain"], ["custom", "Custom image"]], st.gui_background, async (v) => {
+        const n = await save("gui_background", v);
+        if (n) await applyBackground(n.gui_background);
+        sel.value = cur.gui_background;
+      });
+      const apply = async (r) => {
+        if (!r.ok) { fail(r.error); return; }
+        fail("");
+        if (r.cancelled) return;
+        cur = r.settings;
+        sel.value = cur.gui_background;
+        await applyBackground(cur.gui_background);
+      };
+      return row("Background", "Only in the dark theme. A custom image (PNG, JPG or WEBP, up to 4 MB) is blurred and darkened so text stays readable.", sel,
+        button({ label: "Choose image...", icon: "folder", kind: "secondary", onClick: async () => apply(await call("pick_background")) }),
+        button({ label: "Reset", kind: "ghost", onClick: async () => apply(await call("reset_background")) }));
+    };
     wrap.append(h("section", { class: "s-group", "aria-label": "Appearance" },
       row("Theme", "System follows the Windows setting.", select("Theme", [["system", "System"], ["dark", "Dark"], ["light", "Light"]], s.gui_theme, async (v) => {
         applyTheme(v);
         await save("gui_theme", v);
-      }))));
+      })),
+      bgRow(s)));
 
     // ---- Behaviour
     const sw = (label, name, value) => {

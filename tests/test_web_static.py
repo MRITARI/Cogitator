@@ -22,8 +22,20 @@ def test_there_are_assets():
 
 def test_no_binary_assets():
     binary = (".png", ".jpg", ".jpeg", ".gif", ".svg", ".ico", ".woff", ".woff2", ".ttf", ".otf")
-    assert [rel(p) for p in ASSETS if p.suffix.lower() in binary] == ["img/logo.png"]
+    assert sorted(rel(p) for p in ASSETS if p.suffix.lower() in binary) == ["img/cogitator-bg.svg", "img/logo.png"]
     assert (UI / "img" / "logo.png").stat().st_size < 60 * 1024
+    assert (UI / "img" / "cogitator-bg.svg").stat().st_size < 60 * 1024
+
+
+def test_background_svg_is_inert():
+    svg = (UI / "img" / "cogitator-bg.svg").read_text(encoding="utf-8")
+    low = svg.lower()
+    assert "<script" not in low and "<foreignobject" not in low and "<image" not in low and "<use" not in low
+    assert not re.search(r"on\w+\s*=", low), "event handler attribute"
+    assert not re.search(r"(xlink:)?href\s*=", low)
+    assert not re.search(r"url\(\s*[\"']?(?!#)", low), "url() may only point at in-file ids"
+    assert not re.search(r"(?:https?:)?//", svg.replace('xmlns="http://www.w3.org/2000/svg"', "")), "external URL"
+    assert "@import" not in low and "javascript:" not in low
 
 
 def test_local_image_references_exist():
@@ -84,8 +96,9 @@ def test_local_references_exist():
         for ref in re.findall(r"""(?:from|import)\s*["']([^"']+)["']""", p.read_text(encoding="utf-8")):
             assert ref.startswith("./") or ref.startswith("../"), f"{rel(p)} imports {ref}"
             assert (p.parent / ref).resolve().is_file(), f"{rel(p)} imports missing {ref}"
-    for p in (UI / "app.css", UI / "theme.css"):
-        assert "url(" not in p.read_text(encoding="utf-8")
+    assert "url(" not in (UI / "theme.css").read_text(encoding="utf-8")
+    refs = re.findall(r"url\(([^)]*)\)", (UI / "app.css").read_text(encoding="utf-8"))
+    assert refs == ['"img/cogitator-bg.svg"'], refs  # the one local background; no other, no remote, no data: in the stylesheet
 
 
 def test_every_js_module_is_reachable_from_main():
@@ -188,3 +201,37 @@ def test_toasts_are_a_polite_live_region_and_wired():
     assert "components/toast.js" in main and 'on("log"' in main
     shell = (UI / "js" / "components" / "shell.js").read_text(encoding="utf-8")
     assert "let collapsed = true" in shell and "dot-bad" in shell
+
+
+def _rgba(v: str):
+    nums = [float(x) for x in re.findall(r"[\d.]+", v)]
+    return nums if v.startswith("rgba") else [*[int(v[i:i + 2], 16) for i in (1, 3, 5)], 1.0]
+
+
+def _over(top, under):
+    r, g, b, a = top
+    return "#" + "".join(f"{round(c * a + u * (1 - a)):02x}" for c, u in zip((r, g, b), under))
+
+
+def test_text_contrast_on_translucent_surfaces_over_the_worst_custom_image():
+    _, d, light, _ = _themes()
+    worst = _over(_rgba(d["bg-shade"]), (255, 255, 255))  # a pure white photo under the dark shade
+    assert _rgba(d["bg-shade"])[3] >= 0.8
+    rgb = lambda h: tuple(int(worst[i:i + 2], 16) for i in (1, 3, 5))  # noqa: E731
+    assert ratio(d["muted"], worst) >= 4.5 and ratio(d["fg"], worst) >= 4.5  # text sitting straight on the layer
+    for glass in ("sidebar-glass", "card-glass", "menu-glass"):
+        surface = _over(_rgba(d[glass]), rgb(worst))
+        for fg in TEXT_COLOURS:
+            assert ratio(d[fg], surface) >= 4.5, f"{fg} on {glass} over the worst background = {ratio(d[fg], surface):.2f}"
+    for k in ("sidebar-glass", "card-glass", "menu-glass"):  # the light theme never shows a layer: its glass is the opaque surface
+        assert light[k] == light[k.replace("-glass", "").replace("menu", "card")]
+
+
+def test_background_is_wired():
+    js = {rel(p): p.read_text(encoding="utf-8") for p in JS}
+    assert "style.backgroundImage" in js["js/background.js"] and "get_background" in js["js/background.js"]
+    assert "applyBackground" in js["js/main.js"] and "pick_background" in js["js/pages/settings.js"] and "reset_background" in js["js/pages/settings.js"]
+    html = (UI / "index.html").read_text(encoding="utf-8")
+    assert 'id="bg"' in html
+    css = (UI / "app.css").read_text(encoding="utf-8")
+    assert 'img/cogitator-bg.svg' in css and "blur(" in css and "--bg-shade" in css
