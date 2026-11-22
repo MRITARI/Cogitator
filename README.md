@@ -1,6 +1,6 @@
 # Cogitator
 
-A terminal mod manager for **Warhammer 40,000: Darktide** (Steam version), for Windows 11 (x64).
+A mod manager for **Warhammer 40,000: Darktide** (Steam version), for Windows 11 (x64).
 
 It finds your Darktide install, installs the Darktide Mod Loader and Mod Framework, switches mods on and off (the game
 update that turns them off is detected), enables or disables individual mods, and checks your mods for updates on every
@@ -64,35 +64,20 @@ pipx install .
 
 ## Use
 
-Run `cogitator` (or use the Start menu shortcut). If the Mod Loader is missing it offers to install it from the Nexus zips you
-downloaded. Press `?` in the program for help, the log location and links.
-
-| Key | Action |
-|---|---|
-| `?` or `F1` | Help |
-| `Q` | Quit |
-| `T` | Mods on or off (asks before switching off) |
-| `Space` | Enable or disable the selected mod |
-| `Shift+Up` / `Shift+Down` (or `[` / `]`) | Move the selected mod up or down in the load order |
-| `U` / `Ctrl+U` | Update the selected mod / all mods |
-| `F` | Update the Mod Loader or Framework |
-| `R` | Re-check for updates |
-| `L` / `M` | Link the selected mod / all unlinked mods to their Nexus page |
-| `I` | Import a mod, Mod Loader or Framework zip (or just drop the file onto the window) |
-| `K` | Set your Nexus API key (only needed for update checks) |
-| `O` | Change the sort order |
-| `A` | Download and install a new Cogitator version (shown when one is available) |
-| `D` | Run the doctor |
+Open **Cogitator** from the Start menu (or the desktop icon); running `cogitator` with no command opens the same window. It needs
+the Microsoft Edge WebView2 runtime, which Windows 11 includes. If the Mod Loader is missing it offers to install it from the
+Nexus zips you downloaded. The window has the mod list (switch mods on and off, drag to change the load order, link to Nexus,
+update), the Mod Loader and Framework, snapshots and profiles, settings and the doctor.
 
 Free Nexus accounts see which mods have updates and are guided through downloading the file; Premium accounts can
 update with one key.
 
-The same things work without the interface: `cogitator status`, `toggle`, `mod enable|disable <folder>`,
+The same things work from a terminal with the headless command line, `cogitator ...` (`cogitator --help` lists everything): `cogitator status`, `toggle`, `mod enable|disable <folder>`,
 `install-framework --zip <file>`, `check-updates`, `link`, `import`, `update`, `uninstall-framework`, `set-key`,
 `restore-database`, `verify-download` and `doctor` (exit code 0 ok, 1 warnings, 2 failures) and
 `self-update [--check|--apply|--rollback]` (signed GitHub releases only). `path add|remove|status` adds or removes the folder of
 `cogitator.exe` in your user PATH (the installer's PATH option runs it). Commands that change things refuse to run while
-the interface is open.
+the window is open.
 
 `cogitator-setup` opens a step-by-step installer window (add `--dry-run` to look without changing anything, or
 `--uninstall` to remove the Mod Loader and Framework). Uninstalling never deletes your own mods.
@@ -120,8 +105,8 @@ and `update_consent = true` in `config.toml`; `update_mode = "off"` turns the ch
 
 ## Troubleshooting
 
-- Press `D` (or run `cogitator doctor`) and read the `[WARN]`/`[FAIL]` lines; each comes with a fix.
-- Mods stopped working after a game update: press `T` to switch them on again.
+- Open the doctor in the Cogitator window (or run `cogitator doctor`) and read the `[WARN]`/`[FAIL]` lines; each comes with a fix.
+- Mods stopped working after a game update: switch them on again in the window (or run `cogitator toggle`).
 - Cogitator will not start after an update was cut off (power loss): open **Cogitator Setup** from the Start menu (it puts the
   previous version back), or run the installer again.
 - A mod patch was interrupted and the game will not start: `cogitator restore-database`, or in Steam use
@@ -138,18 +123,17 @@ from it, but check it before posting).
 
 ## Windows packaging
 
-`packaginguild_exe.ps1` (in a venv with `pip install ".[web]" pyinstaller==6.22.3`) builds, then self-checks every program:
-`dist\cogitator\` holds `cogitator.exe` (console: CLI and terminal UI) and `cogitator-web.exe` (windowed web UI) from one spec
-(`packaging\cogitator.spec`) and one shared `_internal` folder, plus `cogitator-updater.exe` and `cogitator-nxm.exe`;
+`packaging\build_exe.ps1` (in a venv with `pip install . pyinstaller==6.22.3`) builds, then self-checks every program:
+`dist\cogitator\` holds `cogitator.exe` (console: the command line) and `cogitator-web.exe` (the windowed Cogitator window) from one
+spec (`packaging\cogitator.spec`) and one shared `_internal` folder, plus `cogitator-updater.exe` and `cogitator-nxm.exe`;
 `dist\Cogitator Setup\Cogitator Setup.exe` is the setup/uninstall program. `packaging\cogitator.iss` (Inno Setup) packs both
-into the installer: shortcuts "Cogitator" (web) and "Cogitator (terminal)", then the web wizard opens. `Cogitator Setup.exe --classic`
-forces the tkinter setup. Without the Microsoft Edge WebView2 runtime (or pywebview) every web window falls back to its tkinter
-version; the installer says so and does not block. `--self-check [--expect-version V]` works on every exe and, for the windowed ones,
-writes its result to the log file.
+into the installer: shortcuts "Cogitator" and "Cogitator Setup", then the setup wizard opens. The windows need the Microsoft Edge
+WebView2 runtime (included in Windows 11); the installer says so if it is missing and does not block, and `cogitator` on the command
+line keeps working. `--self-check [--expect-version V]` works on every exe and, for the windowed ones, writes its result to the log file.
 
 ## Third-party software
 
 The installer bundles Python and these libraries, each under its own licence (copyright their authors):
-Textual, Rich, keyring, platformdirs, vdf and Tcl/Tk (MIT-style), httpx and its dependencies (BSD-3-Clause), cryptography
+pywebview (BSD-3-Clause), keyring, platformdirs, vdf and pythonnet (MIT-style), httpx and its dependencies (BSD-3-Clause), cryptography
 (Apache-2.0 or BSD-3-Clause), certifi (MPL-2.0), Python (PSF-2.0). Their full licence texts are in each project's repository.
 

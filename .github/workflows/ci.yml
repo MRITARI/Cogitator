@@ -21,8 +21,8 @@ jobs:
         with:
           python-version: ${{ matrix.python }}
           cache: pip
-      - run: python -m pip install -e ".[dev,web]"
-      - run: python -m ruff check cogitator cogitator_setup
+      - run: python -m pip install -e ".[dev]"
+      - run: python -m ruff check cogitator cogitator_setup cogitator_web
         continue-on-error: true
       - run: python -m mypy cogitator
         continue-on-error: true

@@ -22,8 +22,8 @@ TITLE = "Cogitator"
 UI_DIR = Path(__file__).resolve().parent / "ui"
 BACKGROUND = "#09090b"  # the dark page colour: no white flash before the page paints
 USAGE = ("usage: cogitator-web [--game-dir DIR] [--instance NAME] [--no-update-check] [--version]\n"
-         "Opens Cogitator's web-style window (needs pywebview and the Microsoft Edge WebView2 runtime; otherwise the\n"
-         "tkinter window opens instead). All other commands: run cogitator in a terminal (cogitator --help).")
+         "Opens the Cogitator window (needs the Microsoft Edge WebView2 runtime, which Windows 11 includes).\n"
+         "All other commands: run cogitator in a terminal (cogitator --help).")
 
 _WEBVIEW2_KEYS = ("{F3017226-FE2A-4295-8BDF-00C3A9A7E4C5}",  # runtime
                   "{2CD8A007-E189-409D-A2C8-9AF4EF3C72AA}", "{0D50BFEC-CD6A-4F9A-964C-C7416E3ACB10}", "{65C35B14-6C1D-4122-AC46-7148CC9D6497}")

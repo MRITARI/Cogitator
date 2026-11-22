@@ -1,4 +1,4 @@
-# One build, two programs in dist\cogitator\: cogitator.exe (console: CLI/TUI) and cogitator-web.exe (windowed web UI).
+# One build, two programs in dist\cogitator\: cogitator.exe (console: the command line) and cogitator-web.exe (windowed web UI).
 # Both share one Analysis, one PYZ and one _internal folder, so the self-updater's swap of the whole app folder carries both.
 # Build (from the repository root):  pyinstaller --noconfirm --clean --distpath dist --workpath build\pyi packaging\cogitator.spec
 from pathlib import Path
@@ -9,12 +9,11 @@ ROOT = Path(SPECPATH).parent
 ICON = str(ROOT / "packaging" / "cogitator.ico")
 USER_SCRIPTS = ("entry", "web_entry")
 
-datas, binaries, hidden = [], [], ["sv_ttk", "tkinter", "tkinter.filedialog"]
-for pkg in ("textual", "cogitator", "cogitator_gui", "cogitator_web", "keyring"):
+datas, binaries, hidden = [], [], []
+for pkg in ("cogitator", "cogitator_web", "keyring"):
     hidden += collect_submodules(pkg)
-for pkg in ("textual", "cogitator", "cogitator_web", "sv_ttk"):
+for pkg in ("cogitator", "cogitator_web"):
     datas += collect_data_files(pkg)
-hidden += collect_submodules("rich._unicode_data")
 for pkg in ("webview", "clr_loader", "pythonnet", "proxy_tools", "bottle"):  # the web window and its pythonnet bridge
     d, b, h = collect_all(pkg)
     datas, binaries, hidden = datas + d, binaries + b, hidden + h

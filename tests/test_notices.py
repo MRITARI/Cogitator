@@ -77,7 +77,6 @@ def _fake_build(monkeypatch, texts):
     monkeypatch.setattr(notices, "runtime_closure", lambda roots: ({"foo-bar": _FakeDist()}, []))
     monkeypatch.setattr(notices, "_text_files", lambda d: texts)
     monkeypatch.setattr(notices, "python_runtime", lambda: ("Python 3.x", "Python licence text"))
-    monkeypatch.setattr(notices, "tcl_tk_terms", lambda: None)
     monkeypatch.setattr(notices, "pyinstaller_exception", lambda: "Bootloader Exception unlimited permission")
     monkeypatch.setattr(notices, "openssl_in_cryptography", lambda apache: None)
     monkeypatch.setattr(notices, "certifi_unmodified", lambda p: "unmodified")
