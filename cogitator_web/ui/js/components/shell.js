@@ -66,6 +66,6 @@ export function buildStatusline() {
   };
 }
 
-export function pageHead(title, subtitle) {
-  return h("header", { class: "page-head" }, h("h1", { text: title }), h("p", { text: subtitle }));
+export function pageHead(title) {
+  return h("header", { class: "page-head" }, h("h1", { text: title }));
 }

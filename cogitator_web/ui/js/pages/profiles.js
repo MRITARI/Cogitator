@@ -6,7 +6,6 @@ import { h } from "../dom.js";
 import { on } from "../store.js";
 
 export const title = "Profiles";
-export const subtitle = "Profiles are named setups of your mods: which are on, and in what order.";
 
 export function mount(container, ctx) {
   const msg = h("div", { class: "msg tone-bad", role: "alert", hidden: true });

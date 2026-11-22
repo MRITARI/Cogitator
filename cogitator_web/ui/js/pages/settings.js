@@ -7,7 +7,6 @@ import { h } from "../dom.js";
 import { applyTheme, watch } from "../store.js";
 
 export const title = "Settings";
-export const subtitle = "Your Nexus key, appearance and how Cogitator behaves.";
 export const focusIds = { key: "nexus-key" };
 
 const KEY_HELP = "Create one in your Nexus account settings, under API. It is stored in your OS keyring (or a private file) and is never logged or shown.";

@@ -24,7 +24,7 @@ function go(id, focus = false) {
   const page = PAGES[id];
   state.page = id;
   content.replaceChildren();
-  head.replaceWith((head = pageHead(page.title, page.subtitle)));
+  head.replaceWith((head = pageHead(page.title)));
   const host = h("div", { class: "page" });
   content.append(host);
   mounted = page.mount(host, status);
@@ -86,7 +86,7 @@ async function boot() {
   initModals(document.getElementById("modal-root"), app);
   state.goto = (id) => go(id, true);
   sidebar = buildSidebar((id) => go(id, true), settings.version);
-  head = pageHead("", "");
+  head = pageHead("");
   content = h("main", { class: "content", id: "content" });
   drawer = buildDrawer();
   status = buildStatusline();

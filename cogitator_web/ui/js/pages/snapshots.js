@@ -6,7 +6,6 @@ import { h } from "../dom.js";
 import { on } from "../store.js";
 
 export const title = "Snapshots";
-export const subtitle = "Taken before risky actions (remove, update, profile switch). Restoring one snapshots your current setup first.";
 
 export function mount(container, ctx) {
   const msg = h("div", { class: "msg tone-bad", role: "alert", hidden: true });

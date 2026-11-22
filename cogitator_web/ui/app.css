@@ -59,7 +59,6 @@ html.icons-text .icon { font-family: var(--font); font-weight: 600; }
 .main { display: flex; flex-direction: column; min-width: 0; height: 100vh; }
 .page-head { padding: var(--page-pad) var(--page-pad) var(--sp-4); }
 .page-head h1 { margin: 0; font-size: 30px; line-height: 1.15; font-weight: 600; letter-spacing: -0.02em; }
-.page-head p { margin: var(--sp-2) 0 0; color: var(--muted); }
 .content { flex: 1; min-height: 0; overflow: auto; padding: 0 var(--page-pad) var(--page-pad); }
 .page { display: flex; flex-direction: column; min-height: 100%; }
 

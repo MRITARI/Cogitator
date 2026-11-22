@@ -6,7 +6,6 @@ import { h } from "../dom.js";
 import { on, state } from "../store.js";
 
 export const title = "Tools";
-export const subtitle = "Diagnose problems and find mods.";
 
 const TOOLS = [
   ["Doctor", "Check the game folder, the loader, the framework and your mods for problems.", "Run", () => call("doctor")],

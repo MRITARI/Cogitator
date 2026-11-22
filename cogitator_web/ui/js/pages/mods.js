@@ -22,7 +22,6 @@ let anchor = null; // where a Shift+click range starts
 const chipTest = (id) => (CHIPS.find((c) => c[0] === id) || CHIPS[0])[2];
 
 export const title = "Mods";
-export const subtitle = "Turn mods on or off, change their load order and check Nexus for updates.";
 
 export function mount(container, ctx) {
   const entries = new Map(); // folder -> { tr, sig, sw, name, installed, latest, status }
