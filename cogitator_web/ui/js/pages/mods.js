@@ -26,10 +26,10 @@ export function mount(container, ctx) {
   const updBanner = h("div", { class: "banner", role: "status", hidden: true });
 
   // ---- toolbar
-  const check = button({ label: "Check updates", icon: "sync", kind: "primary", title: "Check Nexus for updates (R, F5)", onClick: () => call("check_updates") });
-  const importBtn = button({ label: "Import zip", icon: "add", title: "Import zip(s) (Ctrl+I)", onClick: () => call("import_zips") });
-  const launchBtn = button({ label: "Launch game", icon: "play", title: "Launch Darktide (G)", onClick: () => call("launch") });
-  const globalBtn = button({ label: "Mods on/off", icon: "power", title: "Turn all mods on or off (T)", onClick: () => call("toggle_global") });
+  const check = button({ label: "Check updates", icon: "sync", kind: "secondary", title: "Check Nexus for updates (R, F5)", onClick: () => call("check_updates") });
+  const importBtn = button({ label: "Import zip", icon: "add", kind: "secondary", title: "Import zip(s) (Ctrl+I)", onClick: () => call("import_zips") });
+  const launchBtn = button({ label: "Launch game", icon: "play", kind: "primary", title: "Launch Darktide (G)", onClick: () => call("launch") });
+  const globalBtn = button({ label: "Mods on/off", icon: "power", kind: "secondary", title: "Turn all mods on or off (T)", onClick: () => call("toggle_global") });
   const moreBtn = button({ label: "Nexus", kind: "secondary", title: "Update all, link all, update Mod Loader / Framework", onClick: () => {
     const r = moreBtn.getBoundingClientRect();
     showMenu(r.left, r.bottom + 4, [{ label: "Update all (Ctrl+U)", id: "update_all", enabled: true }, { label: "Link all mods to Nexus (M)", id: "link_all", enabled: true },
@@ -46,7 +46,8 @@ export function mount(container, ctx) {
   const downBtn = button({ label: "Move down", icon: "down", iconOnly: true, kind: "secondary", title: "Move down (Ctrl+Down)", onClick: () => api.move(1), disabled: true });
   const filter = h("input", { class: "input", type: "search", placeholder: "Filter mods", "aria-label": "Filter mods", autocomplete: "off", spellcheck: "false" });
   const search = h("div", { class: "search" }, icon("search"), filter);
-  const toolbar = h("div", { class: "toolbar", role: "toolbar", "aria-label": "Mods" }, check, importBtn, launchBtn, globalBtn, moreBtn, bulkBtn, upBtn, downBtn, h("span", { class: "grow" }), search);
+  const toolbar = h("div", { class: "toolbar", role: "toolbar", "aria-label": "Mods" }, launchBtn, check, importBtn, globalBtn, moreBtn, bulkBtn,
+    h("span", { class: "sep", "aria-hidden": "true" }), upBtn, downBtn, h("span", { class: "grow" }), search);
   let ftimer = null;
   filter.value = state.filter;
   filter.addEventListener("input", () => { clearTimeout(ftimer); ftimer = setTimeout(() => call("set_filter", filter.value), 120); });
@@ -187,7 +188,8 @@ export function mount(container, ctx) {
     syncSelection();
     if (keep && entries.has(keep)) entries.get(keep).tr.scrollIntoView({ block: "nearest" });
     empty.hidden = state.order.length > 0 || !state.loaded;
-    empty.textContent = state.filter ? "No mods match the filter." : state.emptyHint;
+    empty.textContent = state.filter ? `No mods match "${state.filter}". Press Esc in the filter box to clear it.` : state.emptyHint;
+    wrap.classList.toggle("is-empty", !empty.hidden);
     for (const [id, { th, arrow }] of heads) {
       const on = state.sort.col === id;
       th.setAttribute("aria-sort", on ? (state.sort.desc ? "descending" : "ascending") : "none");

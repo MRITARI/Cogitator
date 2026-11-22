@@ -112,7 +112,7 @@ select.input option { background: var(--card); color: var(--fg); }
 .banner { border-radius: var(--radius-tile); background: var(--card); box-shadow: inset 3px 0 0 var(--attention); padding: var(--sp-3) var(--sp-5); margin-bottom: var(--sp-4); }
 
 /* ---------- table: inside a card */
-.table-wrap { border-radius: var(--radius-card); overflow: hidden; background: var(--card); padding: var(--sp-2) var(--sp-3); }
+.table-wrap { border-radius: var(--radius-card); overflow: clip; background: var(--card); padding: var(--sp-2) var(--sp-3); }
 table.mods { width: 100%; border-collapse: collapse; table-layout: fixed; }
 .mods th { position: sticky; top: 0; height: 40px; padding: 0 var(--sp-3); text-align: left; font-weight: 500; font-size: 12px; color: var(--muted); border-bottom: 1px solid var(--divider); background: var(--card); z-index: 1; }
 .mods th button { all: unset; box-sizing: border-box; display: inline-flex; align-items: center; gap: 4px; cursor: pointer; height: 28px; padding: 0 10px; margin-left: -10px; border-radius: var(--radius-pill); transition: background var(--t-fast), color var(--t-fast); }
@@ -135,7 +135,29 @@ table.mods { width: 100%; border-collapse: collapse; table-layout: fixed; }
 .mods tr.is-off td.name .t { color: var(--muted); }
 .chip { display: inline-flex; align-items: center; gap: 4px; height: 20px; padding: 0 8px; border-radius: var(--radius-pill); background: var(--tile); color: var(--muted); font-size: 11px; flex: none; }
 .mods tbody tr:hover .chip, .mods tbody tr[aria-selected="true"] .chip { background: var(--card); }
-.empty { padding: var(--sp-6); text-align: center; color: var(--muted); }
+.empty { padding: calc(var(--sp-6) * 2) var(--sp-6); text-align: center; color: var(--muted); max-width: 52ch; margin: 0 auto; text-wrap: balance; }
+.mods td:nth-child(3), .mods td:nth-child(4) { font-variant-numeric: tabular-nums; }
+.toolbar .sep { width: 1px; height: 20px; margin: 0 var(--sp-1); background: var(--divider); }
+.search { flex: 0 1 280px; min-width: 160px; }
+.btn:active:not(:disabled) { transform: translateY(1px); }
+.nav-item:active:not(:disabled) { transform: translateY(1px); }
+.content { scrollbar-gutter: stable; }
+.content::-webkit-scrollbar, .drawer-body::-webkit-scrollbar, .modal .body::-webkit-scrollbar { width: 10px; height: 10px; }
+.content::-webkit-scrollbar-thumb, .drawer-body::-webkit-scrollbar-thumb, .modal .body::-webkit-scrollbar-thumb { background: var(--input); border-radius: var(--radius-pill); border: 2px solid transparent; background-clip: padding-box; }
+.content::-webkit-scrollbar-thumb:hover { background: var(--border); background-clip: padding-box; }
+::selection { background: var(--ring); color: var(--bg); }
+
+/* narrow windows: icon-only sidebar, tighter padding */
+@media (max-width: 860px) {
+  .app { grid-template-columns: 64px minmax(0, 1fr); }
+  .brand span, .nav-item span, .sidebar .ver { display: none; }
+  .brand, .nav-item { justify-content: center; padding-left: 0; padding-right: 0; }
+  .page-head h1 { font-size: 24px; }
+  .s-row { flex-wrap: wrap; gap: var(--sp-3); }
+  .s-row .ctl .input { width: 100%; min-width: 180px; }
+  .search { flex: 1 1 100%; width: auto; order: 10; }
+  .toolbar .grow { display: none; }
+}
 
 /* ---------- context menu */
 .menu { position: fixed; z-index: 60; min-width: 230px; padding: var(--sp-2); background: var(--card); border: 1px solid var(--divider); border-radius: var(--radius-menu); box-shadow: 0 12px 32px rgba(0, 0, 0, 0.4); opacity: 0; transform: scale(0.98); transition: opacity var(--t-fast), transform var(--t-fast); }
