@@ -235,9 +235,7 @@ table.mods { width: 100%; border-collapse: collapse; table-layout: fixed; }
 .d-ver { margin: var(--sp-2) 0; }
 .d-vname { font-weight: 500; }
 .d-ver ul { margin: var(--sp-1) 0 0; padding-left: var(--sp-5); color: var(--muted); overflow-wrap: anywhere; }
-.d-h { margin: var(--sp-4) 0 var(--sp-2); font-size: 12px; font-weight: 500; color: var(--muted); text-transform: uppercase; letter-spacing: 0.04em; }
-.d-kv { display: grid; grid-template-columns: max-content 1fr; gap: var(--sp-1) var(--sp-4); margin: 0; font-size: 13px; }
-.d-kv dt { color: var(--muted); } .d-kv dd { margin: 0; overflow-wrap: anywhere; }
+.d-folder { margin-top: var(--sp-4); font-size: 12px; overflow-wrap: anywhere; }
 .d-hint { font-size: 13px; overflow-wrap: anywhere; }
 .d-actions { display: flex; flex-wrap: wrap; gap: var(--sp-2); margin-top: var(--sp-4); }
 :root[data-bg="default"] .details, :root[data-bg="custom"] .details { background: var(--card-glass); }

@@ -30,14 +30,6 @@ export function createDetails({ onClose }) {
   el.addEventListener("keydown", (e) => { if (e.key === "Escape") { e.stopPropagation(); onClose(true); } });
 
   const row = () => state.rows.get(folder);
-  const kv = (k, v) => [h("dt", { text: k }), h("dd", { text: v })];
-
-  function localInfo(r) {
-    const tags = (r.tags || []).map((t) => `#${t}`).join(" ");
-    return h("dl", { class: "d-kv" }, kv("Folder", r.folder), kv("Installed", r.installed || "-"), kv("Latest", r.latest === "-" ? "—" : r.latest),
-      kv("Status", r.status), kv("Load order", r.en === "on" ? "on" : r.en === "off" ? "off" : "not listed"),
-      ...(r.pinned ? kv("Pinned", r.pinned) : []), ...(tags ? kv("Tags", tags) : []));
-  }
 
   function actions(r) {
     const act = (id) => () => call("row_action", folder, id);
@@ -110,7 +102,7 @@ export function createDetails({ onClose }) {
     title.textContent = folder;
     title.title = folder;
     body.replaceChildren(...(r.linked ? nexusSection(r) : [h("div", { class: "d-note", role: "status", text: "Not linked to Nexus. Link it to see the mod page details and detect updates." })]),
-      h("h3", { class: "d-h", text: "On this PC" }), localInfo(r), r.hint ? h("p", { class: "d-hint muted", text: r.hint }) : null, actions(r));
+      h("div", { class: "d-folder muted", text: folder }), r.kind !== "ok" && r.hint ? h("p", { class: "d-hint muted", text: r.hint }) : null, actions(r));
   }
 
   function show(f) {
