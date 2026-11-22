@@ -37,7 +37,6 @@ html.icons-text .icon { font-family: var(--font); font-weight: 600; }
 :root:is([data-bg="default"], [data-bg="custom"]) :is(.mods tbody tr[aria-selected="true"], .btn-secondary, .badge, .fchip) { background: var(--secondary-glass); }
 :root:is([data-bg="default"], [data-bg="custom"]) :is(.input) { background: var(--input-glass); }
 :root:is([data-bg="default"], [data-bg="custom"]) :is(.mods tbody tr:hover, .mods tbody tr[aria-selected="true"]) :is(.badge, .chip) { background: var(--card-glass); }
-:root:is([data-bg="default"], [data-bg="custom"]) .fchip[aria-pressed="true"] { background: var(--primary); }
 :root:is([data-bg="default"], [data-bg="custom"]) :is(.sidebar, .details, .table-wrap, .s-group, .banner, .menu, .modal, .toast, .setup .card) { backdrop-filter: blur(8px); }
 
 /* ---------- shell */
@@ -146,7 +145,7 @@ select.input option { background: var(--card); color: var(--fg); }
 .chips .grow { flex: 1; }
 .fchip { display: inline-flex; align-items: center; gap: 6px; height: 28px; padding: 0 12px; border: 0; border-radius: var(--radius-pill); background: var(--secondary); color: var(--muted); font-size: 13px; cursor: pointer; transition: background var(--t-fast), color var(--t-fast); }
 .fchip:hover { background: var(--tile); color: var(--fg); }
-.fchip[aria-pressed="true"] { background: var(--primary); color: var(--primary-fg); }
+.fchip[aria-pressed="true"] { background: var(--secondary); color: var(--fg); box-shadow: inset 0 -2px 0 var(--accent); }
 .fchip .n { font-variant-numeric: tabular-nums; opacity: 0.85; }
 .fchip .n:empty { display: none; }
 

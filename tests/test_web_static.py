@@ -313,3 +313,18 @@ def test_grip_gutter():
     assert re.search(r"\.mods \.en \{[^}]*gap: 10px", css)
     assert re.search(r"\.mods \.grip \{[^}]*width: 16px", css)
     assert re.search(r"\.mods td:first-child \{ padding-left: var\(--sp-2\)", css)  # right of the 3px selected marker, on every row
+
+
+def test_filter_chip_states():
+    css = (UI / "app.css").read_text(encoding="utf-8")
+    assert re.search(r'\.fchip\[aria-pressed="true"\] \{[^}]*color: var\(--fg\);[^}]*inset 0 -2px 0 var\(--accent\)', css)
+    _, d, light, _ = _themes()
+    worst = _over(_rgba(d["bg-shade"]), (255, 255, 255))
+    card = _over(_rgba(d["card-glass"]), tuple(int(worst[i:i + 2], 16) for i in (1, 3, 5)))
+    rgb = tuple(int(card[i:i + 2], 16) for i in (1, 3, 5))
+    for glass in ("secondary-glass", "tile-glass"):  # active / hovered chip over the worst custom image
+        surface = _over(_rgba(d[glass]), rgb)
+        assert ratio(d["fg"], surface) >= 4.5 and ratio(d["muted"], surface) >= 4.5, glass
+    for t in (d, light):
+        for bg in ("secondary", "tile"):
+            assert ratio(t["fg"], t[bg]) >= 4.5 and ratio(t["muted"], t[bg]) >= 4.5
