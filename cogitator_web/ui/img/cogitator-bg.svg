@@ -1,0 +1,23 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1920 1080" width="1920" height="1080" preserveAspectRatio="xMidYMid slice">
+<title>Cogitator background</title>
+<defs>
+  <linearGradient id="base" x1="0" y1="0" x2="1" y2="1">
+    <stop offset="0" stop-color="#150d0a"/><stop offset=".6" stop-color="#0c0908"/><stop offset="1" stop-color="#0a0a0a"/>
+  </linearGradient>
+  <radialGradient id="rust" cx=".12" cy=".95" r=".7">
+    <stop offset="0" stop-color="#8a2a1a" stop-opacity=".30"/><stop offset="1" stop-color="#8a2a1a" stop-opacity="0"/>
+  </radialGradient>
+  <radialGradient id="amber" cx=".85" cy=".15" r=".6">
+    <stop offset="0" stop-color="#b8892e" stop-opacity=".16"/><stop offset="1" stop-color="#b8892e" stop-opacity="0"/>
+  </radialGradient>
+  <radialGradient id="vig" cx=".5" cy=".5" r=".78">
+    <stop offset=".55" stop-color="#000" stop-opacity="0"/><stop offset="1" stop-color="#000" stop-opacity=".7"/>
+  </radialGradient>
+  <pattern id="scan" width="4" height="4" patternUnits="userSpaceOnUse"><rect width="4" height="1" fill="#000" fill-opacity=".28"/></pattern>
+</defs>
+<rect width="1920" height="1080" fill="url(#base)"/>
+<rect width="1920" height="1080" fill="url(#rust)"/>
+<rect width="1920" height="1080" fill="url(#amber)"/>
+<rect width="1920" height="1080" fill="url(#scan)"/>
+<rect width="1920" height="1080" fill="url(#vig)"/>
+</svg>
