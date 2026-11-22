@@ -251,8 +251,7 @@ export function mount(container, ctx) {
       e.tr.setAttribute("aria-selected", String(selSet.has(f)));
       e.tr.tabIndex = f === tab ? 0 : -1;
     }
-    const row = state.rows.get(state.selected);
-    ctx.setHint(row ? row.hint : state.emptyHint);
+    ctx.setHint(state.order.length ? "" : state.emptyHint); // only the empty-state text; the details panel carries the per-mod hint
     if (panelOpen && state.selected !== panel.current()) { if (state.selected && state.rows.has(state.selected)) panel.show(state.selected); else panel.hide(); }
     lastIndex = state.selected ? state.order.indexOf(state.selected) : lastIndex;
     renderBar();
