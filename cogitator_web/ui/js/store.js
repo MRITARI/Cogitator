@@ -3,8 +3,9 @@ const handlers = new Map();
 const watchers = new Set();
 
 export const state = {
-  header: null, order: [], rows: new Map(), summary: "", sort: { col: null, desc: false }, filter: "", emptyHint: "",
+  header: null, order: [], rows: new Map(), summary: "", filter: "", emptyHint: "",
   selected: null, logs: [], page: "mods", loaded: false,
+  details: new Map(), versions: new Map(), goto: null, // Nexus data per folder (details panel); goto(pageId) is set by main.js
 };
 
 export function on(type, fn) {
@@ -27,7 +28,7 @@ function dispatch(p) {
     case "state":
       state.order = p.rows.map((r) => r.folder);
       state.rows = new Map(p.rows.map((r) => [r.folder, r]));
-      state.summary = p.summary; state.sort = p.sort; state.filter = p.filter; state.emptyHint = p.empty; state.loaded = true;
+      state.summary = p.summary; state.filter = p.filter; state.emptyHint = p.empty; state.loaded = true;
       if (p.header) state.header = p.header;
       break;
     case "row":
@@ -41,6 +42,15 @@ function dispatch(p) {
       state.logs.push({ text: p.text, style: p.style });
       if (state.logs.length > 500) state.logs.splice(0, state.logs.length - 500);
       break;
+    case "details":
+      state.details.delete(p.folder);
+      state.details.set(p.folder, p);
+      if (state.details.size > 200) state.details.delete(state.details.keys().next().value);
+      break;
+    case "versions":
+      state.versions.set(p.folder, p);
+      if (state.versions.size > 100) state.versions.delete(state.versions.keys().next().value);
+      break;
     default:
       break;
   }
@@ -53,9 +63,3 @@ window.cogitatorPush = (batch) => {
     try { dispatch(p); } catch (e) { console.error(e); }
   }
 };
-
-export function applyTheme(choice) {
-  const root = document.documentElement;
-  if (choice === "light" || choice === "dark") root.dataset.theme = choice;
-  else delete root.dataset.theme;
-}

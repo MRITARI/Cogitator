@@ -1,9 +1,9 @@
 """Everything the page can do, without a window: state (game folder, registry, mod table model) and the flows.
 
-It reuses the engine and the shared pieces: `cogitator.actions` (flows), `cogitator.viewtext` (wording), `cogitator_gui.viewmodel`
-(filter / sort / marks) and `cogitator_gui.controller` (workers, questions). It talks to the page only through `Bridge.emit`.
+It reuses the engine and the shared pieces: `cogitator.actions` (flows), `cogitator.viewtext` (wording), `cogitator_web.viewmodel`
+(filter) and `cogitator_web.controller` (workers, questions). It talks to the page only through `Bridge.emit`.
 
-Threading: short operations (toggle, move, mark...) run on the calling API thread under `_mlock`. Anything that waits (network,
+Threading: short operations (toggle, move...) run on the calling API thread under `_mlock`. Anything that waits (network,
 zips, questions) runs on a Controller worker. Callbacks scheduled with `ctl.ui` run on the pusher thread and must stay short and
 never take `self.lock` (the flow lock a worker may hold for a long time)."""
 from __future__ import annotations
@@ -17,14 +17,14 @@ from pathlib import Path
 from typing import Callable
 
 from cogitator import __version__, actions, actions_nexus, actions_setup, profiles, snapshots
-from cogitator import nxm, repair
+from cogitator import nexus_info, nxm, repair
 from cogitator.config import InstanceLock, LockError, Settings, cache_dir, config_dir, get_api_key, log_path, redact
 from cogitator.frameworks import detect_framework
 from cogitator.gamefinder import resolve_game_dir, validate_game_dir
 from cogitator.linking import folder_mtime
 from cogitator.loader import NEXUS_PAGES
 from cogitator.modinstall import open_files_page
-from cogitator.nexus import parse_nexus_ref
+from cogitator.nexus import GAME, parse_nexus_ref
 from cogitator.mods import DISABLED, ENABLED, UNLISTED, ModError, mods_dir, move_mod, move_mod_to, scan_mods, toggle_mod
 from cogitator.patcher import ON, PatcherError, banner as patch_banner, default_runner, patch_state
 from cogitator.patcher import toggle as toggle_mods
@@ -32,9 +32,9 @@ from cogitator.procs import darktide_running
 from cogitator.registry import Registry
 from cogitator.updates import (PROBABLY_OUTDATED, UPDATE, CheckBundle, FrameworkUpdate, ModRow, cached_frameworks, cached_rows,
                                quota_text, run_checks)
-from cogitator.viewtext import (NOTICE_BODY, NOTICE_TITLE, gui_words, installed_label, mod_suffix, report_segments, status_label)
-from cogitator_gui.controller import TEXT, GuiUi
-from cogitator_gui.viewmodel import ARROW, TAG_BAD, TAG_DIM, TAG_OK, TAG_WARN, ModListModel
+from cogitator.viewtext import (NOTICE_BODY, NOTICE_TITLE, gui_words, installed_label, mod_suffix, report_segments, status_kind, status_label)
+from cogitator_web.controller import GuiUi
+from cogitator_web.viewmodel import ARROW, TAG_BAD, TAG_DIM, TAG_OK, TAG_WARN, ModListModel
 
 from .bridge import Bridge
 
@@ -42,28 +42,28 @@ log = logging.getLogger("cogitator.web")
 
 NOTICE = "notice"  # a question kind only the web page knows: a message with one button (answer: True)
 TONE = {TAG_BAD: "bad", TAG_WARN: "warn", TAG_OK: "ok", TAG_DIM: "dim", "": ""}
-GUI_THEMES = ("system", "light", "dark")
 AUTO_REPAIR = ("off", "ask", "auto")
+GUI_BACKGROUNDS = ("default", "plain")
 # boolean / choice settings the page may change: name -> allowed values (bool = a switch)
-SETTING_CHOICES = {"gui_theme": GUI_THEMES, "auto_repair": AUTO_REPAIR}
+SETTING_CHOICES = {"auto_repair": AUTO_REPAIR, "gui_background": GUI_BACKGROUNDS}
 SETTING_BOOLS = ("check_updates_on_start", "update_consent")
-ROW_ACTIONS = ("toggle", "up", "down", "open_page", "open_folder", "mark", "fav", "note", "pin", "rollback", "remove",
-               "link", "update", "changelog")
+ROW_ACTIONS = ("toggle", "open_page", "open_folder", "pin", "rollback", "remove",
+               "link", "update")
 GLOBAL_ACTIONS = ("update_all", "link_all", "framework_update")
-BULK_IDS = ("enable", "disable", "update", "tag", "remove", "clear")
+BULK_IDS = ("enable", "disable", "update", "remove")
 HELP_BODY = (
     "Space or double-click   turn the selected mod on or off\n"
     "Ctrl+Up / Ctrl+Down     move it in the load order\n"
     "Right-click a mod       every action for that mod\n"
+    "Click, Ctrl+click, Shift+click, a dragged box or Ctrl+A select several mods; the bar under the list acts on all of them\n"
     "R or F5                 check Nexus for updates      I or Ctrl+I   import zip(s)\n"
     "G or Ctrl+G             launch Darktide              D or Ctrl+D   doctor (diagnose problems)\n"
     "T or Ctrl+T             all mods on / off (the game patch)\n"
-    "K or Ctrl+K             Nexus API key (Settings)     X   mark a mod\n"
-    "N   tags and note       *   favourite                / or Ctrl+F   filter the list\n"
+    "K or Ctrl+K             Nexus API key (Settings)\n"
+    "/ or Ctrl+F             filter the list\n"
     "Ctrl+U   update all     M   link all mods to Nexus     F   update Mod Loader / Framework\n"
-    "B   bulk actions on the marked mods\n"
-    "F3  search Nexus Mods (the Tools page also has doctor, find a crashing mod, crash-log leads)\n"
-    "O   sort (cycle)        F1  this help\n"
+    "F3  search Nexus Mods (the Tools page also has doctor, find a crashing mod, crash-log leads, snapshots)\n"
+    "F1                      this help\n"
     "\n"
     "Log file: {log}\n"
     "Settings folder: {cfg}\n"
@@ -109,6 +109,9 @@ class Session:
         self.open_path: Callable[[Path], object] = _startfile
         self.download_wait_s = 180.0
         self._nxm_busy = False
+        self._dlock = threading.Lock()  # the details worker: one at a time, the newest request wins
+        self._details_want: str | None = None
+        self._details_busy = False
         self._last_patch_state: str | None = None
         self._ticker: threading.Thread | None = None
         self.selfupdater = None  # SelfUpdater, created once the registry is loaded; tests inject their own
@@ -152,8 +155,9 @@ class Session:
             return {"folder": folder, "en": "on" if m.state == ENABLED else ("off" if m.state == DISABLED else "unlisted"),
                     "present": m.present, "suffix": (suffix[0].strip() if suffix else ""), "installed": installed,
                     "latest": (r.latest if r else None) or "-", "status": status, "tone": TONE.get(self.model.status_tag(m), ""),
-                    "marked": folder in self.model.marked, "fav": bool(meta.get("fav")), "pinned": meta.get("pinned_version") or "",
-                    "note": bool(meta.get("notes")), "tags": list(meta.get("tags") or []), "linked": bool(r is not None and r.nexus_id),
+                    "kind": status_kind(r, m),
+                    "pinned": meta.get("pinned_version") or "",
+                    "rollback": bool((self.registry.mod(folder) or {}).get("previous")) if self.registry else False, "linked": bool(r is not None and r.nexus_id),
                     "hint": self.model.hint(folder)}
 
     def header_payload(self) -> dict | None:
@@ -186,10 +190,10 @@ class Session:
         """The whole table (order and filter applied). The page reconciles it row by row."""
         with self._mlock:
             order = [rv.folder for rv in self.model.rows(keep)]
-            summary, sort = self.model.summary(), {"col": self.model.sort_col, "desc": self.model.sort_desc}
+            summary = self.model.summary()
             filt = self.model.filter_text
         rows = [p for p in (self.row_payload(f) for f in order) if p is not None]
-        self.bridge.emit({"type": "state", "rows": rows, "summary": summary, "sort": sort, "filter": filt, "keep": keep,
+        self.bridge.emit({"type": "state", "rows": rows, "summary": summary, "filter": filt, "keep": keep,
                           "empty": self.model.hint(None)})
         self.emit_header()
 
@@ -530,16 +534,6 @@ class Session:
             self.model.filter_text = text[:200]
         self.emit_state()
 
-    def set_sort(self, col: str | None) -> None:
-        with self._mlock:
-            self.model.set_sort(col)
-        self.emit_state()
-
-    def cycle_sort(self) -> None:
-        with self._mlock:
-            self.model.cycle_sort()
-        self.emit_state()
-
     # ================================================================== per-mod (short, on the API thread)
     def toggle(self, folder: str) -> None:
         if not self.ready():
@@ -552,8 +546,16 @@ class Session:
             self.say(f"Could not write mod_load_order.txt: {e}", "bold red")
         self._rescan_one(folder)
 
+    def _filtered(self, msg: str) -> bool:
+        """The list order is the load order: reordering is refused while a text filter hides part of it."""
+        with self._mlock:
+            filtered = bool(self.model.filter_text)
+        if filtered:
+            self.say(msg + ".", "yellow")
+        return filtered
+
     def move(self, folder: str, delta: int) -> None:
-        if not self.ready():
+        if not self.ready() or self._filtered("Clear the filter to change the load order"):
             return
         snapshots.auto(self.game_dir, "reorder", once=True, registry=self.registry)
         try:
@@ -562,14 +564,11 @@ class Session:
             self.say(str(e), "bold red")
         except OSError as e:
             self.say(f"Could not write mod_load_order.txt: {e}", "bold red")
-        with self._mlock:
-            if self.model.sort_col is not None:  # the table shows the load order again, so the move is visible
-                self.model.set_sort(None)
         self.refresh_all(keep=folder)
 
     def move_to(self, folder: str, target: str, after: bool) -> None:
         """Drag and drop: put `folder` before/after `target` in the load order."""
-        if not self.ready():
+        if not self.ready() or self._filtered("Clear the filter to change the load order"):
             return
         snapshots.auto(self.game_dir, "reorder", once=True, registry=self.registry)
         try:
@@ -578,24 +577,7 @@ class Session:
             self.say(str(e), "bold red")
         except OSError as e:
             self.say(f"Could not write mod_load_order.txt: {e}", "bold red")
-        with self._mlock:
-            if self.model.sort_col is not None:
-                self.model.set_sort(None)
         self.refresh_all(keep=folder)
-
-    def mark(self, folder: str) -> None:
-        if not self.ready():
-            return
-        with self._mlock:
-            self.model.toggle_mark(folder)
-            n = len(self.model.marked)
-        self.emit_row(folder)
-        self.say(f"{n} mod(s) marked.", "dim")
-
-    def fav(self, folder: str) -> None:
-        if self.ready():
-            self.say(actions.toggle_fav(self.registry, folder), "green")
-            self.emit_row(folder)
 
     def pin(self, folder: str) -> None:
         if not self.ready():
@@ -623,15 +605,67 @@ class Session:
         if r is not None and r.nexus_id:
             self.say(f"Opened {open_files_page(r.nexus_id, self.open_url)}", "cyan")
 
+    # ---- details panel (Nexus data; runs on a worker, the answer arrives as a "details" / "versions" push)
+    def nexus_id_of(self, folder: str) -> int | None:
+        rec = (self.registry.mod(folder) or {}) if self.registry else {}
+        v = rec.get("nexus_id")
+        return v if isinstance(v, int) and not isinstance(v, bool) and v > 0 else None
+
+    def _details_push(self, folder: str, res: nexus_info.Result, image: str | None = None) -> None:
+        self.bridge.emit({"type": "details", "folder": folder, "nexus_id": self.nexus_id_of(folder), "status": res.status, "message": res.message,
+                          "stale": res.stale, "why": res.extra.get("why", ""), "at": res.at, "data": res.data, "image": image})
+
+    def request_details(self, folder: str) -> None:
+        if self.nexus_id_of(folder) is None:
+            self._details_push(folder, nexus_info.Result(nexus_info.UNLINKED, None, nexus_info.MESSAGES[nexus_info.UNLINKED]))
+            return
+        with self._dlock:
+            self._details_want = folder
+            if self._details_busy:
+                return  # the running worker takes the newest request when it is done
+            self._details_busy = True
+        self.ctl.run("mod details", self._details_loop, "details")
+
+    def _details_loop(self) -> None:
+        while True:
+            with self._dlock:
+                folder, self._details_want = self._details_want, None
+                if folder is None:
+                    self._details_busy = False
+                    return
+            try:
+                res = nexus_info.details_for(self.nexus_id_of(folder), self.registry, lock=self.lock)
+                url = (res.data or {}).get("picture_url") or ""
+                image = nexus_info.cached_image(url) if url else None
+                if url and image is None and self._details_want is None:  # only fetch while this panel is still the one shown
+                    image = nexus_info.fetch_image(url)
+                self._details_push(folder, res, image)
+            except Exception:
+                log.exception("details for %s failed", folder)
+                self._details_push(folder, nexus_info.Result(nexus_info.ERROR, None, nexus_info.MESSAGES[nexus_info.ERROR]))
+
+    def request_versions(self, folder: str) -> None:
+        mod_id = self.nexus_id_of(folder)
+
+        def work() -> None:
+            res = nexus_info.changes_for(mod_id, self.registry, lock=self.lock)
+            self.bridge.emit({"type": "versions", "folder": folder, "status": res.status, "message": res.message, "stale": res.stale,
+                              "versions": (res.data or {}).get("versions", [])})
+
+        self.job("mod versions", "versions", work)
+
+    def open_nexus_page(self, folder: str) -> None:
+        mod_id = self.nexus_id_of(folder)
+        if mod_id:
+            self.open_url(f"https://www.nexusmods.com/{GAME}/mods/{mod_id}")
+
     def row_menu(self, folder: str) -> list[dict | None]:
-        """(label, id, enabled) entries of the right-click menu: the ones the tkinter window has."""
+        """(label, id, enabled) entries of the right-click menu: the ones the window offers."""
         with self._mlock:
             m, row = self.model.mod(folder), self.model.urows.get(folder)
-            marked = folder in self.model.marked
         if m is None or not self.registry:
             return []
         meta = actions.mod_meta(self.registry, folder)
-        listed = m.state != UNLISTED
         linked = bool(row is not None and row.nexus_id)
         can_update = row is not None and row.status in (UPDATE, PROBABLY_OUTDATED)
         can_link = m.present and actions_nexus.link_refusal(folder) is None
@@ -639,41 +673,33 @@ class Session:
         def item(label: str, aid: str, enabled: bool = True) -> dict:
             return {"label": label, "id": aid, "enabled": bool(enabled)}
 
+        pinned = bool(meta.get("pinned_version"))
         items: list[dict | None] = [
-            item("Disable" if m.state == ENABLED else ("Enable" if m.state != UNLISTED else "Add to load order and enable"), "toggle", m.present),
-            item("Move up", "up", listed and m.present), item("Move down", "down", listed and m.present), None,
-            item("Update" + (f" to {row.latest}" if can_update and row.latest else ""), "update", can_update and m.present),
-            item("Open Nexus page" if linked else "Link to Nexus...", "open_page" if linked else "link", m.present if linked else can_link),
-            *([item("Set installed version...", "link", can_link and actions_nexus.link_needs_version_only(row))] if linked else []),
-            item("Open folder in Explorer" if sys.platform == "win32" else "Open folder", "open_folder", m.present), None,
-            item("Unmark" if marked else "Mark for bulk actions", "mark"),
-            item("Remove favourite" if meta.get("fav") else "Favourite", "fav"), item("Tags and note...", "note")]
-        if linked:
-            items += [item("Show changelog", "changelog", True),
-                      item("Unpin version" if meta.get("pinned_version") else "Pin version", "pin")]
-        items.append(None)
+            item("Disable" if m.state == ENABLED else ("Enable" if m.state != UNLISTED else "Add to load order and enable"), "toggle", m.present), None,
+            item("Update" + (f" to {row.latest}" if can_update and row.latest else ""), "update", can_update and m.present)]
         if (self.registry.mod(folder) or {}).get("previous"):
             items.append(item("Roll back last update", "rollback", m.present))
-        items.append(item("Remove...", "remove"))
+        if linked:
+            items.append(item("Unpin version" if pinned else "Pin version", "pin"))
+        items.append(None)
+        if linked:
+            items.append(item("Set installed version...", "link", can_link and actions_nexus.link_needs_version_only(row)))
+            items.append(item("Open Nexus page", "open_page", m.present))
+        else:
+            items.append(item("Link to Nexus...", "link", can_link))
+        items += [None, item("Open folder in Explorer" if sys.platform == "win32" else "Open folder", "open_folder", m.present), None,
+                  item("Remove...", "remove")]
         return items
 
     def row_action(self, folder: str, aid: str) -> None:
         if aid == "toggle":
             self.toggle(folder)
-        elif aid in ("up", "down"):
-            self.move(folder, -1 if aid == "up" else 1)
         elif aid == "open_page":
             self.open_page(folder)
         elif aid == "open_folder":
             self.open_folder(folder)
-        elif aid == "mark":
-            self.mark(folder)
-        elif aid == "fav":
-            self.fav(folder)
         elif aid == "pin":
             self.pin(folder)
-        elif aid == "note":
-            self.edit_note(folder)
         elif aid == "rollback":
             self.job("roll back", "install", lambda: self._after_outcome_ui(actions.roll_back(self.ctx(), self.ui, folder)))
         elif aid == "remove":
@@ -682,8 +708,6 @@ class Session:
             self.link(folder)
         elif aid == "update":
             self.update(folder)
-        elif aid == "changelog":
-            self.changelog(folder)
 
     # ================================================================== Nexus flows (workers)
     def link(self, folder: str) -> None:
@@ -876,103 +900,43 @@ class Session:
         ctx, ui = self.ctx(), self.ui
         self.job("restore snapshot", "install", lambda: self._after_outcome_ui(actions_setup.restore_snapshot(ctx, ui, name)))
 
-    def snapshot_prune(self, keep: int) -> None:
-        self._lines(actions_setup.prune_snapshots(keep))
-
-    def bulk_menu(self) -> list[dict]:
-        with self._mlock:
-            n = len(self.model.marked)
-        return [{"label": lab, "id": BULK_IDS[i], "enabled": n > 0}
-                for i, lab in enumerate(actions_setup.bulk_options(n))]
-
-    def bulk(self, action: str) -> None:
+    def bulk(self, action: str, folders: list[str]) -> None:
         if not self.ready():
             return
-        with self._mlock:
-            marked = sorted(self.model.marked)
-        marked = [f for f in marked if self.mod_known(f)]
-        if not marked:
-            self.say("Mark mods first (X, or right-click > Mark for bulk actions). Marked mods show a +.", "yellow")
+        folders = [f for f in dict.fromkeys(folders) if self.mod_known(f)]
+        if not folders:
+            self.say("Select some mods first.", "yellow")
             return
         ctx, ui = self.ctx(), self.ui
         if action in ("enable", "disable"):
-            self._job_lines("bulk", "bulk", lambda: actions_setup.bulk_set_enabled(ctx, marked, action == "enable"))
+            self._job_lines("bulk", "bulk", lambda: actions_setup.bulk_set_enabled(ctx, folders, action == "enable"))
         elif action == "update":
-            self.update_marked(marked)
-        elif action == "tag":
-            def tag() -> None:
-                text = ui.ask_text("Tag the marked mods", "tag names separated by spaces")
-                if text:
-                    self._lines(actions_setup.bulk_tag(ctx, marked, text))
-                    self.ctl.ui(self.refresh_all)
-
-            self.job("tag", "bulk", tag)
-        elif action == "remove":
-            def remove() -> None:
-                body = ", ".join(marked) + "\nTheir folders are moved (not deleted) so you can restore them."
-                if ui.confirm(f"Remove {len(marked)} mod(s)?", body, False):
-                    out = actions_setup.remove_many(ctx, ui, marked)
-                    self.ctl.ui(self.model.marked.difference_update, marked)
-                    self._after_outcome_ui(out)
-
-            self.job("remove marked", "install", remove)
+            self.update_many(folders)
         else:
-            with self._mlock:
-                self.model.marked.clear()
-            self.refresh_all()
+            def remove() -> None:
+                body = ", ".join(folders) + "\nTheir folders are moved (not deleted) so you can restore them."
+                if ui.confirm(f"Remove {len(folders)} mod(s)?", body, False):
+                    self._after_outcome_ui(actions_setup.remove_many(ctx, ui, folders))
 
-    def update_marked(self, marked: list[str]) -> None:
+            self.job("remove selected", "install", remove)
+
+    def update_many(self, folders: list[str]) -> None:
         ctx, ui = self.ctx(), self.ui
         with self._mlock:
             urows = dict(self.model.urows)
-        todo = actions_nexus.update_candidates(urows, marked)
+        todo = actions_nexus.update_candidates(urows, folders)
 
         def work() -> None:
-            if not actions_nexus.is_premium(ctx):
-                if todo:
-                    actions_nexus.free_update_all_help(ctx, ui, urows, todo)
-                else:
-                    self.say("None of the marked mods has an update available.", "yellow")
-            elif not todo:
-                self.say("None of the marked mods has an update available.", "yellow")
+            if not todo:
+                self.say("None of the selected mods has an update available.", "yellow")
+            elif not actions_nexus.is_premium(ctx):
+                actions_nexus.free_update_all_help(ctx, ui, urows, todo)
             else:
                 self._premium_update(ctx, todo)
 
-        self.job("update marked", "install", work)
-
-    def changelog(self, folder: str) -> None:
-        if not self.ready():
-            return
-        reg = self.registry
-
-        def work() -> None:
-            res = actions_nexus.changelog_for(reg, folder)
-            if res.ok:
-                self.ctl.ask(NOTICE, title=f"{folder} changelog", body="\n".join(t for t, _ in res.lines), button="Close", dismissable=True)
-            else:
-                for t, st in res.lines:
-                    self.say(t, st)
-
-        self.job("changelog", "net", work)
+        self.job("update selected", "install", work)
 
     # ================================================================== per-mod flows that ask (workers)
-    def edit_note(self, folder: str) -> None:
-        if not self.ready():
-            return
-        meta = actions.mod_meta(self.registry, folder)
-        cur = " ".join([f"#{t}" for t in meta.get("tags") or []] + ([meta["notes"]] if meta.get("notes") else []))
-
-        def work() -> None:
-            text = self.ctl.ask(TEXT, title=f"Tags and note for {folder}", hint="#ui #hud  free text note (empty = clear)", body="",
-                                allow_blank=True, password=False, value=cur)
-            if text is None:
-                return
-            msg = actions.set_note(self.registry, folder, text)
-            self.ctl.ui(self.emit_row, folder)
-            self.say(msg, "green")
-
-        self.job("note", "note", work)
-
     def remove(self, folder: str) -> None:
         if not self.ready():
             return
@@ -1121,11 +1085,18 @@ class Session:
     # ================================================================== settings page
     def settings_payload(self) -> dict:
         s = self.settings
-        return {"version": __version__, "gui_theme": s.gui_theme if s.gui_theme in GUI_THEMES else "system",
+        return {"version": __version__,
+                "gui_background": self.background_mode(),
                 "check_updates_on_start": s.check_updates_on_start, "update_consent": s.update_consent, "auto_repair": s.auto_repair,
                 "downloads_dir": s.downloads_dir, "downloads_effective": str(self.ctx().downloads_dir()) if self.game_dir else
                 (s.downloads_dir or str(Path.home() / "Downloads")), "nexus": self.nexus_payload(),
                 "log_path": str(log_path()), "config_dir": str(config_dir())}
+
+    def background_mode(self) -> str:
+        mode = self.settings.gui_background
+        if mode not in GUI_BACKGROUNDS:
+            return "default"
+        return mode
 
     def set_setting(self, name: str, value: object) -> str | None:
         """Change one setting the page is allowed to touch. Returns an error text, or None when saved."""

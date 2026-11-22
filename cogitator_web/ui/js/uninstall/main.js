@@ -2,7 +2,7 @@
 import { call } from "../api.js";
 import { h, clear } from "../dom.js";
 import { detectIcons } from "../icons.js";
-import { applyTheme, on } from "../store.js";
+import { on } from "../store.js";
 import { info, initModals, ask, modalOpen } from "../components/modal.js";
 import { button } from "../components/widgets.js";
 import { PAGES } from "./pages.js";
@@ -70,7 +70,6 @@ function onKey(e) {
 
 async function boot() {
   detectIcons();
-  applyTheme("system");
   root = document.getElementById("setup");
   initModals(document.getElementById("modal-root"), root);
   on("ask", (p) => ask(p));

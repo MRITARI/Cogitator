@@ -94,7 +94,7 @@ def test_missing_and_incomplete_frameworks(game, steam):
 
 def test_patch_off_is_a_warning_with_the_remedy(game, steam):
     c = by_id(doctor_run(game, steam, patched=False))
-    assert c["patch_state"].level == WARN and "Press T" in c["patch_state"].fix
+    assert c["patch_state"].level == WARN and "Run: cogitator toggle" in c["patch_state"].fix
     assert c["bak"].level == OK
 
 
@@ -310,7 +310,7 @@ def test_report_shows_fixes_only_for_problems_and_redacts(game, steam):
     checks = doctor_run(game, steam, patched=False)
     checks.append(doctor.Check("x", "leak", WARN, f"token {SECRET} here apikey: {SECRET}", "do a thing"))
     text = format_report(checks)
-    assert "[WARN] Mods patch" in text and "fix: Press T" in text and "[OK]" in text
+    assert "[WARN] Mods patch" in text and "fix: Run: cogitator toggle" in text and "[OK]" in text
     assert text.count("fix:") == sum(1 for c in checks if c.fix and c.level != OK)
     assert text.rstrip().splitlines()[-1].endswith("failure(s).")
 

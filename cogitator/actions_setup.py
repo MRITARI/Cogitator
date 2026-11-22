@@ -1,4 +1,4 @@
-"""Interface-independent flows for setups and housekeeping: profiles, snapshots, bulk actions on marked mods, bisect, crash-log
+"""Interface-independent flows for setups and housekeeping: profiles, snapshots, bulk actions on selected mods, bisect, crash-log
 leads, game-update repair and Cogitator's own update texts. Same contract as `actions`: talk to the person through a `Ui`, run on
 a worker thread, return an `Outcome`. Messages that are only text come back as (text, rich-style) pairs so any interface can show
 them."""
@@ -140,15 +140,7 @@ def prune_snapshots(keep: int) -> Lines:
     return [(f"Removed {snapshots.prune(keep)} old snapshot(s); keeping the newest {keep}.", OK)]
 
 
-# ---------------------------------------------------------------- bulk actions on marked mods
-
-BULK_OPTIONS = ("Enable {n} mod(s)", "Disable {n} mod(s)", "Update them (Premium)", "Add a tag...", "Remove them...", "Clear marks")
-BULK_ENABLE, BULK_DISABLE, BULK_UPDATE, BULK_TAG, BULK_REMOVE, BULK_CLEAR = range(6)
-
-
-def bulk_options(n: int) -> list[str]:
-    return [o.format(n=n) for o in BULK_OPTIONS]
-
+# ---------------------------------------------------------------- bulk actions on selected mods
 
 def bulk_set_enabled(ctx: Ctx, folders: list[str], enable: bool) -> Lines:
     snapshots.auto(ctx.game_dir, "bulk", registry=ctx.registry, once=True)
@@ -162,20 +154,6 @@ def bulk_set_enabled(ctx: Ctx, folders: list[str], enable: bool) -> Lines:
             out.append((str(e), ERR))
     out.append((f"{'Enabled' if enable else 'Disabled'} {done} mod(s).", OK))
     return out
-
-
-def parse_tags(text: str) -> list[str]:
-    return [t.lstrip("#").lower()[:30] for t in (text or "").split() if t.lstrip("#")]
-
-
-def bulk_tag(ctx: Ctx, folders: list[str], text: str) -> Lines:
-    tags = parse_tags(text)
-    if not tags:
-        return []
-    for f in folders:
-        cur = [t for t in (ctx.registry.mod(f) or {}).get("tags") or [] if isinstance(t, str)]
-        ctx.registry.set_mod(f, tags=cur + [t for t in tags if t not in cur])
-    return [(f"Tagged {len(folders)} mod(s): {', '.join(tags)}", OK)]
 
 
 def remove_many(ctx: Ctx, ui: Ui, folders: list[str]) -> Outcome:

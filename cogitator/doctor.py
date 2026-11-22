@@ -85,7 +85,7 @@ def _fw(game: Path, kind: str, reg: Registry) -> Check:
     if st.status == "incomplete":
         return Check(f"fw_{kind}", name, FAIL, f"incomplete - missing {', '.join(st.missing)}",
                      "Reinstall it: cogitator install-framework --zip <Nexus zip>.")
-    return Check(f"fw_{kind}", name, FAIL, "not installed", "cogitator install-framework --zip <Nexus zip> (or press I in the TUI).")
+    return Check(f"fw_{kind}", name, FAIL, "not installed", "cogitator install-framework --zip <Nexus zip>.")
 
 
 def _patch(game: Path, reg: Registry) -> list[Check]:
@@ -105,7 +105,7 @@ def _patch(game: Path, reg: Registry) -> list[Check]:
         out.append(Check("patch_state", "Mods patch", OK, "ON (bundle_database.data contains the patch_999 entry)"))
     elif st == OFF:
         out.append(Check("patch_state", "Mods patch", WARN, "OFF - a game update or file verification removed the patch, or it was never applied",
-                         "Press T in the TUI or run: cogitator toggle"))
+                         "Run: cogitator toggle"))
     else:
         out.append(Check("patch_state", "Mods patch", WARN, "UNKNOWN - bundle_database.data is missing or unreadable",
                          "Verify game files in Steam (Properties > Installed Files)."))
@@ -240,7 +240,7 @@ def _nexus(offline: bool, key: str | None, client: httpx.Client | None) -> Check
     if offline:
         return Check("nexus", "Nexus API key", OK, "skipped (--offline)")
     if not key:
-        return Check("nexus", "Nexus API key", WARN, "no key set - update checks are disabled", "cogitator set-key (or press K in the TUI).")
+        return Check("nexus", "Nexus API key", WARN, "no key set - update checks are disabled", "cogitator set-key.")
     try:
         with NexusClient(key, client=client) as nx:
             who = nx.validate()

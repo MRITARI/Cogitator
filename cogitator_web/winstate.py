@@ -1,5 +1,5 @@
 """Window size and position, kept in `web_window.json` next to config.toml. config.toml is not used: `Settings.save()` writes only
-its own fields, so an extra key there would be dropped (and its format is shared with the CLI and TUI, which stay untouched)."""
+its own fields, so an extra key there would be dropped (and its format is shared with the CLI)."""
 from __future__ import annotations
 
 import json

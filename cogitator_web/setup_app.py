@@ -1,7 +1,6 @@
-"""Entry point of the web-style setup wizard: same flags, platform gate and error handling as the tkinter `cogitator_setup.app.main`.
+"""Entry point of the setup wizard window: flags, platform gate and error handling.
 
-The tkinter wizard stays the default. `--self-check` and a missing WebView2 / pywebview hand over to the tkinter `main` with the same
-argv. Uninstall and maintenance open the web uninstall window; Maintenance > Repair relaunches this program with the web-only
+Uninstall and maintenance open the uninstall window; Maintenance > Repair relaunches this program with the
 `--repair` flag (pywebview cannot reliably start twice in one process), which opens the wizard in repair mode."""
 from __future__ import annotations
 
@@ -12,9 +11,9 @@ from typing import Callable
 
 from cogitator.config import log_path, redact
 from cogitator_setup import platform_gate
-from cogitator_setup.app import TITLE, USAGE, choose_mode, parse_flags, setup_services, uninstall_services
+from cogitator_setup.entry_support import TITLE, USAGE, choose_mode, parse_flags, setup_services, uninstall_services
 
-from .app import BACKGROUND, UI_DIR, notify, webview2_available
+from .app import BACKGROUND, UI_DIR, WEBVIEW2_MISSING, notify, webview2_available
 from . import winicon
 from .bridge import Bridge
 from .setup_session import SetupApi, WizardSession
@@ -24,30 +23,20 @@ SIZE = (720, 560)
 _DETECT = object()
 
 
-def _classic(argv: list[str]) -> int:
-    from cogitator_setup.app import main as tk_main
-
-    return tk_main(argv)
-
-
-def _need_webview(what: str, webview2_check: Callable[[], bool]):
-    """The `webview` module, or None after telling the user why the classic window opens instead."""
+def _need_webview(webview2_check: Callable[[], bool]):
+    """The `webview` module, or None after telling the user that WebView2 is required."""
     if not webview2_check():
-        notify(f"The Microsoft Edge WebView2 runtime is not installed, so the web-style {what} cannot open.\n\nOpening the classic {what} window instead.")
+        notify(WEBVIEW2_MISSING)
         return None
-    try:
-        import webview
-    except ImportError:
-        notify(f"The 'pywebview' package is not installed, so the web-style {what} cannot open.\n\nOpening the classic {what} window instead.")
-        return None
+    import webview
+
     return webview
 
 
-def run_web_setup(argv: list[str], flags, *, webview2_check: Callable[[], bool] = webview2_available,
-                  fallback: Callable[[list[str]], int] = _classic) -> int:
-    webview = _need_webview("setup", webview2_check)
+def run_web_setup(argv: list[str], flags, *, webview2_check: Callable[[], bool] = webview2_available) -> int:
+    webview = _need_webview(webview2_check)
     if webview is None:
-        return fallback(argv)
+        return 4
     repair = bool(getattr(flags, "repair", False))
     bridge = Bridge()
     session = WizardSession(bridge, services=setup_services(flags.game_dir), dry_run=flags.dry_run,
@@ -105,10 +94,10 @@ def after_uninstall_window(action: str | None, flags, *, relauncher: Callable[[l
 
 
 def run_web_uninstall(argv: list[str], flags, start: str, *, webview2_check: Callable[[], bool] = webview2_available,
-                      fallback: Callable[[list[str]], int] = _classic, relauncher: Callable[[list[str]], None] = _spawn_detached) -> int:
-    webview = _need_webview("uninstaller", webview2_check)
+                      relauncher: Callable[[list[str]], None] = _spawn_detached) -> int:
+    webview = _need_webview(webview2_check)
     if webview is None:
-        return fallback(argv)
+        return 4
     bridge = Bridge()
     session = UninstallSession(bridge, services=uninstall_services(flags.game_dir), dry_run=flags.dry_run, start=start)
     holder: dict = {"window": None}
@@ -137,7 +126,7 @@ def main(argv: list[str] | None = None, *, build=_DETECT, show_error: Callable[[
          installed: bool | None = None, runner: Callable[..., int] = run_web_setup,
          uninstall_runner: Callable[..., int] = run_web_uninstall, silent_fn: Callable[..., int] | None = None) -> int:
     argv = list(sys.argv[1:] if argv is None else argv)
-    repair = "--repair" in argv  # web-only: not known to the tkinter parser
+    repair = "--repair" in argv  # not a flag of parse_flags
     argv = [a for a in argv if a != "--repair"]
     flags = parse_flags(argv)
     flags.repair = repair
@@ -151,7 +140,7 @@ def main(argv: list[str] | None = None, *, build=_DETECT, show_error: Callable[[
 
         setup_logging()
         return run_setup(parse_expect(argv))
-    from cogitator_setup.app import _default_show_error
+    from cogitator_setup.entry_support import _default_show_error
 
     err = show_error or _default_show_error
     b = platform_gate.windows_build() if build is _DETECT else build
@@ -167,7 +156,7 @@ def main(argv: list[str] | None = None, *, build=_DETECT, show_error: Callable[[
         err(TITLE, str(e))
         return 2
     try:
-        from cogitator_setup.app import _repair_app_folder
+        from cogitator_setup.entry_support import _repair_app_folder
         from cogitator_setup.uninstall_vm import detect
 
         _repair_app_folder()
@@ -179,7 +168,7 @@ def main(argv: list[str] | None = None, *, build=_DETECT, show_error: Callable[[
         if mode == "setup":
             return runner(argv, flags)
         if mode == "silent-uninstall":
-            from cogitator_setup.uninstall_app import run_silent
+            from cogitator_setup.silent import run_silent
 
             return (silent_fn or run_silent)(uninstall_services(flags.game_dir))
         return uninstall_runner(argv, flags, mode)  # "uninstall" | "maintenance"
@@ -190,10 +179,7 @@ def main(argv: list[str] | None = None, *, build=_DETECT, show_error: Callable[[
 
 
 def entry(argv: list[str] | None = None) -> int:
-    """Program entry (Cogitator Setup.exe, cogitator-setup): `--classic` forces the tkinter setup; it is stripped before parsing."""
-    argv = list(sys.argv[1:] if argv is None else argv)
-    if "--classic" in argv:
-        return _classic([a for a in argv if a != "--classic"])
+    """Program entry (Cogitator Setup.exe, cogitator-setup)."""
     return main(argv)
 
 

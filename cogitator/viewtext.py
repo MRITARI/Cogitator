@@ -1,7 +1,6 @@
-"""Display text shared by every interface (terminal and graphical): constants and plain (text, style) pieces.
+"""Display text for the window: constants and plain (text, style) pieces.
 
-No rich, textual or tkinter in here. A "style" is a rich-style string such as "bold green"; the terminal UI hands it to rich
-and the graphical UI maps it to a text tag. Keeping the wording in one place means both show the same thing."""
+No window toolkit in here. A "style" is a style name such as "bold green" that the window maps to a colour."""
 from __future__ import annotations
 
 import time
@@ -31,7 +30,6 @@ NOTICE_BODY = (
 EMPTY_STATE = ("No mods installed yet. Download mods from nexusmods.com/warhammer40kdarktide, then press I to import the "
                "zip (or drop it onto this window). Press ? for help.")
 BASELINE_UNKNOWN_LABEL = "version unknown - press L to set it"
-SORT_COLUMNS = ("mod", "status", "installed", "latest", "en")
 
 STATUS_STYLE = {UP_TO_DATE: "green", UPDATE: "bold yellow", UNKNOWN: "dim", FAILED: "bold red", NOT_LINKED: "dim",
                 PROBABLY_UP_TO_DATE: "green", PROBABLY_OUTDATED: "bold yellow", "pinned": "cyan"}
@@ -67,8 +65,24 @@ def status_label(row: ModRow | None, arrow: str, mod: Mod | None = None, gui: bo
     return label, STATUS_STYLE.get(row.status, "")
 
 
-GUI_EMPTY_STATE = ("No mods installed yet. Download mods from nexusmods.com/warhammer40kdarktide, then use File > Import zip(s) "
-                   "(or Ctrl+I). Press F1 for help.")
+def status_kind(row: ModRow | None, mod: Mod | None = None) -> str:
+    """Coarse status class for the window: ok | update | unlinked | error | other (the page quiets "ok", badges the rest)."""
+    if mod is not None and not mod.present:
+        return "error"
+    if row is None or row.status == NOT_LINKED:
+        return "unlinked"
+    if row.status in (UPDATE, PROBABLY_OUTDATED):
+        return "update"
+    if row.status == FAILED:
+        return "error"
+    if row.status in (UP_TO_DATE, PROBABLY_UP_TO_DATE):
+        return "ok"
+    return "other"
+
+
+GUI_EMPTY_STATE = ("No mods installed yet. Download mods from nexusmods.com/warhammer40kdarktide, then press Import zip (Ctrl+I). "
+                   "Press F1 for help.")
+GUI_SELECT_TIP = "Select a mod to see its details. Right-click a mod for more actions."
 GUI_BASELINE_UNKNOWN_LABEL = "version unknown - right-click > Link to Nexus to set it"
 
 

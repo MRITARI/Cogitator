@@ -19,7 +19,6 @@ from .session import BULK_IDS, ROW_ACTIONS, Session, valid_folder_name
 
 log = logging.getLogger("cogitator.web")
 
-SORTABLE = ("mod", "status", "installed", "latest", "en")
 KEY_MAX = 200
 
 
@@ -85,16 +84,6 @@ class Api:
         self._s.set_filter(self._text(text, 200, "The filter"))
 
     @_call
-    def set_sort(self, col):
-        if col is not None and col not in SORTABLE:
-            raise _Reject("Unknown column.")
-        self._s.set_sort(col)
-
-    @_call
-    def cycle_sort(self):
-        self._s.cycle_sort()
-
-    @_call
     def row_menu(self, folder):
         return {"ok": True, "items": self._s.row_menu(self._mod(folder))}
 
@@ -102,7 +91,22 @@ class Api:
     def row_action(self, folder, action):
         if not isinstance(action, str) or action not in ROW_ACTIONS:
             raise _Reject("Unknown action.")
-        self._s.row_action(self._mod(folder, present=action in ("toggle", "up", "down", "open_folder", "link", "update")), action)
+        self._s.row_action(self._mod(folder, present=action in ("toggle", "open_folder", "link", "update")), action)
+
+    @_call
+    def mod_details(self, folder):
+        """Open the details panel for a mod: local info is already in the row; Nexus data arrives later as a "details" push."""
+        self._s.request_details(self._mod(folder))
+        return {"ok": True, "started": True}
+
+    @_call
+    def mod_versions(self, folder):
+        self._s.request_versions(self._mod(folder))
+        return {"ok": True, "started": True}
+
+    @_call
+    def open_nexus_page(self, folder):
+        self._s.open_nexus_page(self._mod(folder))
 
     @_call
     def toggle(self, folder):
@@ -119,18 +123,6 @@ class Api:
         if not isinstance(after, bool):
             raise _Reject("after must be true or false.")
         self._s.move_to(self._mod(folder, present=True), self._mod(target, present=True), after)
-
-    @_call
-    def mark(self, folder):
-        self._s.mark(self._mod(folder))
-
-    @_call
-    def fav(self, folder):
-        self._s.fav(self._mod(folder))
-
-    @_call
-    def edit_note(self, folder):
-        self._s.edit_note(self._mod(folder))
 
     # ---- profiles, snapshots, bulk
     def _profile(self, name: object) -> str:
@@ -186,20 +178,12 @@ class Api:
         self._s.snapshot_restore(name)
 
     @_call
-    def snapshot_prune(self, keep):
-        if not isinstance(keep, int) or isinstance(keep, bool) or not 1 <= keep <= 1000:
-            raise _Reject("Keep must be a whole number from 1 to 1000.")
-        self._s.snapshot_prune(keep)
-
-    @_call
-    def bulk_menu(self):
-        return {"ok": True, "items": self._s.bulk_menu()}
-
-    @_call
-    def bulk(self, action):
+    def bulk(self, action, folders):
         if not isinstance(action, str) or action not in BULK_IDS:
             raise _Reject("Unknown action.")
-        self._s.bulk(action)
+        if not isinstance(folders, list) or not folders or len(folders) > 500:
+            raise _Reject("Choose between 1 and 500 mods.")
+        self._s.bulk(action, [self._mod(f) for f in folders])
 
     # ---- global actions
     @_call

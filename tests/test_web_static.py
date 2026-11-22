@@ -22,8 +22,20 @@ def test_there_are_assets():
 
 def test_no_binary_assets():
     binary = (".png", ".jpg", ".jpeg", ".gif", ".svg", ".ico", ".woff", ".woff2", ".ttf", ".otf")
-    assert [rel(p) for p in ASSETS if p.suffix.lower() in binary] == ["img/logo.png"]
+    assert sorted(rel(p) for p in ASSETS if p.suffix.lower() in binary) == ["img/cogitator-bg.svg", "img/logo.png"]
     assert (UI / "img" / "logo.png").stat().st_size < 60 * 1024
+    assert (UI / "img" / "cogitator-bg.svg").stat().st_size < 60 * 1024
+
+
+def test_background_svg_is_inert():
+    svg = (UI / "img" / "cogitator-bg.svg").read_text(encoding="utf-8")
+    low = svg.lower()
+    assert "<script" not in low and "<foreignobject" not in low and "<image" not in low and "<use" not in low
+    assert not re.search(r"on\w+\s*=", low), "event handler attribute"
+    assert not re.search(r"(xlink:)?href\s*=", low)
+    assert not re.search(r"url\(\s*[\"']?(?!#)", low), "url() may only point at in-file ids"
+    assert not re.search(r"(?:https?:)?//", svg.replace('xmlns="http://www.w3.org/2000/svg"', "")), "external URL"
+    assert "@import" not in low and "javascript:" not in low
 
 
 def test_local_image_references_exist():
@@ -84,8 +96,9 @@ def test_local_references_exist():
         for ref in re.findall(r"""(?:from|import)\s*["']([^"']+)["']""", p.read_text(encoding="utf-8")):
             assert ref.startswith("./") or ref.startswith("../"), f"{rel(p)} imports {ref}"
             assert (p.parent / ref).resolve().is_file(), f"{rel(p)} imports missing {ref}"
-    for p in (UI / "app.css", UI / "theme.css"):
-        assert "url(" not in p.read_text(encoding="utf-8")
+    assert "url(" not in (UI / "theme.css").read_text(encoding="utf-8")
+    refs = re.findall(r"url\(([^)]*)\)", (UI / "app.css").read_text(encoding="utf-8"))
+    assert refs == ['"img/cogitator-bg.svg"'], refs  # the one local background; no other, no remote, no data: in the stylesheet
 
 
 def test_every_js_module_is_reachable_from_main():
@@ -110,9 +123,7 @@ def _block(css: str, selector: str) -> dict[str, str]:
 def _themes():
     css = (UI / "theme.css").read_text(encoding="utf-8")
     dark = _block(css, ":root")
-    light = _block(css, ':root[data-theme="light"]')
-    system_light = _block(css, ":root:not([data-theme])")
-    return css, dark, light, system_light
+    return css, dark
 
 
 def _lum(h: str) -> float:
@@ -131,43 +142,177 @@ SURFACES = ("bg", "sidebar", "card", "tile", "secondary", "input")
 
 
 def test_the_spec_colours_are_there():
-    _, d, _, _ = _themes()
+    _, d = _themes()
     for k, v in {"bg": "#0a0a0a", "card": "#171717", "tile": "#1e1e1e", "input": "#282828", "secondary": "#262626", "border": "#2f2f2f",
                  "primary": "#e5e5e5", "fg": "#fafafa", "muted": "#a3a3a3", "destructive": "#ef4444", "ok": "#4ade80", "attention": "#fbbf24",
-                 "neutral": "#71717a", "ring": "#a3a3a3"}.items():
+                 "neutral": "#71717a", "accent": "#b8892e"}.items():
         assert d[k].lower() == v, k
-    assert (d["radius-pill"], d["radius-card"], d["radius-tile"]) == ("999px", "24px", "16px")
+    assert (d["radius-pill"], d["radius-card"], d["radius-tile"], d["radius-menu"]) == ("0", "0", "0", "0")  # square, industrial
 
 
-@pytest.mark.parametrize("which", ["dark", "light"])
-def test_text_contrast_on_every_surface(which):
-    _, dark, light, _ = _themes()
-    t = dark if which == "dark" else light
+def test_text_contrast_on_every_surface():
+    _, t = _themes()
+    which = "dark"
     for fg in TEXT_COLOURS:
         for bg in SURFACES:
             assert ratio(t[fg], t[bg]) >= 4.5, f"{which}: {fg} {t[fg]} on {bg} {t[bg]} = {ratio(t[fg], t[bg]):.2f}"
     assert ratio(t["primary-fg"], t["primary"]) >= 4.5  # the primary button
+    assert ratio(t["accent-fg"], t["accent"]) >= 4.5  # the accent (Launch) button
+    for bg in SURFACES:
+        assert ratio(t["ring"], t[bg]) >= 3, f"{which}: focus ring on {bg}"
     assert ratio(t["knob-on"], t["primary"]) >= 3  # switch knob on its track (not text)
-
-
-def test_light_variants_are_identical_and_complete():
-    _, dark, light, system_light = _themes()
-    assert {k: v for k, v in light.items() if k != "color-scheme"} == {k: v for k, v in system_light.items() if k != "color-scheme"}
-    colour_keys = {k for k, v in dark.items() if v.startswith("#") or v.startswith("rgba")}
-    assert colour_keys <= set(light), colour_keys - set(light)
+    for bg in SURFACES:
+        assert ratio(t["accent"], t[bg]) >= 3, f"{which}: switch ON track on {bg}"
+        assert ratio(t["control-line"], t[bg]) >= 3, f"{which}: switch OFF outline on {bg}"
+        assert ratio(t["muted"], t[bg]) >= 3, f"{which}: switch OFF knob on {bg}"
+    assert ratio(t["accent-fg"], t["accent"]) >= 3  # switch ON knob on its track
 
 
 def test_css_uses_only_defined_variables():
-    css, dark, _, _ = _themes()
+    css, dark = _themes()
     app = (UI / "app.css").read_text(encoding="utf-8") + (UI / "setup.css").read_text(encoding="utf-8") + (UI / "uninstall.css").read_text(encoding="utf-8")
     used = set(re.findall(r"var\(--([\w-]+)", app))
     assert used <= set(dark), used - set(dark)
-    assert "prefers-reduced-motion" in app and "prefers-color-scheme" in css
+    assert "prefers-reduced-motion" in app and "prefers-color-scheme" not in css and "light" not in css.lower().replace("highlight", "")
 
 
 def test_accessibility_hooks_are_in_the_scripts():
     js = {rel(p): p.read_text(encoding="utf-8") for p in JS}
     assert 'role: "switch"' in js["js/components/widgets.js"] and "aria-checked" in js["js/components/widgets.js"]
     assert "aria-current" in js["js/components/shell.js"]
-    assert 'aria-label": "Mods"' in js["js/pages/mods.js"] and 'scope: "col"' in js["js/pages/mods.js"] and "aria-sort" in js["js/pages/mods.js"]
+    assert 'aria-label": "Mods"' in js["js/pages/mods.js"] and 'scope: "col"' in js["js/pages/mods.js"]
     assert 'role: "dialog"' in js["js/components/modal.js"] and "Escape" in js["js/components/modal.js"]
+
+
+def test_filter_chips_are_pressable_buttons():
+    js = (UI / "js" / "pages" / "mods.js").read_text(encoding="utf-8")
+    assert "aria-pressed" in js and all(w in js for w in ('"Updates"', '"Not linked"', '"Enabled"'))
+
+
+def test_toasts_are_a_polite_live_region_and_wired():
+    toast = (UI / "js" / "components" / "toast.js").read_text(encoding="utf-8")
+    assert '"aria-live": "polite"' in toast and "4000" in toast
+    main = (UI / "js" / "main.js").read_text(encoding="utf-8")
+    assert "components/toast.js" in main and 'on("log"' in main
+    shell = (UI / "js" / "components" / "shell.js").read_text(encoding="utf-8")
+    assert "let collapsed = true" in shell and "dot-bad" in shell
+
+
+def _rgba(v: str):
+    nums = [float(x) for x in re.findall(r"[\d.]+", v)]
+    return nums if v.startswith("rgba") else [*[int(v[i:i + 2], 16) for i in (1, 3, 5)], 1.0]
+
+
+def _over(top, under):
+    r, g, b, a = top
+    return "#" + "".join(f"{round(c * a + u * (1 - a)):02x}" for c, u in zip((r, g, b), under))
+
+
+def test_no_rounded_corners_anywhere():
+    for name in ("app.css", "setup.css", "uninstall.css"):
+        css = (UI / name).read_text(encoding="utf-8")
+        for v in re.findall(r"border-radius:\s*([^;}]+)", css):
+            assert v.strip() in ("0", "var(--radius-pill)", "var(--radius-card)", "var(--radius-tile)", "var(--radius-menu)", "var(--radius-round)"), f"{name}: {v}"
+    assert "border-radius" not in "".join(p.read_text(encoding="utf-8") for p in JS) and "borderRadius" not in "".join(p.read_text(encoding="utf-8") for p in JS)
+
+
+def test_glass_surfaces_are_blurred_and_have_hairlines():
+    css = (UI / "app.css").read_text(encoding="utf-8")
+    assert "backdrop-filter: blur(8px)" in css and "tr { backdrop" not in css and "tbody tr" not in re.findall(r"[^{}]*backdrop-filter[^{}]*", css)[0]
+    for sel in (".table-wrap {", ".s-group {", ".details {", ".banner {"):
+        assert re.search(re.escape(sel) + r"[^}]*border: 1px solid", css), sel
+
+
+def test_background_is_wired():
+    js = {rel(p): p.read_text(encoding="utf-8") for p in JS}
+    assert "dataset.bg" in js["js/background.js"] and "get_background" not in js["js/background.js"]
+    assert "applyBackground" in js["js/main.js"] and "pick_background" not in js["js/pages/settings.js"] and "applyTheme" not in js["js/main.js"]
+    html = (UI / "index.html").read_text(encoding="utf-8")
+    assert 'id="bg"' in html
+    css = (UI / "app.css").read_text(encoding="utf-8")
+    assert 'img/cogitator-bg.svg' in css and "blur(" in css and "--bg-shade" not in css and "data-bg=\"custom\"" not in css
+
+
+def test_details_panel_is_accessible_and_text_only():
+    js = (UI / "js" / "components" / "details.js").read_text(encoding="utf-8")
+    assert 'role: "complementary"' in js and 'aria-label": "Close details"' in js and "Escape" in js
+    assert "innerHTML" not in js and "text: data.description" in js and "text: data.summary" in js  # author text only via textContent
+    assert "mod_details" in js and "mod_versions" in js and "open_nexus_page" in js
+    mods = (UI / "js" / "pages" / "mods.js").read_text(encoding="utf-8")
+    assert "createDetails" in mods and "ArrowRight" in mods and "closePanel" in mods
+    css = (UI / "app.css").read_text(encoding="utf-8")
+    assert "max-width: 1100px" in css and ".details" in css and "width: 420px" in css
+
+
+SELECTABLE = {"input", "textarea", "select", ".drawer-body", ".modal .body", ".d-text", ".pick"}
+
+
+def test_text_selection_is_off_except_where_listed():
+    css = (UI / "app.css").read_text(encoding="utf-8")
+    rules = re.findall(r"([^{}]+)\{([^{}]*)\}", re.sub(r"/\*.*?\*/", "", css, flags=re.S))
+    body = [d for sel, d in rules if sel.strip() == "body"]
+    assert body and "user-select: none" in body[0] and "-webkit-user-select: none" in body[0]
+    assert any(sel.strip() == "img" and "-webkit-user-drag: none" in d for sel, d in rules)
+    enabled = set()
+    for sel, decl in rules:
+        if re.search(r"user-select:\s*(text|auto|all)", decl):
+            enabled |= {s.strip() for s in sel.split(",")}
+    assert enabled == SELECTABLE
+
+
+def test_selection_hooks_and_no_row_selection():
+    mods = (UI / "js" / "pages" / "mods.js").read_text(encoding="utf-8")
+    assert 'aria-multiselectable": "true"' in mods
+    assert '"aria-selected"' in mods
+    assert "draggable" in mods and "grip" in mods
+    for gone in ('call("bulk_menu")', 'call("mark"', "Bulk"):
+        assert gone not in mods
+
+
+def test_switch_shape():
+    css = (UI / "app.css").read_text(encoding="utf-8")
+    assert re.search(r"\.switch \{[^}]*width: 40px; height: 28px", css)
+    assert re.search(r"\.switch::before \{[^}]*width: 32px; height: 16px", css)
+    assert re.search(r"\.switch::after \{[^}]*width: 10px; height: 10px", css)
+    assert re.search(r'\.switch\[aria-checked="true"\]::after \{[^}]*translateX\(16px\)', css)
+
+
+def test_grip_gutter():
+    css = (UI / "app.css").read_text(encoding="utf-8")
+    assert re.search(r"\.mods \.en \{[^}]*gap: 10px", css)
+    assert re.search(r"\.mods \.grip \{[^}]*width: 16px", css)
+    assert re.search(r"\.mods td:first-child \{ padding-left: var\(--sp-2\)", css)  # right of the 3px selected marker, on every row
+
+
+def test_filter_chip_states():
+    css = (UI / "app.css").read_text(encoding="utf-8")
+    assert re.search(r'\.fchip\[aria-pressed="true"\] \{[^}]*color: var\(--fg\);[^}]*inset 0 -2px 0 var\(--accent\)', css)
+    _, t = _themes()
+    for bg in ("secondary", "tile"):
+        assert ratio(t["fg"], t[bg]) >= 4.5 and ratio(t["muted"], t[bg]) >= 4.5
+
+
+def _js(*parts):
+    return (UI / "js" / Path(*parts)).read_text(encoding="utf-8")
+
+
+def test_removed_controls_are_gone():
+    mods, shell, main, tools = _js("pages", "mods.js"), _js("components", "shell.js"), _js("main.js"), _js("pages", "tools.js")
+    assert "Favourites" not in mods and "Favourite" not in mods and "Bulk" not in mods
+    assert 'label: "Nexus"' not in mods and "moreBtn" not in mods and "Move up" not in mods and "Move down" not in mods
+    assert "badges" not in mods and 'class: "chip"' not in mods and 'class: "chip on"' not in mods and "#${" not in mods
+    assert '"Snapshots"' not in shell and "snapshots" not in main and not (UI / "js" / "pages" / "snapshots.js").exists()
+    assert "Prune" not in tools and "subtitle" not in main and "subtitle" not in shell
+    for name in ("Restore...", "Take snapshot", "Link mods to Nexus", "Update Mod Loader / Framework"):
+        assert name in tools
+    for col in ('"Installed"', '"Latest"'):
+        assert col not in mods
+    assert "Version" in mods and "Update all" in mods
+
+
+def test_reordering_is_guarded_while_the_list_is_filtered():
+    mods, main = _js("pages", "mods.js"), _js("main.js")
+    assert "Clear the filter to change the load order" in mods
+    assert re.search(r'canReorder = \(\) => !state\.filter && activeChip === "all"', mods)
+    assert "!canReorder()" in mods and "e.grip.hidden = !canReorder()" in mods
+    assert "hourly" in main and "left" in main

@@ -1,7 +1,7 @@
 """`cogitator --self-check`: proves an installed/frozen build has everything it needs (no game, no network, no secrets).
 
-Used to verify pipx installs and PyInstaller builds, where dynamic imports (Textual widgets, Rich unicode tables,
-keyring backends) and the TLS certificate bundle are the usual things that go missing.
+Used to verify pipx installs and PyInstaller builds, where dynamic imports (pywebview, keyring
+backends) and the TLS certificate bundle are the usual things that go missing.
 """
 from __future__ import annotations
 
@@ -41,20 +41,6 @@ def run() -> int:
         assert re.fullmatch(r"Cogitator/\S+ \(Windows; Python \d+\.\d+\)", h["User-Agent"]), h["User-Agent"]
         return f"Cogitator {__version__}"
 
-    def tui():
-        app = importlib.import_module("cogitator.tui.app")
-        importlib.import_module("cogitator.tui.screens")
-        widgets = importlib.import_module("textual.widgets")
-        for name in ("DataTable", "Footer", "RichLog", "Static", "Input", "OptionList", "Button"):
-            getattr(widgets, name)  # Textual resolves these lazily; a bad freeze fails here
-        app.CogitatorApp(game_dir=None, check_updates=False)
-        return "widgets and App construct"
-
-    def rich_unicode():
-        from rich.cells import cell_len
-
-        return f"cell_len(U+2713)={cell_len(chr(0x2713))}"  # ASCII only: consoles may be cp1252
-
     def tls():
         import httpx
 
@@ -75,19 +61,12 @@ def run() -> int:
         get = getattr(keyring, "get_keyring", None)
         return f"backend {type(get()).__name__}" if get else "keyring module present"
 
-    def gui():
-        """The window opens by default, so a build without it silently falls back to the terminal UI: fail the build instead."""
-        import importlib.resources as res
+    def web():
+        import webview  # noqa: F401
 
-        importlib.import_module("cogitator_gui.app")
-        import sv_ttk
+        return "pywebview present"
 
-        theme_dir = res.files("sv_ttk")
-        for name in ("sv.tcl", "theme/light.tcl", "theme/dark.tcl", "theme/spritesheet_light.png", "theme/spritesheet_dark.png"):
-            assert (theme_dir / name).is_file(), f"sv_ttk data file missing: {name}"
-        return f"GUI modules and sv_ttk theme files ({sv_ttk.__name__})"
-
-    for label, fn in (("core modules", core), ("GUI", gui), ("TUI", tui), ("rich unicode tables", rich_unicode), ("TLS", tls), ("Nexus identity", nexus_identity),
+    for label, fn in (("core modules", core), ("pywebview", web), ("TLS", tls), ("Nexus identity", nexus_identity),
                       ("VDF parser", vdf), ("keyring", keyring_backend)):
         step(label, fn)
     print(f"python {sys.version.split()[0]}, frozen={getattr(sys, 'frozen', False)}")

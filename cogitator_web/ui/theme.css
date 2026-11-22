@@ -1,6 +1,4 @@
-/* Design tokens. Dark is the default; the light set applies when Windows prefers light (and no theme is forced in Settings)
-   or when Settings forces it. The two light blocks below must stay identical (tests/test_web_static.py checks it).
-   Dark values marked "measured" were sampled from the reference; the rest are estimates tuned for 4.5:1 text contrast. */
+/* Design tokens (dark only). Values marked "measured" were sampled from the reference; the rest are estimates tuned for 4.5:1 text contrast. */
 :root {
   --bg: #0a0a0a;          /* page (measured) */
   --sidebar: #0a0a0a;     /* same as the page */
@@ -14,6 +12,7 @@
   --muted: #a3a3a3;
   --primary: #e5e5e5;     /* primary button, switch track on (measured) */
   --primary-fg: #0a0a0a;
+  --control-line: #8a8a8a; /* switch outline when off: >= 3:1 on every surface (--border is a hairline, too faint) */
   --knob: #d4d4d4;
   --knob-on: #0a0a0a;
   --destructive: #ef4444; /* fills and dots */
@@ -23,13 +22,23 @@
   --ok-text: #4ade80;
   --attention-text: #fbbf24;
   --neutral: #71717a;
-  --ring: #a3a3a3;
+  --accent: #b8892e;      /* brass: primary button, selected-row marker, focus ring */
+  --accent-fg: #0a0a0a;
+  --ring: #b8892e;
   --scrim: rgba(0, 0, 0, 0.6);
+  /* translucent surfaces, used only while the default background image is shown */
+  --sidebar-glass: rgba(10, 10, 10, 0.48);
+  --card-glass: rgba(23, 23, 23, 0.54);
+  --menu-glass: rgba(23, 23, 23, 0.66);
+  --tile-glass: rgba(30, 30, 30, 0.50);
+  --secondary-glass: rgba(38, 38, 38, 0.56);
+  --input-glass: rgba(40, 40, 40, 0.56);
 
-  --radius-pill: 999px;
-  --radius-card: 24px;
-  --radius-tile: 16px;
-  --radius-menu: 16px;
+  --radius-pill: 0;
+  --radius-card: 0;
+  --radius-tile: 0;
+  --radius-menu: 0;
+  --radius-round: 999px;  /* switches only; everything else stays square */
   --sp-1: 4px;
   --sp-2: 8px;
   --sp-3: 12px;
@@ -37,71 +46,11 @@
   --sp-5: 20px;
   --sp-6: 24px;
   --page-pad: 24px;
-  --row-h: 44px;
+  --row-h: 40px;
   --t-fast: 120ms;
   --t-med: 150ms;
   --font: "Geist", "Inter", "Segoe UI Variable", "Segoe UI", system-ui, sans-serif;
   --mono: "Cascadia Mono", Consolas, monospace;
   --icons: "Segoe Fluent Icons", "Segoe MDL2 Assets";
-  color-scheme: dark;
-}
-
-@media (prefers-color-scheme: light) {
-  :root:not([data-theme]) {
-    --bg: #ffffff;
-    --sidebar: #ffffff;
-    --card: #f5f5f5;
-    --tile: #ececec;
-    --input: #ededed;
-    --secondary: #e5e5e5;
-    --border: #e0e0e0;
-    --divider: rgba(0, 0, 0, 0.07);
-    --fg: #0a0a0a;
-    --muted: #626262;
-    --primary: #171717;
-    --primary-fg: #fafafa;
-    --knob: #8a8a8a;
-    --knob-on: #fafafa;
-    --destructive: #b91c1c;
-    --ok: #15803d;
-    --attention: #a14a07;
-    --destructive-text: #b91c1c;
-    --ok-text: #166534;
-    --attention-text: #8f4106;
-    --neutral: #a3a3a3;
-    --ring: #626262;
-    --scrim: rgba(0, 0, 0, 0.4);
-    color-scheme: light;
-  }
-}
-
-:root[data-theme="light"] {
-  --bg: #ffffff;
-  --sidebar: #ffffff;
-  --card: #f5f5f5;
-  --tile: #ececec;
-  --input: #ededed;
-  --secondary: #e5e5e5;
-  --border: #e0e0e0;
-  --divider: rgba(0, 0, 0, 0.07);
-  --fg: #0a0a0a;
-  --muted: #626262;
-  --primary: #171717;
-  --primary-fg: #fafafa;
-  --knob: #8a8a8a;
-  --knob-on: #fafafa;
-  --destructive: #b91c1c;
-  --ok: #15803d;
-  --attention: #a14a07;
-  --destructive-text: #b91c1c;
-  --ok-text: #166534;
-  --attention-text: #8f4106;
-  --neutral: #a3a3a3;
-  --ring: #626262;
-  --scrim: rgba(0, 0, 0, 0.4);
-  color-scheme: light;
-}
-
-:root[data-theme="dark"] {
   color-scheme: dark;
 }

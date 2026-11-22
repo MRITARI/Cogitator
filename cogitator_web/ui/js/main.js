@@ -3,17 +3,18 @@ import { call } from "./api.js";
 import { menuOpen } from "./components/menu.js";
 import { ask, info, initModals, modalOpen, promptText } from "./components/modal.js";
 import { buildDrawer, buildSidebar, buildStatusline, pageHead } from "./components/shell.js";
+import { applyBackground } from "./background.js";
+import { initToasts, toast } from "./components/toast.js";
 import { h } from "./dom.js";
 import { detectIcons } from "./icons.js";
 import * as modsPage from "./pages/mods.js";
 import { modsApi } from "./pages/mods.js";
 import * as toolsPage from "./pages/tools.js";
 import * as profilesPage from "./pages/profiles.js";
-import * as snapshotsPage from "./pages/snapshots.js";
 import * as settingsPage from "./pages/settings.js";
-import { applyTheme, on, state } from "./store.js";
+import { on, state } from "./store.js";
 
-const PAGES = { mods: modsPage, profiles: profilesPage, snapshots: snapshotsPage, tools: toolsPage, settings: settingsPage };
+const PAGES = { mods: modsPage, profiles: profilesPage, tools: toolsPage, settings: settingsPage };
 let sidebar, content, head, status, drawer, mounted = null;
 
 function go(id, focus = false) {
@@ -22,13 +23,15 @@ function go(id, focus = false) {
   const page = PAGES[id];
   state.page = id;
   content.replaceChildren();
-  head.replaceWith((head = pageHead(page.title, page.subtitle)));
+  head.replaceWith((head = pageHead(page.title)));
   const host = h("div", { class: "page" });
   content.append(host);
   mounted = page.mount(host, status);
   sidebar.select(id);
   if (focus && mounted.focus) mounted.focus();
 }
+
+const hourlyLeft = (q) => { const m = /(\d+) hourly/.exec(q || ""); return m ? m[1] : ""; };
 
 async function searchNexus() {
   const text = await promptText({ title: "Search Nexus Mods", hint: "part of a mod's name" });
@@ -52,6 +55,12 @@ function onKey(e) {
   if (k === "F1") return run(showHelp);
   if (k === "F5") return run(() => call("check_updates"));
   if (k === "F3") return run(searchNexus);
+  if (ctrl && (k === "a" || k === "A")) { // never select page text; in the table it selects every visible mod
+    if (typing) return;
+    e.preventDefault();
+    if (mods && mods.inTable()) mods.selectAll();
+    return;
+  }
   if (ctrl && !e.shiftKey && !e.altKey) {
     const map = { i: () => call("import_zips"), g: () => call("launch"), d: () => call("doctor"), t: () => call("toggle_global"), u: () => call("update_all"), q: () => call("quit"),
       k: () => { go("settings", true); }, f: () => { if (state.page !== "mods") go("mods"); if (modsApi.current) modsApi.current.focusFilter(); } };
@@ -63,7 +72,7 @@ function onKey(e) {
   // plain letters act only while the table has focus (typing in a field must not trigger anything)
   const letters = { r: () => call("check_updates"), i: () => call("import_zips"), g: () => call("launch"), d: () => call("doctor"), t: () => call("toggle_global"),
     m: () => call("link_all"), f: () => call("framework_update"),
-    k: () => go("settings", true), x: () => mods.mark(), b: () => mods.bulk(), n: () => mods.note(), o: () => mods.cycleSort(), "*": () => mods.fav(), "/": () => mods.focusFilter() };
+    k: () => go("settings", true), "/": () => mods.focusFilter() };
   const fn = letters[k.length === 1 ? k.toLowerCase() : k];
   if (fn) run(fn);
 }
@@ -71,18 +80,29 @@ function onKey(e) {
 async function boot() {
   detectIcons();
   const r = await call("boot");
-  const settings = r.ok ? r.settings : { gui_theme: "system", version: "" };
-  applyTheme(settings.gui_theme);
+  const settings = r.ok ? r.settings : { version: "" };
+  applyBackground(settings.gui_background);
   const app = document.getElementById("app");
   initModals(document.getElementById("modal-root"), app);
+  state.goto = (id) => go(id, true);
   sidebar = buildSidebar((id) => go(id, true), settings.version);
-  head = pageHead("", "");
+  head = pageHead("");
   content = h("main", { class: "content", id: "content" });
   drawer = buildDrawer();
   status = buildStatusline();
   app.append(sidebar.el, h("div", { class: "main" }, head, content, drawer.el, status.el));
   document.addEventListener("keydown", onKey);
   document.addEventListener("contextmenu", (e) => { if (!(e.target.closest && e.target.closest("input, textarea"))) e.preventDefault(); });
+  initToasts(document.getElementById("modal-root"));
+  on("log", (p) => {
+    const st = String(p.style || "");
+    if (/red/.test(st)) { toast(p.text, "bad"); drawer.flagError(); }
+    else if (/(green|yellow|bold)/.test(st)) toast(p.text, /yellow/.test(st) ? "warn" : "ok");
+  });
+  on("header", (p) => {
+    const nx = p.header && p.header.nexus;
+    status.setNexus(!nx ? "" : !nx.key_set ? "Nexus: no API key" : nx.premium === null ? "Nexus key set" : `Nexus ${nx.premium ? "premium" : "free"}${hourlyLeft(nx.quota) ? ` - ${hourlyLeft(nx.quota)} left` : ""}`, nx && nx.quota || "");
+  });
   on("ask", (p) => ask(p));
   on("report", (p) => info({ title: p.title, segments: p.segments, wide: true }));
   go("mods");

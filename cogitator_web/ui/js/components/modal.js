@@ -131,6 +131,14 @@ export function promptText({ title: t, hint, body, value, allowBlank }) {
   } }));
 }
 
+// A list of choices for the pages: resolves with the picked item's name (or null when cancelled). Labels come from files on disk: text only.
+export function pickFrom({ title: t, items, empty }) {
+  return new Promise((resolve) => open({ cancelValue: null, done: resolve, build: (d, fin) => {
+    const list = items.length ? h("div", { class: "choices" }, items.map((it) => button({ label: it.label, kind: "secondary", onClick: () => fin(it.name) }))) : bodyEl(empty);
+    d.append(title(t), list, h("div", { class: "foot" }, af(button({ label: "Cancel", kind: "secondary", onClick: () => fin(null) }))));
+  } }));
+}
+
 // A read-only text box with a Select all button (the share code).
 export function showCode({ title: t, code, note }) {
   open({ cancelValue: true, build: (d, fin) => {

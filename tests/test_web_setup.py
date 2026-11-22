@@ -1,4 +1,4 @@
-"""The web setup wizard's session and page-facing API, driven without a window. Fakes mirror tests/test_setup_gui.py."""
+"""The web setup wizard's session and page-facing API, driven without a window. Fakes are local to this file."""
 import functools
 import json
 import threading
@@ -263,7 +263,6 @@ def test_entry_gate_flags_and_delegation(monkeypatch):
     calls = []
     runner = lambda argv, flags: calls.append(("web", flags.dry_run)) or 0
     assert setup_app.main(["--wizard", "--dry-run"], build=22631, installed=False, runner=runner) == 0 and calls == [("web", True)]
-    monkeypatch.setattr(setup_app, "_classic", lambda argv: calls.append(("tk", argv)) or 0)
     un = lambda argv, flags, mode: calls.append(("un", mode)) or 0
     assert setup_app.main(["--uninstall"], build=22631, installed=True, runner=runner, uninstall_runner=un) == 0 and calls[-1] == ("un", "uninstall")
     assert setup_app.main([], build=22631, installed=True, runner=runner, uninstall_runner=un) == 0 and calls[-1] == ("un", "maintenance")

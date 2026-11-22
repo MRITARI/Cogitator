@@ -4,7 +4,7 @@
 ; Resulting layout (what cogitator.selfupdate.detect_layout() recognises as "installer"):
 ;   %LOCALAPPDATA%\Programs\Cogitator\
 ;       install.json              written by the [Code] section below
-;       app\cogitator.exe         console program (CLI/TUI); app\cogitator-web.exe is the windowed web UI (same _internal folder)
+;       app\cogitator.exe         console program (the command line); app\cogitator-web.exe is the Cogitator window (same _internal folder)
 ;       app\...                   the PyInstaller folder; the self-updater swaps this folder
 ;       app\cogitator-updater.exe
 ;       setup\Cogitator Setup.exe ...
@@ -50,7 +50,6 @@ Source: "..\dist\cogitator\THIRD-PARTY-NOTICES.txt"; DestDir: "{app}"; Flags: ig
 
 [Icons]
 Name: "{autoprograms}\Cogitator"; Filename: "{app}\app\cogitator-web.exe"; WorkingDir: "{%USERPROFILE}"; IconFilename: "{app}\cogitator.ico"
-Name: "{autoprograms}\Cogitator (terminal)"; Filename: "{app}\app\cogitator.exe"; WorkingDir: "{%USERPROFILE}"; IconFilename: "{app}\cogitator.ico"
 Name: "{autoprograms}\Cogitator Setup"; Filename: "{app}\setup\Cogitator Setup.exe"; IconFilename: "{app}\cogitator.ico"
 Name: "{autodesktop}\Cogitator"; Filename: "{app}\app\cogitator-web.exe"; WorkingDir: "{%USERPROFILE}"; IconFilename: "{app}\cogitator.ico"; Tasks: desktopicon
 
@@ -127,11 +126,10 @@ begin
     // Its presence next to the app\ folder is what makes the Update panel live (detect_layout -> "installer").
     SaveStringToFile(ExpandConstant('{app}\install.json'),
       '{"installer": "inno", "version": "{#AppVersion}"}' + #13#10, False);
-    // No download, no network: without WebView2 the wizard and the app open their classic (tkinter) windows by themselves.
+    // No download, no network: the Cogitator window needs WebView2 (Windows 11 has it); the cogitator command works without it.
     if not WebView2Present() then
-      SuppressibleMsgBox('The Microsoft Edge WebView2 runtime was not found on this computer.' + #13#10 + #13#10 +
-        'Setup continues with the classic window, and Cogitator opens its classic window too. Nothing else is needed; ' +
-        'installing WebView2 later gives you the newer window.', mbInformation, MB_OK, IDOK);
+      SuppressibleMsgBox('WebView2 is required for the Cogitator window (Windows 11 includes it) and was not found on this computer.' + #13#10 + #13#10 +
+        'Setup continues. The cogitator command still works without it.', mbInformation, MB_OK, IDOK);
   end;
 end;
 

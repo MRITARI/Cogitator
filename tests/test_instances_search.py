@@ -1,12 +1,9 @@
-import webbrowser
 
 import pytest
 import respx
 
 from cogitator import cli, config, nexus
-from cogitator.tui.screens import ChoiceScreen, InputScreen
 from make_demo_game import build
-from test_tui import SIZE, fx, game as tui_game, log_text, make_app, settle  # noqa: F401  (fixtures)
 
 
 @pytest.fixture(autouse=True)
@@ -79,45 +76,3 @@ def test_search_cli_without_key_or_results(monkeypatch, capsys):
     assert cli.main(["search", "zzz"]) == 0 and "No mods found" in capsys.readouterr().out
     respx.post(nexus.GRAPHQL).respond(401)
     assert cli.main(["search", "zzz"]) == 2
-
-
-class FakeNexus:
-    def __init__(self, key):
-        pass
-
-    def __enter__(self):
-        return self
-
-    def __exit__(self, *a):
-        pass
-
-    def search_mods(self, text, count=10):
-        return [{"mod_id": 7, "name": "Cool HUD"}, {"mod_id": 8, "name": "Other"}]
-
-
-async def test_tui_search_opens_the_chosen_page(tui_game, monkeypatch):
-    from cogitator.config import Settings
-
-    s = Settings.load()
-    s.notice_accepted = True
-    s.save()
-    opened = []
-    monkeypatch.setattr(webbrowser, "open", lambda url: opened.append(url))
-    monkeypatch.setattr("cogitator.actions_nexus.get_api_key", lambda: "k")
-    monkeypatch.setattr("cogitator.actions_nexus.NexusClient", FakeNexus)
-    app = make_app(tui_game)
-    async with app.run_test(size=SIZE) as pilot:
-        await settle(app, pilot)
-        await pilot.press("f3")
-        await pilot.pause()
-        assert isinstance(app.screen, InputScreen)
-        await pilot.press(*"cool", "enter")
-        for _ in range(30):
-            await pilot.pause()
-            if isinstance(app.screen, ChoiceScreen):
-                break
-        assert isinstance(app.screen, ChoiceScreen)
-        await pilot.press("down", "enter")  # "Other"
-        await settle(app, pilot)
-        assert opened == ["https://www.nexusmods.com/warhammer40kdarktide/mods/8"]
-        assert "Other: https://www.nexusmods.com" in log_text(app)

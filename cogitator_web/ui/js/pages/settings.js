@@ -1,12 +1,12 @@
 // The Settings page: rows with the label and muted help on the left, the control on the right. Changes are saved through
 // api.set_setting (Python validates and writes the same settings file the CLI and TUI use).
 import { call } from "../api.js";
+import { applyBackground } from "../background.js";
 import { button, toggleSwitch, setSwitch } from "../components/widgets.js";
 import { h } from "../dom.js";
-import { applyTheme, watch } from "../store.js";
+import { watch } from "../store.js";
 
 export const title = "Settings";
-export const subtitle = "Your Nexus key, appearance and how Cogitator behaves.";
 export const focusIds = { key: "nexus-key" };
 
 const KEY_HELP = "Create one in your Nexus account settings, under API. It is stored in your OS keyring (or a private file) and is never logged or shown.";
@@ -15,6 +15,9 @@ function row(label, help, ...ctl) {
   return h("div", { class: "s-row" }, h("div", { class: "lbl" }, h("div", { class: "t", text: label }), help ? h("div", { class: "h", text: help }) : null),
     ctl.length ? h("div", { class: "ctl" }, ...ctl) : null);
 }
+
+// the one place in the app where the user may select text: a path they might want to copy
+function pick(r) { const el = r.querySelector(".h"); if (el) el.classList.add("pick"); return r; }
 
 function select(label, options, value, onChange) {
   const s = h("select", { class: "input", "aria-label": label }, options.map(([v, t]) => h("option", { value: v, text: t })));
@@ -79,11 +82,12 @@ export function mount(container, ctx) {
       h("div", { class: "s-row" }, h("div", { class: "lbl" }, h("div", { class: "t", text: "Account" }), account))));
 
     // ---- Appearance
-    wrap.append(h("section", { class: "s-group", "aria-label": "Appearance" },
-      row("Theme", "System follows the Windows setting.", select("Theme", [["system", "System"], ["dark", "Dark"], ["light", "Light"]], s.gui_theme, async (v) => {
-        applyTheme(v);
-        await save("gui_theme", v);
-      }))));
+    const bgSel = select("Background", [["default", "Default"], ["plain", "Plain"]], s.gui_background, async (v) => {
+      const n = await save("gui_background", v);
+      if (n) applyBackground(n.gui_background);
+      bgSel.value = cur.gui_background;
+    });
+    wrap.append(h("section", { class: "s-group", "aria-label": "Appearance" }, row("Background", "The picture behind the window.", bgSel)));
 
     // ---- Behaviour
     const sw = (label, name, value) => {
@@ -111,8 +115,8 @@ export function mount(container, ctx) {
 
     // ---- About
     wrap.append(h("section", { class: "s-group", "aria-label": "About" },
-      row("Version", "Cogitator is not affiliated with Fatshark, Games Workshop or Nexus Mods.", h("span", { text: s.version })),
-      row("Log file", s.log_path), row("Settings folder", s.config_dir)));
+      row("Version", "Cogitator is not affiliated with Fatshark, Games Workshop or Nexus Mods.", h("span", { class: "pick", text: s.version })),
+      pick(row("Log file", s.log_path)), pick(row("Settings folder", s.config_dir))));
     wrap.append(err);
   }
 

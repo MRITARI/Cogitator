@@ -285,7 +285,7 @@ def check_mods(folders: list[str], registry: Registry, nexus: NexusClient | None
     return finish()
 
 
-# ---------------------------------------------------------------- one pipeline for CLI and TUI
+# ---------------------------------------------------------------- one pipeline for the CLI and the window
 
 def quota_text(registry: Registry) -> str | None:
     """Last known quota with the time it was observed, e.g. '19992 daily / 1992 hourly left (as of 14:22)'."""

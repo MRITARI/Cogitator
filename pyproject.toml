@@ -4,13 +4,13 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "cogitator"
-version = "0.3.0-beta.3"
-description = "Terminal mod manager for Warhammer 40,000: Darktide"
+version = "0.3.0-beta.4"
+description = "Mod manager for Warhammer 40,000: Darktide, with a desktop window and a command line"
 readme = "README.md"
 license = "MIT"
 license-files = ["LICENSE"]
 requires-python = ">=3.10"
-keywords = ["darktide", "warhammer", "mods", "mod manager", "tui", "nexus"]
+keywords = ["darktide", "warhammer", "mods", "mod manager", "nexus"]
 classifiers = [
   "Environment :: Console",
   "Intended Audience :: End Users/Desktop",
@@ -19,11 +19,10 @@ classifiers = [
   "Topic :: Games/Entertainment",
 ]
 dependencies = [
-  "textual>=0.80",
   "httpx>=0.27",
   "platformdirs>=4",
   "vdf>=3.4",
-  "sv-ttk>=2.6",  # Sun Valley (Windows 11 look) theme for the tkinter GUI; MIT
+  "pywebview>=5",  # the Cogitator window; needs the Edge WebView2 runtime (in Windows 11). BSD-3-Clause
   "cryptography>=42",
   "tomli>=2; python_version < '3.11'",
   # Windows Credential Locker for the Nexus key by default; elsewhere it stays optional (0600-file fallback).
@@ -36,7 +35,7 @@ Issues = "https://github.com/MRITARI/Cogitator/issues"
 
 [project.optional-dependencies]
 keyring = ["keyring>=24"]
-web = ["pywebview>=5"]  # the web-style window (cogitator-web); needs the Edge WebView2 runtime. BSD-3-Clause
+web = []  # kept so `pip install cogitator[web]` from older docs still works; pywebview is a core dependency now
 dev = ["pytest", "respx", "pytest-asyncio", "pytest-cov", "ruff", "mypy"]
 
 [project.scripts]
@@ -44,13 +43,11 @@ cogitator = "cogitator.cli:main"
 
 [project.gui-scripts]
 cogitator-setup = "cogitator_web.setup_app:entry"
-cogitator-setup-classic = "cogitator_setup.app:main"
-cogitator-gui = "cogitator_gui.app:main"
 cogitator-web = "cogitator_web.app:main"
 cogitator-setup-web = "cogitator_web.setup_app:main"
 
 [tool.setuptools.packages.find]
-include = ["cogitator*", "cogitator_setup*", "cogitator_gui*", "cogitator_web*"]
+include = ["cogitator*", "cogitator_setup*", "cogitator_web*"]
 
 [tool.setuptools.package-data]
 cogitator = ["locales/*.json"]

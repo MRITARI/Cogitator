@@ -5,7 +5,7 @@
 
 Run it with the interpreter the programs were built with (.venv-release): everything is read from that environment's installed
 package metadata, never from memory. What is covered: the runtime dependency closure of pyproject.toml, any further
-distribution that PyInstaller's PYZ tables (--pyz) show was bundled, the Python runtime, Tcl/Tk, the PyInstaller bootloader
+distribution that PyInstaller's PYZ tables (--pyz) show was bundled, the Python runtime, the PyInstaller bootloader
 exception, the OpenSSL that the cryptography wheel links in (from the wheel's own SBOM), and certifi's CA file.
 If a licence text cannot be found for any of them the script prints the list and exits non-zero without writing anything."""
 from __future__ import annotations
@@ -154,20 +154,6 @@ def python_runtime() -> tuple[str, str]:
     raise NoticesError(f"Python licence file not found in {sys.base_prefix} (looked for {', '.join(PYTHON_LICENSE_NAMES)}).")
 
 
-def tcl_tk_terms() -> str | None:
-    """The Tcl/Tk licence terms, or None when this Python has no tkinter (so nothing of it is bundled)."""
-    try:
-        import tkinter
-
-        lib = Path(tkinter.Tcl().eval("info library"))
-    except Exception:
-        return None
-    for p in (lib.parent / "tk8.6" / "license.terms", lib / "license.terms", lib.parent / "tk8.6" / "docs" / "license.terms"):
-        if p.is_file():
-            return read(p)
-    raise NoticesError(f"Tcl/Tk is bundled but its license.terms was not found near {lib}.")
-
-
 def _record_hash(d: md.Distribution, suffix: str) -> tuple[Path, str] | None:
     for f in d.files or []:
         if PurePath(f).as_posix().endswith(suffix) and f.hash:
@@ -253,13 +239,6 @@ def collect(pyz: list[Path] | None = None, app_dir: Path | None = None) -> tuple
             extra.append(f"{SECTION}\n{name}\n{SECTION}\n{text}")
         except NoticesError as e:
             problems.append(f"{label}: {e}")
-    try:
-        tk = tcl_tk_terms()
-        if tk:
-            index.append("  Tcl/Tk 8.6  (Tcl/Tk licence)")
-            extra.append(f"{SECTION}\nTcl/Tk (bundled with the Python runtime for the setup window)\n{SECTION}\n{tk}")
-    except NoticesError as e:
-        problems.append(f"Tcl/Tk: {e}")
     try:
         index.append("  PyInstaller bootloader  (GPL-2.0-or-later with the Bootloader Exception)")
         extra.append(f"{SECTION}\nPyInstaller bootloader\n{SECTION}\nThe .exe files start with PyInstaller's bootloader "

@@ -14,19 +14,24 @@ def web_target(frozen: bool, executable: str) -> list[str] | None:
     """installed: app/cogitator-web.exe next to the setup folder (None when it is missing); source: python -m cogitator_web."""
     if not frozen:
         return [executable, "-m", "cogitator_web"]
-    exe = Path(executable).resolve().parent.parent / "app" / WEB_EXE
-    return [str(exe)] if exe.is_file() else None
+    here = Path(executable).resolve().parent
+    for exe in (here / WEB_EXE, here.parent / "app" / WEB_EXE):  # side by side (dist folder, updater), then the setup layout
+        if exe.is_file():
+            return [str(exe)]
+    return None
+
+
+MISSING = "cogitator-web.exe was not found next to this install, so the Cogitator window cannot open. The command line still works: cogitator --help"
 
 
 def launch_app(*, frozen: bool | None = None, executable: str | None = None, popen: Callable[..., object] = subprocess.Popen,
-               fallback: Callable[[], object] | None = None) -> list[str] | None:
-    """Start the web window detached; without cogitator-web.exe use the terminal launcher. Returns the argv used (None: fallback)."""
+               args: list[str] | None = None) -> list[str] | None:
+    """Start the web window detached. Without cogitator-web.exe, say so on stderr and return None; else the argv used."""
     frozen = bool(getattr(sys, "frozen", False)) if frozen is None else frozen
     target = web_target(frozen, executable or sys.executable)
     if target is None:
-        if fallback is None:
-            from cogitator_setup.launch import launch_cogitator as fallback
-        fallback()
+        print(MISSING, file=sys.stderr)
         return None
+    target = target + list(args or [])
     popen(target, creationflags=_DETACHED if sys.platform == "win32" else 0, close_fds=True, cwd=str(Path.home()))
     return target

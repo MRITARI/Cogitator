@@ -38,8 +38,7 @@ def build_parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(prog="cogitator", description="Darktide mod manager")
     p.add_argument("--game-dir", help="Darktide install folder (overrides config/auto-detect)")
     p.add_argument("--instance", metavar="NAME", help="use a separate named setup (own settings, registry, snapshots and profiles)")
-    p.add_argument("--no-update-check", action="store_true", help="GUI/TUI: do not check for updates on start")
-    p.add_argument("--tui", action="store_true", help="open the terminal interface instead of the graphical one")
+    p.add_argument("--no-update-check", action="store_true", help="with no command: do not check for updates when the window opens")
     p.add_argument("--version", action="version", version=__version__)
     p.add_argument("--self-check", action="store_true", help=argparse.SUPPRESS)  # verifies a pipx/PyInstaller build
     p.add_argument("--expect-version", help=argparse.SUPPRESS)  # with --self-check: fail unless this is the build's version
@@ -1313,16 +1312,12 @@ def _dispatch(args) -> int:
         return cmd_self_update(args)
     if args.cmd == "path":
         return cmd_path(args)
-    if args.cmd is None:
-        if not args.tui:
-            from .gui_entry import run_default_gui
+    if args.cmd is None:  # no command: open the Cogitator window
+        from cogitator_web.launch import launch_app
 
-            rc = run_default_gui(game_override=args.game_dir, check_updates=not args.no_update_check)
-            if rc is not None:
-                return rc
-        from .tui.app import run_tui  # imported lazily: headless commands must not pay for Textual
-
-        return run_tui(game_override=args.game_dir, check_updates=not args.no_update_check)
+        extra = (["--game-dir", str(Path(args.game_dir).resolve())] if args.game_dir else []) + (["--instance", args.instance] if args.instance else [])
+        extra += ["--no-update-check"] if args.no_update_check else []
+        return 0 if launch_app(args=extra) else 1
     return 2
 
 

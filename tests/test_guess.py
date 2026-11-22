@@ -1,21 +1,25 @@
-"""Pre-existing mods: guessed baseline from file dates, name-search candidates, link-all flow."""
+"""Pre-existing mods: guessed baseline from file dates, name-search candidates, check_mods."""
 import json
 import os
+from pathlib import Path
 
-import httpx
 import pytest
 import respx
 
 from cogitator.linking import GUESS_WINDOW_S, apply_guess, choose_baseline, folder_mtime, guess_baseline, link_mod, rank_candidates
-from cogitator.nexus import GAME, GRAPHQL, NexusClient, NexusFile, parse_files
+from cogitator.nexus import GAME, NexusClient, NexusFile, parse_files
 from cogitator.registry import Registry
-from cogitator.tui.app import installed_text, status_text
-from cogitator.glyphs import glyphs_for
+from cogitator.viewtext import installed_label, status_label
 from cogitator.updates import PROBABLY_OUTDATED, PROBABLY_UP_TO_DATE, UNKNOWN, UP_TO_DATE, cached_rows, check_mods, decide_mod
 
-from test_tui import B, HDR, SIZE, accepted_notice, fx, game, make_app, settle  # noqa: F401  (fixtures)
-
+FX = Path(__file__).parent / "fixtures" / "nexus"
+B = "https://api.nexusmods.com/v1"
+HDR = {"x-rl-daily-remaining": "19990", "x-rl-hourly-remaining": "1990"}
 DAY = 86400
+
+
+def fx(n):
+    return json.loads((FX / n).read_text(encoding="utf-8"))
 
 
 def files(*uploads):
@@ -57,8 +61,8 @@ def test_guessed_baseline_is_stored_shown_with_tilde_and_never_plain_up_to_date(
     assert (rec["baseline"], rec["installed_file_id"]) == ("guessed", 100)
     row = cached_rows(["m"], reg)[0]
     assert row.status == PROBABLY_OUTDATED and row.installed == "~1.0"   # old file vs latest 1.1
-    assert installed_text(row, None).plain == "~1.0"
-    assert "probably outdated" in status_text(row, glyphs_for("utf-8")).plain
+    assert installed_label(row, None)[0] == "~1.0"
+    assert "probably outdated" in status_label(row, "→")[0]
     rec["installed_file_id"], rec["installed_version"] = 101, "1.1"      # guess equals the latest file
     assert decide_mod(rec)[0] == PROBABLY_UP_TO_DATE != UP_TO_DATE
 
@@ -89,10 +93,10 @@ def test_unknown_date_fallback_and_unknown_status_wording():
     link_mod(reg, "m", 5, "M", None, via="manual", baseline="none")
     row = cached_rows(["m"], reg)[0]
     assert row.status == UNKNOWN and row.baseline_unknown
-    assert status_text(row, glyphs_for("utf-8")).plain == "version unknown - press L to set it"
-    assert installed_text(row, 86400 * 365).plain.startswith("1971")  # unknown version -> folder's last-modified date
-    assert installed_text(row, None).plain == "-"
-    assert status_text(None, glyphs_for("utf-8")).plain == "not linked"
+    assert status_label(row, "→")[0] == "version unknown - press L to set it"
+    assert installed_label(row, 86400 * 365)[0].startswith("1971")  # unknown version -> folder's last-modified date
+    assert installed_label(row, None)[0] == "-"
+    assert status_label(None, "→")[0] == "not linked"
 
 
 def test_rank_candidates_exact_then_near_only_and_limited_to_three():
@@ -115,60 +119,3 @@ def test_check_mods_guesses_baseline_for_linked_mod_without_one():
         check_mods(["modA"], reg, nx, mtimes={"modA": f.uploaded - 60})
     rec = Registry.load().mod("modA")
     assert rec["baseline"] == "guessed" and rec["installed_file_id"] is not None
-
-
-# ------------------------------------------------------------ TUI: link-all flow
-
-def graphql(request):
-    q = json.loads(request.content)["variables"]["f"]["name"][0]["value"]
-    nodes = [{"modId": 19, "name": "Alpha Overhaul"}] if q == "alpha" else []
-    if q == "beta":
-        nodes = [{"modId": 8, "name": "Betamax Gizmo"}]  # fuzzy-ish: must never be linked unless the user says yes
-    return httpx.Response(200, json={"data": {"mods": {"nodes": nodes}}}, headers=HDR)
-
-
-async def next_dialog(app, pilot):
-    for _ in range(100):
-        await pilot.pause(0.05)
-        if len(app.screen_stack) > 1:
-            return
-    raise AssertionError("dialog did not appear")
-
-
-@respx.mock
-async def test_link_all_end_to_end_with_guess_preselected_and_no_auto_link(game, monkeypatch):
-    monkeypatch.setenv("COGITATOR_NEXUS_KEY", "k" * 12)
-    f = next(x for x in parse_files(fx("files_19.json")) if x.uploaded and x.file_id)
-    for p in (game / "mods" / "alpha").iterdir():
-        os.utime(p, (f.uploaded - 3600, f.uploaded - 3600))
-    guess = guess_baseline(folder_mtime(game / "mods" / "alpha"), parse_files(fx("files_19.json")))
-    respx.post(GRAPHQL).mock(side_effect=graphql)
-    respx.get(f"{B}/games/{GAME}/mods/19.json").respond(200, json=fx("mod_19.json"), headers=HDR)
-    respx.get(f"{B}/games/{GAME}/mods/19/files.json").respond(200, json=fx("files_19.json"), headers=HDR)
-    app = make_app(game)
-    async with app.run_test(size=SIZE) as pilot:
-        await settle(app, pilot)
-        await pilot.press("m")
-        # alpha: candidate offered -> Y (first option)
-        await next_dialog(app, pilot)
-        assert "Link 'alpha'?" in "".join(str(w.render()) for w in app.screen.query("Static"))
-        await pilot.press("enter")
-        # version picker: guess preselected, guessed baseline already stored
-        await next_dialog(app, pilot)
-        assert Registry.load().mod("alpha")["baseline"] == "guessed"
-        assert Registry.load().mod("alpha")["installed_file_id"] == guess.file_id
-        assert app.screen.query_one("OptionList").highlighted is not None
-        await pilot.press("enter")  # confirm the preselected guess
-        # beta: fuzzy candidate offered; skip it (option "Skip this mod" is 2nd to last: Yes, No, Skip, Stop)
-        await next_dialog(app, pilot)
-        await pilot.press("down", "down", "enter")
-        # remaining unlinked mods (broken, gamma): no candidate -> blank input = skip
-        for _ in range(2):
-            await next_dialog(app, pilot)
-            await pilot.press("enter")
-            await pilot.pause(0.2)
-        await settle(app, pilot)
-        reg = Registry.load()
-        assert reg.mod("alpha")["baseline"] == "chosen" and reg.mod("alpha")["nexus_id"] == 19
-        assert reg.mod("beta") is None and reg.mod("gamma") is None  # fuzzy match was not auto-linked
-        assert "Link all finished: 1 linked" in "\n".join(l.text for l in app.query_one("#log").lines)

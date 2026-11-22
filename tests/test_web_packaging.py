@@ -1,4 +1,4 @@
-"""W7: self-check of the windowed programs, entry routing (--classic)."""
+"""W7: self-check of the windowed programs, entry routing."""
 from pathlib import Path
 
 import pytest
@@ -59,12 +59,10 @@ def test_web_main_self_check_routes(monkeypatch):
     assert app.main(["--self-check", "--expect-version", "1.2"]) == 0 and got == ["1.2"]
 
 
-def test_entry_classic_goes_to_tkinter_without_the_flag(monkeypatch):
+def test_entry_goes_to_main(monkeypatch):
     seen = []
-    monkeypatch.setattr(setup_app, "_classic", lambda argv: seen.append(("tk", argv)) or 0)
-    monkeypatch.setattr(setup_app, "main", lambda argv: seen.append(("web", argv)) or 0)
-    assert setup_app.entry(["--classic", "--wizard"]) == 0 and seen[-1] == ("tk", ["--wizard"])
-    assert setup_app.entry(["--wizard"]) == 0 and seen[-1] == ("web", ["--wizard"])
+    monkeypatch.setattr(setup_app, "main", lambda argv: seen.append(argv) or 0)
+    assert setup_app.entry(["--wizard"]) == 0 and seen == [["--wizard"]]
 
 
 # ---------------------------------------------------------------- launch targets (setup "Start Cogitator")
@@ -86,15 +84,34 @@ def test_launch_target_installed_source_and_missing(tmp_path):
     assert launch.web_target(True, str(tmp_path / "nowhere" / "setup" / "S.exe")) is None
 
 
-def test_launch_app_detached_or_falls_back(tmp_path):
+def test_launch_app_detached_or_says_it_is_missing(tmp_path, capsys):
     from cogitator_web import launch
 
-    got, fb = [], []
-    argv = launch.launch_app(frozen=True, executable=_installed(tmp_path), popen=lambda a, **k: got.append((a, k)), fallback=lambda: fb.append(1))
-    assert argv and got[0][0] == argv and not fb and "creationflags" in got[0][1]
+    got = []
+    argv = launch.launch_app(frozen=True, executable=_installed(tmp_path), popen=lambda a, **k: got.append((a, k)), args=["--no-update-check"])
+    assert argv and argv[-1] == "--no-update-check" and got[0][0] == argv and "creationflags" in got[0][1]
     got.clear()
-    assert launch.launch_app(frozen=True, executable=str(tmp_path / "x" / "setup" / "S.exe"), popen=lambda a, **k: got.append(a),
-                             fallback=lambda: fb.append(1)) is None and fb == [1] and not got  # old install: terminal launcher
+    assert launch.launch_app(frozen=True, executable=str(tmp_path / "x" / "setup" / "S.exe"), popen=lambda a, **k: got.append(a)) is None
+    assert not got and "cogitator --help" in capsys.readouterr().err
+
+
+def test_bare_cogitator_opens_the_window_and_forwards_flags(monkeypatch):
+    from cogitator import cli
+    from cogitator_web import launch
+
+    seen = []
+    monkeypatch.setattr(launch, "launch_app", lambda **k: seen.append(k) or ["x"])
+    assert cli.main(["--game-dir", "G", "--no-update-check"]) == 0
+    assert seen == [{"args": ["--game-dir", str(Path("G").resolve()), "--no-update-check"]}]
+    monkeypatch.setattr(launch, "launch_app", lambda **k: None)
+    assert cli.main([]) == 1
+
+
+def test_web_target_finds_a_side_by_side_exe(tmp_path):
+    from cogitator_web import launch
+
+    (tmp_path / "cogitator-web.exe").write_bytes(b"")
+    assert launch.web_target(True, str(tmp_path / "cogitator.exe")) == [str(tmp_path / "cogitator-web.exe")]
 
 
 def test_setup_start_button_uses_the_launch_helper(monkeypatch):

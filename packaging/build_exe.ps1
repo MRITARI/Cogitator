@@ -1,7 +1,7 @@
 <#
   Builds the three programs with PyInstaller (no Python needed to run them) and self-checks each.
   Run from the repository root inside a virtual environment:
-      pip install ".[web]" "pyinstaller==6.22.3"   (the version the releases are built and tested with)
+      pip install "." "pyinstaller==6.22.3"   (the version the releases are built and tested with)
       powershell -ExecutionPolicy Bypass -File packaging\build_exe.ps1
   Output: dist\cogitator\cogitator.exe (console) + cogitator-web.exe (windowed) sharing one _internal, + cogitator-updater/-nxm.exe
           dist\Cogitator Setup\Cogitator Setup.exe
@@ -39,13 +39,12 @@ Copy-Item build\updater\cogitator-updater.exe dist\cogitator\cogitator-updater.e
     packaging\nxm_entry.py
 if ($LASTEXITCODE -ne 0) { throw "PyInstaller (nxm) failed" }
 Copy-Item build\nxm\cogitator-nxm.exe dist\cogitator\cogitator-nxm.exe -Force
-# The setup wizard is a windowed program: the web-style wizard, with the tkinter one as fallback (--classic).
+# The setup wizard is a windowed program: the web wizard.
 & $py -m PyInstaller --noconfirm --clean --onedir --windowed --name "Cogitator Setup" --icon "$PWD\packaging\cogitator.ico" `
     --distpath dist --workpath build\pyi-setup --specpath build\pyi-setup `
-    --collect-submodules cogitator --collect-submodules cogitator_setup --collect-submodules cogitator_gui `
-    --collect-submodules cogitator_web --collect-data cogitator_web --collect-data sv_ttk --hidden-import sv_ttk `
+    --collect-submodules cogitator --collect-submodules cogitator_setup `
+    --collect-submodules cogitator_web --collect-data cogitator_web `
     --collect-all webview --collect-all clr_loader --collect-all pythonnet --collect-all proxy_tools --collect-all bottle `
-    --hidden-import tkinter --hidden-import tkinter.filedialog `
     --add-data "$PWD\packaging\cogitator.ico;." --add-data "$PWD\packaging\cogitator.png;." `
     packaging\setup_entry.py
 if ($LASTEXITCODE -ne 0) { throw "PyInstaller (setup) failed" }

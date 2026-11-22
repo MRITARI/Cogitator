@@ -6,7 +6,8 @@ const GLYPHS = {
   sync: ["", "R"], add: ["", "+"], folder: ["", "F"], play: ["", ">"], up: ["", "^"], down: ["", "v"],
   search: ["", "?"], chevronUp: ["", "^"], chevronDown: ["", "v"], star: ["", "*"], pin: ["", "P"],
   note: ["", "n"], check: ["", "ok"], close: ["", "x"], power: ["", "O"], info: ["", "i"],
-  help: ["", "?"], log: ["", "L"], mark: ["", "+"], doctor: ["", "D"],
+  dash: ["", "-"], error: ["", "!"],
+  grip: ["", "::"], help: ["", "?"], log: ["", "L"], mark: ["", "+"], doctor: ["", "D"],
 };
 
 let mode = "fluent";

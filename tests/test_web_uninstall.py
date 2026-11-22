@@ -1,5 +1,5 @@
 """The web uninstall / maintenance session and API, the entry's routing, and the main web app's in-app self-update. Driven without a
-window or a network: fake folders, fake services, fake updater. Fixtures mirror test_uninstall_gui.py and test_web_setup.py."""
+window or a network: fake folders, fake services, fake updater. Fixtures mirror test_web_setup.py."""
 import json
 import threading
 import time
@@ -439,8 +439,8 @@ def test_routing_of_uninstall_modes_and_silent_exit_codes(monkeypatch):
     assert setup_app.main(["--self-check"], build=22631, installed=True) == 7
 
 
-def test_silent_uninstall_default_matches_the_tkinter_function(installed):
-    from cogitator_setup.uninstall_app import run_silent
+def test_silent_uninstall_default_matches_the_function(installed):
+    from cogitator_setup.silent import run_silent
 
     g, reg, tool = installed
     svc = UServices(game_dir=lambda: g, registry=lambda: reg, is_running=lambda: True)
@@ -462,17 +462,13 @@ def test_repair_command_and_relaunch_after_the_window_closes():
     assert len(started) == 1
 
 
-def test_missing_webview2_or_pywebview_falls_back_to_tkinter(monkeypatch):
+def test_missing_webview2_shows_the_message_and_fails(monkeypatch):
     notes = []
     monkeypatch.setattr(setup_app, "notify", notes.append)
-    got = []
-    fb = lambda argv: got.append(argv) or 7
     f = flags_of(["--uninstall"])
-    assert setup_app.run_web_uninstall(["--uninstall"], f, "uninstall", webview2_check=lambda: False, fallback=fb) == 7
-    assert got == [["--uninstall"]] and "WebView2" in notes[-1]
-    monkeypatch.setitem(__import__("sys").modules, "webview", None)  # import webview -> ImportError
-    assert setup_app.run_web_uninstall(["--maintenance"], flags_of(["--maintenance"]), "maintenance", webview2_check=lambda: True, fallback=fb) == 7
-    assert got[-1] == ["--maintenance"] and "pywebview" in notes[-1]
+    assert setup_app.run_web_uninstall(["--uninstall"], f, "uninstall", webview2_check=lambda: False) == 4
+    assert "WebView2" in notes[-1] and "cogitator --help" in notes[-1]
+    assert setup_app.run_web_setup(["--wizard"], f, webview2_check=lambda: False) == 4
 
 
 # ---------------------------------------------------------------- the main web app: in-app self-update

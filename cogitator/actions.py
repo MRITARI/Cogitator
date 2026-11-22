@@ -1,6 +1,6 @@
 """Interface-independent actions: the flows both the terminal UI and the graphical UI run.
 
-Nothing here knows about Textual or tkinter. A flow talks to the person through a `Ui` (log / confirm / ask_text / choose) and
+Nothing here knows about a window toolkit. A flow talks to the person through a `Ui` (log / confirm / ask_text / choose) and
 changes the game folder and registry only through the engine modules. Flows block (they may wait for an answer), so they run on
 worker threads; the caller owns the threading and the refresh afterwards (`Outcome` says what changed).
 

@@ -79,8 +79,7 @@ def asks(win):
 @pytest.mark.parametrize("bad", ["nope", "../alpha", "a/b", "a\\b", "..", "", None, 5, ["alpha"], "alpha\0", "C:alpha"])
 def test_unknown_or_hostile_folder_names_are_rejected(web, bad):
     _, _, api, _ = web
-    for call in (lambda: api.toggle(bad), lambda: api.move(bad, 1), lambda: api.mark(bad), lambda: api.fav(bad), lambda: api.edit_note(bad),
-                 lambda: api.row_menu(bad), lambda: api.row_action(bad, "toggle")):
+    for call in (lambda: api.toggle(bad), lambda: api.move(bad, 1), lambda: api.row_menu(bad), lambda: api.row_action(bad, "toggle")):
         r = call()
         assert r["ok"] is False and "error" in r
         json.dumps(r)
@@ -90,10 +89,10 @@ def test_other_bad_arguments(web):
     _, _, api, _ = web
     assert api.move("alpha", 2)["ok"] is False and api.move("alpha", True)["ok"] is False and api.move("alpha", "1")["ok"] is False
     assert api.row_action("alpha", "format_c")["ok"] is False and api.row_action("alpha", 7)["ok"] is False
-    assert api.set_sort("; drop")["ok"] is False and api.set_filter(123)["ok"] is False and api.set_filter("x" * 500)["ok"] is False
+    assert api.set_filter(123)["ok"] is False and api.set_filter("x" * 500)["ok"] is False
     assert api.set_setting("game_dir", "C:\\")["ok"] is False  # not on the page's list
     assert api.set_setting("check_updates_on_start", "yes")["ok"] is False
-    assert api.set_setting("gui_theme", "neon")["ok"] is False
+    assert api.set_setting("gui_theme", "dark")["ok"] is False  # the setting is gone
     assert api.set_setting("downloads_dir", "Z:\\no\\such\\folder")["ok"] is False
     assert api.set_setting(3, True)["ok"] is False
     for k in (None, 7, "short", "has space inside the key 12345", "k" * 300, "ключ-with-unicode-12345"):
@@ -135,7 +134,7 @@ def test_drag_and_drop_move_to(web):
     assert [r["folder"] for r in st["rows"]][:2] == ["beta", "alpha"]
 
 
-def test_move_sort_filter_and_marks(web):
+def test_move_and_filter(web):
     win, s, api, _ = web
     n = len(win.of("state"))
     api.move("beta", -1)
@@ -145,21 +144,35 @@ def test_move_sort_filter_and_marks(web):
     st = wait(lambda: [p for p in win.of("state") if p["filter"] == "gam"])[-1]
     assert [r["folder"] for r in st["rows"]] == ["gamma"]
     api.set_filter("")
-    api.set_sort("mod")
-    wait(lambda: [p for p in win.of("state") if p["sort"]["col"] == "mod"])
-    api.mark("alpha")
-    assert wait(lambda: [p for p in win.of("row") if p["row"]["marked"]])[-1]["row"]["folder"] == "alpha"
-    api.fav("beta")
-    assert wait(lambda: [p for p in win.of("row") if p["row"]["fav"]])[-1]["row"]["folder"] == "beta"
+
+
+def test_reordering_is_refused_while_a_filter_is_set(web):
+    win, s, api, _ = web
+    api.set_filter("a")
+    wait(lambda: [p for p in win.of("state") if p["filter"] == "a"])
+    before = [r["folder"] for r in win.of("state")[-1]["rows"]]
+    n = len(win.of("log"))
+    api.move("beta", -1)
+    api.move_to("alpha", "beta", True)
+    logs = wait(lambda: win.of("log")[n:] if len(win.of("log")) >= n + 2 else None)
+    assert all("Clear the filter to change the load order" in p["text"] for p in logs[:2])
+    api.set_filter("")
+    st = wait(lambda: [p for p in win.of("state") if p["filter"] == ""][-1:])[-1]
+    assert [r["folder"] for r in st["rows"]][:2] == ["alpha", "beta"] and before
+    n = len(win.of("state"))
+    api.move("beta", -1)
+    st = wait(lambda: win.of("state")[n:])[-1]
+    assert [r["folder"] for r in st["rows"]][:2] == ["beta", "alpha"]
 
 
 def test_row_menu_has_the_tk_entries(web):
     _, _, api, _ = web
     items = api.row_menu("alpha")["items"]
     ids = [i["id"] for i in items if i]
-    assert {"toggle", "up", "down", "mark", "fav", "note", "remove"} <= set(ids)
+    assert {"toggle", "link", "open_folder", "remove"} <= set(ids)
+    assert not ({"up", "down", "fav", "note", "changelog", "mark"} & set(ids))
     en = {i["id"]: i["enabled"] for i in items if i}
-    assert en["update"] is False and "changelog" not in en  # not linked, nothing to update
+    assert en["update"] is False  # not linked, nothing to update
     assert en["link"] is True
     json.dumps(items)
 
@@ -167,8 +180,6 @@ def test_row_menu_has_the_tk_entries(web):
 def test_every_pushed_payload_is_json_serialisable(web):
     win, s, api, _ = web
     api.toggle("beta")
-    api.set_sort("status")
-    api.mark("gamma")
     s.say("hello", "green")
     wait(lambda: win.of("log"))
     for script in win.scripts:
@@ -199,16 +210,6 @@ def test_cancel_keeps_the_mod(web):
     s.ctl.join(5)
     assert (s.game_dir / "mods" / "beta").exists()
     assert not any("Removed" in p["text"] for p in win.of("log"))
-
-
-def test_note_dialog_round_trip(web):
-    win, s, api, _ = web
-    api.edit_note("alpha")
-    q = wait(lambda: asks(win))[0]
-    assert q["kind"] == "text" and q["allow_blank"] is True and q["password"] is False
-    api.answer(q["id"], "#ui #hud keep this")
-    row = wait(lambda: [p for p in win.of("row") if p["row"]["folder"] == "alpha" and p["row"]["tags"]])[-1]["row"]
-    assert row["tags"] == ["ui", "hud"] and row["note"] is True
 
 
 def test_worker_exception_is_reported_not_raised(web):
@@ -344,15 +345,14 @@ def test_settings_save_to_the_shared_file_and_unknown_keys_survive_load(web, tmp
     _, s, api, _ = web
     dl = tmp_path / "dl"
     dl.mkdir()
-    assert api.set_setting("gui_theme", "dark")["ok"]
     assert api.set_setting("check_updates_on_start", False)["ok"]
     assert api.set_setting("auto_repair", "auto")["ok"]
     assert api.set_setting("downloads_dir", str(dl))["ok"]
     again = Settings.load()
-    assert (again.gui_theme, again.check_updates_on_start, again.auto_repair, again.downloads_dir) == ("dark", False, "auto", str(dl))
+    assert (again.check_updates_on_start, again.auto_repair, again.downloads_dir) == (False, "auto", str(dl))
     path = Settings.path()
     path.write_text(path.read_text() + 'web_future_key = "x"\n')  # an unknown key must not break the other interfaces
-    assert Settings.load().gui_theme == "dark"
+    assert Settings.load().auto_repair == "auto"
     s.pick_folder = lambda: str(tmp_path)
     assert api.pick_downloads()["settings"]["downloads_dir"] == str(tmp_path)
     s.pick_folder = lambda: None
@@ -373,19 +373,11 @@ def test_window_geometry_is_sanitised(tmp_path):
     assert winstate.load(screens)["width"] == 1000
 
 
-def test_missing_webview2_falls_back_to_the_tk_gui(monkeypatch):
+def test_missing_webview2_says_so_and_returns_nonzero(monkeypatch):
     calls = []
-    monkeypatch.setattr(web_app, "fallback_to_gui", lambda msg, argv: calls.append(msg) or 0)
-    assert web_app.run_web(["--x"], webview2_check=lambda: False) == 0
-    assert "WebView2" in calls[0]
-
-
-def test_missing_pywebview_falls_back_to_the_tk_gui(monkeypatch):
-    calls = []
-    monkeypatch.setattr(web_app, "fallback_to_gui", lambda msg, argv: calls.append(msg) or 0)
-    monkeypatch.setitem(__import__("sys").modules, "webview", None)  # import webview -> ImportError
-    assert web_app.run_web([], webview2_check=lambda: True) == 0
-    assert "pywebview" in calls[0]
+    monkeypatch.setattr(web_app, "notify", calls.append)
+    assert web_app.run_web(["--x"], webview2_check=lambda: False) == 4
+    assert "WebView2" in calls[0] and "cogitator --help" in calls[0]
 
 
 def test_installed_pywebview_has_the_parameters_app_uses():
@@ -424,10 +416,10 @@ def test_row_menu_enables_by_state(web):
 
     _, s, api, _ = web
     items = {i["id"]: i for i in api.row_menu("alpha")["items"] if i}
-    assert items["link"]["enabled"] and not items["update"]["enabled"] and "changelog" not in items
+    assert items["link"]["enabled"] and not items["update"]["enabled"]
     _set_rows(s, _row("alpha", UPDATE))
     items = {i["id"]: i for i in api.row_menu("alpha")["items"] if i}
-    assert items["update"]["enabled"] and items["changelog"]["enabled"] and items["open_page"]["enabled"]
+    assert items["update"]["enabled"] and items["open_page"]["enabled"]
     assert not any("coming soon" in i["label"] for i in items.values())
     json.dumps(items)
 
@@ -441,7 +433,6 @@ def test_new_api_methods_validate_and_serialise(web, monkeypatch):
         json.dumps(r)
     for bad in ("nope", None, 5, "../x"):
         assert api.row_action(bad, "link")["ok"] is False and api.row_action(bad, "update")["ok"] is False
-        assert api.row_action(bad, "changelog")["ok"] is False
     s.ctl.join(5)
 
 
@@ -486,17 +477,6 @@ def test_update_with_nothing_to_do_just_logs(web, monkeypatch):
     assert any("nothing to update" in p["text"] for p in wait(lambda: win.of("log")))
 
 
-def test_changelog_is_shown_as_a_notice(web, monkeypatch):
-    from cogitator.actions_nexus import Changelog
-
-    win, s, api, _ = web
-    _set_rows(s, _row("alpha"))
-    _calls(monkeypatch, changelog_for=Changelog(True, [("2.0  fixed things", ""), ("1.0  first", "")]))
-    api.row_action("alpha", "changelog")
-    q = wait(lambda: asks(win))[0]
-    assert q["kind"] == "notice" and q["title"] == "alpha changelog" and q["body"] == "2.0  fixed things\n1.0  first"
-    json.dumps(q)
-
 
 # ---------------------------------------------------------------- profiles, snapshots, bulk (W3)
 def test_profiles_and_snapshots_reject_bad_input_and_serialise(web):
@@ -506,11 +486,8 @@ def test_profiles_and_snapshots_reject_bad_input_and_serialise(web):
         assert api.snapshot_restore(bad)["ok"] is False
     assert api.profile_save("x" * 61)["ok"] is False and api.profile_save("../evil")["ok"] is False and api.profile_save(5)["ok"] is False
     assert api.profile_import_code("c" * 50001)["ok"] is False and api.profile_import_code(None)["ok"] is False and api.profile_import_code("  ")["ok"] is False
-    for keep in (0, -1, 1001, "5", True, 2.5, None):
-        assert api.snapshot_prune(keep)["ok"] is False
     assert api.snapshot_create("r" * 300)["ok"] is False and api.snapshot_create(7)["ok"] is False
-    assert api.bulk("format")["ok"] is False and api.bulk(3)["ok"] is False
-    for r in (api.profiles_list(), api.snapshots_list(), api.bulk_menu(), api.snapshot_prune(5)):
+    for r in (api.profiles_list(), api.snapshots_list()):
         assert r["ok"] is True
         json.dumps(r)
 
@@ -541,24 +518,40 @@ def test_snapshot_create_then_listed(web):
     assert items and set(items[0]) == {"name", "label"}
 
 
-def test_bulk_touches_only_existing_marked_mods(web, monkeypatch):
+def test_bulk_rejects_bad_arguments(web):
+    _, _, api, _ = web
+    for action in ("format", "tag", "clear", 3, None):
+        assert api.bulk(action, ["alpha"])["ok"] is False
+    for folders in ("alpha", None, [], ["nope"], ["alpha", "../x"], ["alpha", 5], ["alpha", ["gamma"]], [f"m{i}" for i in range(501)], ["alpha"] * 501):
+        r = api.bulk("enable", folders)
+        assert r["ok"] is False and "error" in r
+        json.dumps(r)
+
+
+def test_bulk_actions_act_on_the_given_folders(web, monkeypatch):
     from cogitator_web import session as sess
 
     win, s, api, _ = web
-    assert api.bulk("enable")["ok"] is True  # nothing marked: only a log line
-    assert not [i for i in api.bulk_menu()["items"] if i["enabled"]]
-    api.mark("alpha")
-    api.mark("gamma")
-    with s._mlock:
-        s.model.marked.add("ghost")
-    assert all(i["enabled"] for i in api.bulk_menu()["items"])
     seen = []
     monkeypatch.setattr(sess.actions_setup, "bulk_set_enabled", lambda ctx, folders, enable: (seen.append((folders, enable)), [])[1])
-    api.bulk("disable")
+    assert api.bulk("disable", ["alpha", "gamma", "alpha"]) == {"ok": True}
     wait(lambda: seen)
     assert seen[0] == (["alpha", "gamma"], False)
-    api.bulk("clear")
-    assert not s.model.marked
+    assert api.bulk("enable", ["beta"]) == {"ok": True}
+    wait(lambda: len(seen) == 2)
+    assert seen[1] == (["beta"], True)
+    updated = []
+    monkeypatch.setattr(s, "update_many", lambda folders: updated.append(folders))
+    assert api.bulk("update", ["alpha", "beta"]) == {"ok": True}
+    assert updated == [["alpha", "beta"]]
+    removed = []
+    monkeypatch.setattr(sess.actions_setup, "remove_many", lambda ctx, ui, folders: (removed.append(folders), actions.Outcome())[1])
+    assert api.bulk("remove", ["alpha", "beta"]) == {"ok": True}
+    q = wait(lambda: asks(win))[0]
+    assert q["kind"] == "confirm" and "2 mod" in q["title"] and "alpha" in q["body"] and not removed
+    api.answer(q["id"], True)
+    wait(lambda: removed)
+    assert removed[0] == ["alpha", "beta"]
 
 
 # ---------------------------------------------------------------- W4: ticks and tools
@@ -660,3 +653,110 @@ def test_crashlog_notice_is_plain_text_and_no_game_is_refused(web, game):
     s.game_dir = None
     assert api.bisect() == {"ok": True}  # refused with a log line, not an error
     wait(lambda: any("No game folder" in x["text"] for x in win.of("log")))
+
+
+# ---------------------------------------------------------------- window background
+def test_background_choice_validation(web):
+    _, s, api, _ = web
+    assert api.get_settings()["settings"]["gui_background"] == "default"
+    assert api.set_setting("gui_background", "plain")["settings"]["gui_background"] == "plain"
+    assert api.set_setting("gui_background", "neon")["ok"] is False
+    assert api.set_setting("gui_background", "custom")["ok"] is False  # custom images are gone
+    s.settings.gui_background = "custom"  # a stale value from an older version
+    assert api.get_settings()["settings"]["gui_background"] == "default"
+
+
+# ---------------------------------------------------------------- details panel
+def test_details_unlinked_mod_answers_at_once_without_any_network(web, monkeypatch):
+    from cogitator import nexus_info
+
+    win, s, api, _ = web
+    monkeypatch.setattr(nexus_info, "details_for", lambda *a, **k: pytest.fail("no Nexus lookup for an unlinked mod"))
+    assert api.mod_details("alpha") == {"ok": True, "started": True}
+    wait(lambda: win.of("details"))
+    p = win.of("details")[0]
+    assert (p["folder"], p["status"], p["data"], p["image"]) == ("alpha", "unlinked", None, None)
+    assert api.mod_details("../x")["ok"] is False and api.mod_details("nosuchmod")["ok"] is False and api.mod_versions(5)["ok"] is False
+
+
+def test_details_linked_mod_without_key_makes_no_call_and_shows_cache(web, monkeypatch, tmp_path):
+    from cogitator import nexus_info
+
+    win, s, api, _ = web
+    s.registry.set_mod("alpha", nexus_id=77)
+    monkeypatch.setattr(nexus_info, "get_api_key", lambda: None)
+    monkeypatch.setattr(nexus_info, "NexusClient", lambda *a, **k: pytest.fail("no key: no client"))
+    assert api.mod_details("alpha")["ok"]
+    wait(lambda: win.of("details"))
+    p = win.of("details")[-1]
+    assert p["status"] == "no_key" and p["nexus_id"] == 77 and "Settings" in p["message"] and p["data"] is None
+
+
+def test_details_push_carries_data_and_image_only_for_the_open_panel(web, monkeypatch):
+    from cogitator import nexus_info
+
+    win, s, api, _ = web
+    s.registry.set_mod("alpha", nexus_id=77)
+    data = {"name": "Alpha", "picture_url": "https://staticdelivery.nexusmods.com/a.png", "description": "d", "summary": "s", "author": "me",
+            "version": "1", "endorsements": 1, "downloads": 2, "updated": 3}
+    fetched = []
+    monkeypatch.setattr(nexus_info, "details_for", lambda mod_id, reg, **k: nexus_info.Result("ok", data, at=1.0))
+    monkeypatch.setattr(nexus_info, "cached_image", lambda url: None)
+    monkeypatch.setattr(nexus_info, "fetch_image", lambda url, *a: fetched.append(url) or "data:image/png;base64,AAAA")
+    api.mod_details("alpha")
+    wait(lambda: win.of("details"))
+    p = win.of("details")[-1]
+    assert p["status"] == "ok" and p["data"]["name"] == "Alpha" and p["image"].startswith("data:image/png") and fetched == [data["picture_url"]]
+    # a row refresh never fetches anything (thumbnails / scrolling must stay offline)
+    s.refresh_all()
+    assert fetched == [data["picture_url"]]
+
+
+def test_details_burst_keeps_the_newest_request(web, monkeypatch):
+    import threading
+
+    from cogitator import nexus_info
+
+    win, s, api, _ = web
+    s.registry.set_mod("alpha", nexus_id=1)
+    s.registry.set_mod("beta", nexus_id=2)
+    gate, seen = threading.Event(), []
+
+    def slow(mod_id, reg, **k):
+        seen.append(mod_id)
+        gate.wait(3)
+        return nexus_info.Result("ok", {"name": str(mod_id), "picture_url": ""}, at=1.0)
+
+    monkeypatch.setattr(nexus_info, "details_for", slow)
+    api.mod_details("alpha")
+    wait(lambda: seen)
+    api.mod_details("beta")
+    api.mod_details("alpha")
+    api.mod_details("beta")  # the newest wins; older queued ones are dropped
+    gate.set()
+    wait(lambda: [p for p in win.of("details") if p["folder"] == "beta"])
+    assert seen == [1, 2] and not [p for p in win.of("details") if p["status"] == "error"]
+
+
+def test_versions_and_open_page(web, monkeypatch):
+    from cogitator import nexus_info
+
+    win, s, api, _ = web
+    s.registry.set_mod("alpha", nexus_id=77)
+    monkeypatch.setattr(nexus_info, "changes_for", lambda mod_id, reg, **k: nexus_info.Result("ok", {"versions": [{"version": "1", "lines": ["x"]}]}))
+    api.mod_versions("alpha")
+    wait(lambda: win.of("versions"))
+    assert win.of("versions")[0]["versions"][0]["version"] == "1"
+    opened = []
+    s.open_url = opened.append
+    api.open_nexus_page("alpha")
+    assert opened == ["https://www.nexusmods.com/warhammer40kdarktide/mods/77"]
+    api.open_nexus_page("beta")  # unlinked: nothing opens
+    assert len(opened) == 1
+
+
+def test_row_payload_tells_whether_a_rollback_exists(web):
+    _, s, api, _ = web
+    assert s.row_payload("alpha")["rollback"] is False
+    s.registry.set_mod("alpha", previous={"version": "1"})
+    assert s.row_payload("alpha")["rollback"] is True

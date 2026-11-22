@@ -164,7 +164,7 @@ def download(link: NxmLink, nexus, dest_dir: Path, client=None, now: Callable[[]
 # ------------------------------------------------------------------ the click: queue it and make sure Cogitator is open
 
 def _spawn_command() -> list[str]:
-    """A click with no window open starts the web window when this install has one (cogitator-web.exe), else the terminal UI."""
+    """A click with no window open starts the web window when this install has one (cogitator-web.exe), else cogitator.exe."""
     if getattr(sys, "frozen", False):
         web = Path(sys.executable).parent / "cogitator-web.exe"
         return [str(web if web.is_file() else web.with_name("cogitator.exe"))]

@@ -190,16 +190,6 @@ def test_settings_with_wrong_types_fall_back():
     assert (s.update_mode, s.update_consent, s.update_channel) == ("notify", False, "stable")
 
 
-async def test_first_run_notice_keeps_its_ok_button_on_screen_at_80x24(game):
-    from test_tui import make_app, settle
-
-    app = make_app(game)
-    async with app.run_test(size=(80, 24)) as pilot:
-        await settle(app, pilot)
-        r = app.screen.query_one("#ok").region
-        assert r.height > 0 and r.bottom <= 24
-
-
 # ---- A3: Transaction.replace_dir journals before it moves anything
 
 def _tx_dirs(tmp_path):

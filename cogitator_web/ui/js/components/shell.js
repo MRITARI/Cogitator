@@ -2,8 +2,7 @@ import { h, styleClass } from "../dom.js";
 import { icon } from "../icons.js";
 import { state, watch } from "../store.js";
 
-const NAV = [["mods", "Mods", "mods", true], ["profiles", "Profiles", "profiles", true], ["snapshots", "Snapshots", "snapshots", true],
-  ["tools", "Tools", "tools", true], ["settings", "Settings", "settings", true]];
+const NAV = [["mods", "Mods", "mods", true], ["profiles", "Profiles", "profiles", true], ["tools", "Tools", "tools", true], ["settings", "Settings", "settings", true]];
 
 export function buildSidebar(onNav, version) {
   const items = new Map();
@@ -25,10 +24,11 @@ export function buildSidebar(onNav, version) {
 }
 
 export function buildDrawer() {
-  let collapsed = false;
+  let collapsed = true;
   const count = h("span", { text: "" });
   const arrow = h("span", { class: "chev" }, icon("chevronDown"));
-  const toggle = h("button", { type: "button", "aria-expanded": "true", "aria-controls": "log-body" }, icon("log"), h("span", { text: "Log" }), count, arrow);
+  const toggle = h("button", { type: "button", "aria-expanded": "false", "aria-controls": "log-body" }, icon("log"), h("span", { text: "Log" }), count, h("span", { class: "dot-bad", hidden: true, title: "An error was logged" }), arrow);
+  const dot = toggle.querySelector(".dot-bad");
   const body = h("div", { class: "drawer-body", id: "log-body", role: "log", "aria-live": "off", tabindex: "0", "aria-label": "Log" });
   const el = h("div", { class: "drawer" }, h("div", { class: "drawer-bar" }, toggle), body);
   const set = (c) => {
@@ -36,7 +36,9 @@ export function buildDrawer() {
     body.hidden = c;
     toggle.setAttribute("aria-expanded", String(!c));
     arrow.replaceChildren(icon(c ? "chevronUp" : "chevronDown"));
+    if (!c) dot.hidden = true;
   };
+  set(true);
   toggle.addEventListener("click", () => set(!collapsed));
   const add = (l) => {
     const near = body.scrollHeight - body.scrollTop - body.clientHeight < 40;
@@ -47,19 +49,22 @@ export function buildDrawer() {
   };
   for (const l of state.logs) add(l);
   watch((what) => { if (what === "log") add(state.logs[state.logs.length - 1]); });
-  return { el, toggle: () => set(!collapsed) };
+  return { el, toggle: () => set(!collapsed), flagError() { if (collapsed) dot.hidden = false; } };
 }
 
 export function buildStatusline() {
   const left = h("span", { class: "grow", "aria-live": "polite" });
   const right = h("span", { text: "" });
+  let summary = "", nexus = "";
+  const draw = () => { right.textContent = [summary, nexus].filter(Boolean).join("  |  "); };
   return {
     el: h("div", { class: "statusline" }, left, right),
     setHint(t) { left.textContent = t || ""; },
-    setSummary(t) { right.textContent = t || ""; },
+    setSummary(t) { summary = t || ""; draw(); },
+    setNexus(t, tip) { nexus = t || ""; right.title = tip || ""; draw(); },
   };
 }
 
-export function pageHead(title, subtitle) {
-  return h("header", { class: "page-head" }, h("h1", { text: title }), h("p", { text: subtitle }));
+export function pageHead(title) {
+  return h("header", { class: "page-head" }, h("h1", { text: title }));
 }
